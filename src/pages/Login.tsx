@@ -1,3 +1,4 @@
+// cea-plataforma/web/src/pages/Login.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
@@ -19,7 +20,6 @@ export default function Login() {
   const [msg, setMsg] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  // ✅ Si ya hay sesión, no te deja quedarte en /login
   useEffect(() => {
     if (!loading && session) nav("/app", { replace: true });
   }, [loading, session, nav]);
@@ -44,7 +44,7 @@ export default function Login() {
     setSending(false);
 
     if (error) {
-      setMsg("Login error: " + error.message);
+      setMsg("Credenciales incorrectas. Verifica tu código y contraseña.");
       return;
     }
 
@@ -53,73 +53,115 @@ export default function Login() {
 
   if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="text-sm text-gray-600">Cargando...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="spinner w-8 h-8"></div>
       </div>
     );
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-b from-gray-50 to-white">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm bg-white/90 backdrop-blur rounded-2xl shadow-lg ring-1 ring-black/5 p-6 space-y-4"
-      >
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Ingresar</h1>
-          <p className="text-sm text-gray-600">
-            Usa tu <span className="font-medium">código</span> (ej:{" "}
-            <span className="font-mono">admin</span>) o tu correo.
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
+      <div className="w-full max-w-md">
+        {/* Logo y título */}
+        <div className="text-center mb-8">
+          <img
+            src="src/assets/logo-cea.png"
+            alt="Logo CEA"
+            className="mx-auto mb-4 h-48 w-auto object-contain"
+          />
+
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Plataforma CEA
+          </h1>
+          <p className="text-gray-500">
+            Centro de Educación Alternativa Madre María Oliva
           </p>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">
-            Código o email
-          </label>
-          <input
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-300"
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            placeholder="admin"
-            autoComplete="username"
-          />
-          <p className="text-xs text-gray-500">
-            Si pones solo el código, se convierte a{" "}
-            <span className="font-mono">codigo@cea.local</span>
-          </p>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">
-            Contraseña
-          </label>
-          <input
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-300"
-            type="password"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            placeholder="••••••••"
-            autoComplete="current-password"
-          />
-        </div>
-
-        {msg && (
-          <div className="text-sm bg-amber-50 border border-amber-200 rounded-xl p-3 whitespace-pre-wrap text-amber-900">
-            {msg}
+        {/* Formulario */}
+        <form onSubmit={onSubmit} className="card p-6 space-y-5">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Código de usuario
+            </label>
+            <input
+              type="text"
+              className="input"
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
+              placeholder="Ej: ADMIN, SI0001"
+              autoComplete="username"
+              autoFocus
+            />
+            <p className="text-xs text-gray-500">
+              Ingresa solo tu código (sin @cea.local)
+            </p>
           </div>
-        )}
 
-        <button
-          disabled={sending}
-          className="w-full rounded-xl px-3 py-2 font-semibold bg-black text-white hover:bg-black/90 active:scale-[0.99] transition disabled:opacity-60"
-        >
-          {sending ? "Ingresando..." : "Ingresar"}
-        </button>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              className="input"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
 
-        <div className="text-xs text-gray-400 text-center">
-          Plataforma CEA • Sistemas Informáticos
+          {msg && (
+            <div className="alert-error">
+              <div className="flex items-start gap-2">
+                <svg
+                  className="w-5 h-5 flex-shrink-0 mt-0.5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <div className="text-sm">{msg}</div>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={sending}
+            className="btn-primary w-full"
+          >
+            {sending ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="spinner w-4 h-4"></span>
+                Ingresando...
+              </span>
+            ) : (
+              "Ingresar"
+            )}
+          </button>
+
+          <div className="text-center pt-2">
+            <p className="text-xs text-gray-500">
+              ¿Olvidaste tu contraseña?{" "}
+              <span className="text-cea-primary font-medium">
+                Contacta al administrador
+              </span>
+            </p>
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-400">
+            Desarrollado por: Sergio M. Alcocer Valenzuela - Cochabamba, Bolivia
+          </p>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

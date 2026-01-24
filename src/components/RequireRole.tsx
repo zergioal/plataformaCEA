@@ -1,4 +1,4 @@
-// RequireRole.tsx
+// src/components/RequireRole.tsx
 import { Navigate, useLocation } from "react-router-dom";
 import { useRole } from "../lib/useRole";
 import type { Role } from "../lib/useRole";
@@ -21,9 +21,10 @@ export default function RequireRole({
     );
   }
 
-  if (!session) return <Navigate to="/login" replace />;
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
 
-  // 🔥 CLAVE: mientras no tengas role, NO redirijas
   if (!role) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -34,9 +35,14 @@ export default function RequireRole({
 
   if (!allow.includes(role)) {
     const fallback =
-      role === "student" ? "/student" : role === "admin" ? "/admin" : "/app";
+      role === "student"
+        ? "/student"
+        : role === "admin"
+          ? "/admin"
+          : role === "teacher"
+            ? "/teacher"
+            : "/app";
 
-    // evita redirección repetida al mismo lugar
     if (location.pathname === fallback) return null;
 
     return <Navigate to={fallback} replace />;

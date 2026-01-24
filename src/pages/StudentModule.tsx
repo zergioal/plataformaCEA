@@ -1,5 +1,5 @@
 // cea-plataforma/web/src/pages/StudentModule.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
@@ -66,6 +66,42 @@ function getNum(obj: Record<string, unknown>, key: string) {
   return typeof v === "number" ? v : NaN;
 }
 
+// Componente para renderizar HTML con scripts ejecutables
+function HTMLRenderer({ html }: { html: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Limpiar el contenedor
+    containerRef.current.innerHTML = html;
+
+    // Extraer y ejecutar scripts
+    const scripts = containerRef.current.querySelectorAll("script");
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement("script");
+
+      // Copiar atributos
+      Array.from(oldScript.attributes).forEach((attr) => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+
+      // Copiar contenido
+      newScript.textContent = oldScript.textContent;
+
+      // Reemplazar script viejo con nuevo para que se ejecute
+      oldScript.parentNode?.replaceChild(newScript, oldScript);
+    });
+  }, [html]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full rounded-2xl border border-slate-800 p-4 bg-white text-black"
+    />
+  );
+}
+
 export default function StudentModule() {
   const nav = useNavigate();
   const { moduleId } = useParams();
@@ -115,7 +151,7 @@ export default function StudentModule() {
       const lvId = enr.data?.level_id ? Number(enr.data.level_id) : null;
       if (!lvId) {
         setMsg(
-          "No tienes nivel asignado. Pide al admin/docente que te asigne un nivel."
+          "No tienes nivel asignado. Pide al admin/docente que te asigne un nivel.",
         );
         return;
       }
@@ -133,7 +169,7 @@ export default function StudentModule() {
       }
 
       const modList = ((modsRes.data ?? []) as ModuleRow[]).filter(
-        (m) => m.is_active !== false
+        (m) => m.is_active !== false,
       );
       setModules(modList);
 
@@ -183,7 +219,7 @@ export default function StudentModule() {
       }
 
       const secList = ((secRes.data ?? []) as SectionRow[]).filter(
-        (s) => s.is_active !== false
+        (s) => s.is_active !== false,
       );
       setSections(secList);
 
@@ -298,7 +334,7 @@ export default function StudentModule() {
       .from("student_section_progress")
       .upsert(
         { student_id: session.user.id, section_id: sectionId },
-        { onConflict: "student_id,section_id" }
+        { onConflict: "student_id,section_id" },
       );
 
     setMarking(false);
@@ -400,6 +436,11 @@ export default function StudentModule() {
       );
     }
 
+    if (s.kind === "html") {
+      const html = getText(obj, "html");
+      return <HTMLRenderer html={html || ""} />;
+    }
+
     if (s.kind === "quiz") {
       const question = getText(obj, "question");
       const options = Array.isArray(obj.options)
@@ -448,7 +489,7 @@ export default function StudentModule() {
               onClick={() => {
                 if (answer === null) {
                   setQuizFeedback(
-                    "Este quiz no tiene respuesta configurada (demo)."
+                    "Este quiz no tiene respuesta configurada (demo).",
                   );
                 } else if (quizSelected === answer) {
                   setQuizFeedback("✅ Correcto");
@@ -659,8 +700,8 @@ export default function StudentModule() {
                     {marking
                       ? "Guardando..."
                       : completedSet.has(currentSection.id)
-                      ? "Desmarcar completado"
-                      : "Marcar como completado"}
+                        ? "Desmarcar completado"
+                        : "Marcar como completado"}
                   </button>
 
                   <button
@@ -669,7 +710,7 @@ export default function StudentModule() {
                     disabled={!canFinal}
                     onClick={() =>
                       alert(
-                        "Siguiente hito: Evaluación Final del módulo (manual por docente)."
+                        "Siguiente hito: Evaluación Final del módulo (manual por docente).",
                       )
                     }
                     title={

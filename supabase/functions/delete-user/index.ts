@@ -1,4 +1,4 @@
-// supabase/functions/reset-password/index.ts
+// supabase/functions/delete-user/index.ts
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
 
     if (profile?.role !== "admin") {
       return new Response(
-        JSON.stringify({ error: "Only admin can reset passwords" }),
+        JSON.stringify({ error: "Only admin can delete users" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -64,19 +64,24 @@ Deno.serve(async (req) => {
     }
 
     // Leer body
-    const { user_id, new_password } = await req.json();
+    const { user_id } = await req.json();
 
-    if (!user_id || !new_password) {
-      return new Response(
-        JSON.stringify({ error: "user_id and new_password are required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    if (!user_id) {
+      return new Response(JSON.stringify({ error: "user_id is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Cliente admin para actualizar contraseña
+    // No permitir auto-eliminación
+    if (user_id === user.id) {
+      return new Response(JSON.stringify({ error: "Cannot delete yourself" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Cliente admin
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: {
         autoRefreshToken: false,
@@ -84,20 +89,59 @@ Deno.serve(async (req) => {
       },
     });
 
-    // Actualizar contraseña
-    const { error: updateError } = await adminClient.auth.admin.updateUserById(
-      user_id,
-      { password: new_password }
-    );
+    // Verificar que el usuario a eliminar no es admin
+    const { data: targetProfile } = await adminClient
+      .from("profiles")
+      .select("role, code")
+      .eq("id", user_id)
+      .single();
 
-    if (updateError) {
-      throw updateError;
+    if (targetProfile?.role === "admin") {
+      return new Response(
+        JSON.stringify({ error: "Cannot delete admin users" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Eliminar en cascada usando service role
+    // 1. Eliminar enrollments
+    await adminClient.from("enrollments").delete().eq("student_id", user_id);
+
+    // 2. Eliminar module_grades
+    await adminClient.from("module_grades").delete().eq("student_id", user_id);
+
+    // 3. Eliminar student_section_progress
+    await adminClient
+      .from("student_section_progress")
+      .delete()
+      .eq("student_id", user_id);
+
+    // 4. Eliminar lesson_progress
+    await adminClient
+      .from("lesson_progress")
+      .delete()
+      .eq("student_id", user_id);
+
+    // 5. Eliminar profile
+    await adminClient.from("profiles").delete().eq("id", user_id);
+
+    // 6. Eliminar de auth.users
+    const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(
+      user_id
+    );
+    if (deleteAuthError) {
+      console.error("Error deleting auth user:", deleteAuthError);
+      // No fallar si solo falla auth, ya eliminamos el profile
     }
 
     return new Response(
       JSON.stringify({
         ok: true,
-        message: "Password updated successfully",
+        code: targetProfile?.code,
+        message: "User deleted successfully",
       }),
       {
         status: 200,
@@ -105,7 +149,7 @@ Deno.serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error("Error in reset-password:", error);
+    console.error("Error in delete-user:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

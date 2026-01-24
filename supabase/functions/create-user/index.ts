@@ -1,36 +1,32 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+// supabase/functions/create-user/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "http://localhost:5173",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Role = "student" | "teacher" | "admin";
-type Shift = "tarde" | "noche";
-
-type CreateUserBody = {
-  // ahora code puede venir vacío si quieres autogeneración
-  code?: string;
-
-  role: Role;
+type CreateUserPayload = {
+  role: "student" | "teacher";
   temp_password: string;
-
   first_names: string;
   last_name_pat?: string;
   last_name_mat?: string;
-
   phone: string;
   contact_email?: string;
-
-  // obligatorio para student
-  career_id?: number;
-  shift: Shift;
-
-  // solo si role=student
-  level_id?: number;
+  career_id: number;
+  shift: "tarde" | "noche";
+  level_id?: number; // solo para student
+  likes?: string;
+  avatar_key?: string;
+  // Nuevos campos para estudiantes
+  rudeal_number?: string;
+  carnet_number?: string;
+  gender?: "F" | "M";
+  birth_date?: string;
 };
 
 function json(status: number, data: unknown) {
@@ -40,59 +36,13 @@ function json(status: number, data: unknown) {
   });
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response("ok", { headers: corsHeaders });
 
   try {
     if (req.method !== "POST") return json(405, { error: "Use POST" });
 
-    const body = (await req.json()) as Partial<CreateUserBody>;
-
-    const role = body.role as Role;
-    const temp_password = (body.temp_password ?? "").trim();
-
-    const first_names = (body.first_names ?? "").trim();
-    const last_name_pat = (body.last_name_pat ?? "").trim();
-    const last_name_mat = (body.last_name_mat ?? "").trim();
-
-    const phone = (body.phone ?? "").trim();
-    const contact_email = (body.contact_email ?? "").trim();
-
-    const shift = body.shift as Shift;
-
-    if (!role || !temp_password || !first_names || !phone || !shift) {
-      return json(400, {
-        error:
-          "Faltan campos obligatorios: role, temp_password, first_names, phone, shift",
-      });
-    }
-
-    if (!["student", "teacher", "admin"].includes(role)) {
-      return json(400, { error: "role inválido" });
-    }
-
-    if (!["tarde", "noche"].includes(shift)) {
-      return json(400, { error: "shift inválido (tarde|noche)" });
-    }
-
-    // apellidos: al menos uno obligatorio
-    if (!last_name_pat && !last_name_mat) {
-      return json(400, {
-        error: "Debes llenar al menos un apellido (paterno o materno)",
-      });
-    }
-
-    // student: requiere career_id y level_id
-    const career_id = body.career_id;
-    if (role === "student") {
-      if (!career_id)
-        return json(400, { error: "Para student se requiere career_id" });
-      if (!body.level_id)
-        return json(400, { error: "Para student se requiere level_id" });
-    }
-
-    // Autorización: solo admin puede crear usuarios
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader.startsWith("Bearer ")) {
       return json(401, { error: "No Authorization Bearer token" });
@@ -102,7 +52,7 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Cliente normal para validar sesión + rol del caller
+    // Validar caller con cliente anon
     const sb = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -113,135 +63,171 @@ Deno.serve(async (req) => {
 
     const callerId = userData.user.id;
 
-    const { data: callerProfile, error: callerProfErr } = await sb
+    const { data: callerProfile, error: profErr } = await sb
       .from("profiles")
       .select("role")
       .eq("id", callerId)
       .single();
 
-    if (callerProfErr)
+    if (profErr)
       return json(403, { error: "No se pudo leer perfil del caller" });
-    if (callerProfile?.role !== "admin")
-      return json(403, { error: "Solo admin puede crear usuarios" });
+    if (!["admin", "teacher"].includes(callerProfile?.role))
+      return json(403, { error: "Solo admin o teacher pueden crear usuarios" });
 
-    // Cliente admin
-    const admin = createClient(supabaseUrl, serviceKey);
+    const payload = (await req.json()) as CreateUserPayload;
 
-    // 1) Generar código si no viene
-    let code = (body.code ?? "").trim();
+    // Validaciones
+    if (!payload.role || !["student", "teacher"].includes(payload.role)) {
+      return json(400, { error: "role debe ser student o teacher" });
+    }
 
-    if (!code) {
-      if (role === "teacher" || role === "admin") {
-        code = await genCode(admin, "DO-");
-      } else {
-        // student => prefix desde careers.student_prefix
-        const { data: car, error: carErr } = await admin
-          .from("careers")
-          .select("student_prefix")
-          .eq("id", career_id!)
-          .single();
+    if (!payload.first_names?.trim()) {
+      return json(400, { error: "first_names es requerido" });
+    }
 
-        if (carErr || !car?.student_prefix)
-          return json(400, { error: "career_id inválido" });
+    if (!payload.last_name_pat?.trim() && !payload.last_name_mat?.trim()) {
+      return json(400, { error: "Al menos un apellido es requerido" });
+    }
 
-        code = await genCode(admin, `${car.student_prefix}-`);
+    if (!payload.phone?.trim()) {
+      return json(400, { error: "phone es requerido" });
+    }
+
+    if (!payload.career_id) {
+      return json(400, { error: "career_id es requerido" });
+    }
+
+    if (!payload.shift || !["tarde", "noche"].includes(payload.shift)) {
+      return json(400, { error: "shift debe ser tarde o noche" });
+    }
+
+    if (payload.role === "student" && !payload.level_id) {
+      return json(400, { error: "level_id es requerido para estudiantes" });
+    }
+
+    // Validar campos obligatorios para estudiantes
+    if (payload.role === "student") {
+      if (!payload.carnet_number?.trim()) {
+        return json(400, { error: "carnet_number es requerido para estudiantes" });
+      }
+      if (!payload.gender || !["F", "M"].includes(payload.gender)) {
+        return json(400, { error: "gender debe ser F o M para estudiantes" });
+      }
+      if (!payload.birth_date) {
+        return json(400, { error: "birth_date es requerido para estudiantes" });
       }
     }
 
-    // Email interno (obligatorio en Supabase Auth)
+    // Obtener prefijo de carrera
+    const { data: careerData, error: careerErr } = await sb
+      .from("careers")
+      .select("student_prefix")
+      .eq("id", payload.career_id)
+      .single();
+
+    if (careerErr || !careerData)
+      return json(400, { error: "career_id inválido" });
+
+    const prefix = careerData.student_prefix;
+
+    // Generar código único
+    const { data: codeData, error: codeErr } = await sb.rpc("next_code", {
+      p_prefix: prefix,
+    });
+
+    if (codeErr) return json(500, { error: "No se pudo generar código" });
+
+    const code = codeData as string;
     const email = `${code.toLowerCase()}@cea.local`;
 
-    // 2) Crear auth user
-    const { data: created, error: createErr } =
+    // Crear full_name
+    const parts = [
+      payload.first_names?.trim(),
+      payload.last_name_pat?.trim(),
+      payload.last_name_mat?.trim(),
+    ].filter(Boolean);
+    const full_name = parts.join(" ");
+
+    // Cliente admin para crear usuario
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    const { data: authData, error: authErr } =
       await admin.auth.admin.createUser({
         email,
-        password: temp_password,
+        password: payload.temp_password,
         email_confirm: true,
-        user_metadata: { first_names, last_name_pat, last_name_mat },
+        user_metadata: {
+          full_name,
+        },
       });
 
-    if (createErr || !created.user) {
-      return json(400, {
-        error: createErr?.message ?? "No se pudo crear auth user",
-      });
-    }
+    if (authErr) return json(400, { error: authErr.message });
+    if (!authData.user) return json(500, { error: "No se creó el usuario" });
 
-    const newUserId = created.user.id;
+    const userId = authData.user.id;
 
-    // 3) Actualizar profiles
-    const profileUpdate = {
-      role,
+    // ✅ CRÍTICO: Actualizar profile con TODOS los campos
+    const profileData: Record<string, unknown> = {
+      role: payload.role,
       code,
-      first_names,
-      last_name_pat: last_name_pat || null,
-      last_name_mat: last_name_mat || null,
-      phone,
-      contact_email: contact_email || null,
-      career_id: role === "student" ? career_id! : null,
-      shift,
-      full_name: `${first_names} ${last_name_pat || ""} ${
-        last_name_mat || ""
-      }`.trim(),
+      full_name,
+      first_names: payload.first_names.trim(),
+      last_name_pat: payload.last_name_pat?.trim() || null,
+      last_name_mat: payload.last_name_mat?.trim() || null,
+      phone: payload.phone.trim(),
+      contact_email: payload.contact_email?.trim() || null,
+      career_id: payload.career_id,
+      shift: payload.shift,
+      likes: payload.likes?.trim() || null,
+      avatar_key: payload.avatar_key || "av1",
     };
 
-    const { error: profUpErr } = await admin
-      .from("profiles")
-      .update(profileUpdate)
-      .eq("id", newUserId);
-
-    if (profUpErr) {
-      return json(500, {
-        error: "No se pudo actualizar profile: " + profUpErr.message,
-      });
+    // Agregar campos adicionales para estudiantes
+    if (payload.role === "student") {
+      profileData.rudeal_number = payload.rudeal_number?.trim() || null;
+      profileData.carnet_number = payload.carnet_number?.trim() || null;
+      profileData.gender = payload.gender || null;
+      profileData.birth_date = payload.birth_date || null;
     }
 
-    // 4) Student: enrollments + module_grades
-    if (role === "student") {
-      const level_id = body.level_id!;
+    const { error: updateErr } = await admin
+      .from("profiles")
+      .update(profileData)
+      .eq("id", userId);
 
-      const { error: enrErr } = await admin
-        .from("enrollments")
-        .insert({ student_id: newUserId, level_id });
+    if (updateErr) {
+      // Rollback: eliminar usuario de auth
+      await admin.auth.admin.deleteUser(userId);
+      return json(500, { error: "No se pudo actualizar profile" });
+    }
 
-      if (enrErr)
-        return json(500, {
-          error: "No se pudo crear enrollment: " + enrErr.message,
-        });
+    // Si es estudiante, crear enrollment
+    if (payload.role === "student" && payload.level_id) {
+      const { error: enrollErr } = await admin.from("enrollments").insert({
+        student_id: userId,
+        level_id: payload.level_id,
+      });
 
-      const { data: mods, error: modsErr } = await admin
-        .from("modules")
-        .select("id")
-        .eq("level_id", level_id)
-        .order("sort_order");
-
-      if (modsErr)
-        return json(500, {
-          error: "No se pudo leer módulos: " + modsErr.message,
-        });
-
-      if (mods && mods.length > 0) {
-        const rows = mods.map((m) => ({
-          student_id: newUserId,
-          module_id: m.id,
-        }));
-        const { error: gErr } = await admin.from("module_grades").insert(rows);
-        if (gErr)
-          return json(500, {
-            error: "No se pudo crear module_grades: " + gErr.message,
-          });
+      if (enrollErr) {
+        console.error("Error enrollment:", enrollErr);
+        // No hacemos rollback total, solo advertimos
       }
     }
 
-    return json(200, { ok: true, user_id: newUserId, email, temp_password });
+    return json(200, {
+      ok: true,
+      user_id: userId,
+      email,
+      code,
+      temp_password: payload.temp_password,
+    });
   } catch (e) {
+    console.error("Error:", e);
     return json(500, { error: String(e) });
   }
 });
-
-async function genCode(admin: ReturnType<typeof createClient>, prefix: string) {
-  // usa función next_code(prefix)
-  const { data, error } = await admin.rpc("next_code", { p_prefix: prefix });
-  if (error || !data)
-    throw new Error("No se pudo generar código: " + (error?.message ?? ""));
-  return String(data);
-}

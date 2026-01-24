@@ -4,22 +4,6 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
 
-type ProfileRow = {
-  id: string;
-  role: "student" | "teacher" | "admin";
-  code: string | null;
-  full_name: string | null;
-  phone: string | null;
-  likes: string | null;
-  avatar_key: string | null;
-  first_names: string | null;
-  last_name_pat: string | null;
-  last_name_mat: string | null;
-  contact_email: string | null;
-  shift: string | null;
-  career_id: number | null;
-};
-
 type LevelRow = { id: number; name: string };
 
 type ModuleRow = {
@@ -32,9 +16,8 @@ type ModuleRow = {
 
 type ModuleProgress = {
   module_id: number;
-  total_sections: number;
-  completed_sections: number;
-  pct: number;
+  progress_percent: number;
+  is_unlocked_final: boolean;
 };
 
 type CareerRow = { id: number; name: string };
@@ -42,13 +25,31 @@ type CareerRow = { id: number; name: string };
 type ModuleGradeRow = {
   student_id: string;
   module_id: number;
-  ser: number | null; // 10
-  saber: number | null; // 30
-  hacer_proceso: number | null; // 20 (override docente)
-  hacer_producto: number | null; // 20
-  decidir: number | null; // 10
-  auto_ser: number | null; // 5
-  auto_decidir: number | null; // 5
+  ser: number | null;
+  saber: number | null;
+  hacer_proceso: number | null;
+  hacer_producto: number | null;
+  decidir: number | null;
+  auto_ser: number | null;
+  auto_decidir: number | null;
+};
+
+type GradeHistoryRow = {
+  module_id: number;
+  module_name: string;
+  module_order: number;
+  level_id: number;
+  level_name: string;
+  level_order: number;
+  ser: number;
+  saber: number;
+  hacer_proceso: number;
+  hacer_producto: number;
+  decidir: number;
+  auto_ser: number;
+  auto_decidir: number;
+  total: number;
+  observation: string;
 };
 
 function clampPct(x: number) {
@@ -70,7 +71,7 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-const AVATARS = Array.from({ length: 10 }, (_, i) => {
+const AVATARS = Array.from({ length: 20 }, (_, i) => {
   const key = `av${i + 1}`;
   return {
     key,
@@ -81,9 +82,8 @@ const AVATARS = Array.from({ length: 10 }, (_, i) => {
 
 export default function StudentDashboard() {
   const nav = useNavigate();
-  const { loading, session } = useRole();
+  const { loading, session, profile } = useRole();
 
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [careerName, setCareerName] = useState<string>("(sin carrera)");
   const [level, setLevel] = useState<LevelRow | null>(null);
 
@@ -96,7 +96,6 @@ export default function StudentDashboard() {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
 
-  // ===== Calificaciones =====
   const [gradesOpen, setGradesOpen] = useState<Set<number>>(new Set());
   const [gradesByModule, setGradesByModule] = useState<
     Record<number, ModuleGradeRow | null | undefined>
@@ -105,26 +104,38 @@ export default function StudentDashboard() {
     Record<number, boolean>
   >({});
 
+  // ✅ NOTAS HISTÓRICAS
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyData, setHistoryData] = useState<GradeHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   function num0(x: number | null | undefined) {
     return typeof x === "number" && Number.isFinite(x) ? x : 0;
   }
 
-  function suggestedHacerProceso(pct: number) {
-    // 0..20 según progreso
-    const v = Math.round((clampPct(pct) / 100) * 20);
-    return Math.max(0, Math.min(20, v));
-  }
+  function calcTotal(g: ModuleGradeRow, pct: number) {
+    const hpSuggested = Math.round((clampPct(pct) / 100) * 20);
+    const hpFinal =
+      g.hacer_proceso === null || g.hacer_proceso === undefined
+        ? hpSuggested
+        : num0(g.hacer_proceso);
 
-  function calcTotal(g: ModuleGradeRow, hacerProcesoFinal: number) {
     return (
       num0(g.ser) +
       num0(g.saber) +
-      hacerProcesoFinal +
+      hpFinal +
       num0(g.hacer_producto) +
       num0(g.decidir) +
       num0(g.auto_ser) +
       num0(g.auto_decidir)
     );
+  }
+
+  function getObservation(total: number) {
+    if (total >= 76) return "Promovido Excelente";
+    if (total >= 51) return "Promovido";
+    if (total >= 20) return "Postergado";
+    return "Retirado";
   }
 
   async function loadGrades(moduleId: number) {
@@ -135,7 +146,7 @@ export default function StudentDashboard() {
     const res = await supabase
       .from("module_grades")
       .select(
-        "student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir"
+        "student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir",
       )
       .eq("student_id", session.user.id)
       .eq("module_id", moduleId)
@@ -155,6 +166,30 @@ export default function StudentDashboard() {
     }));
   }
 
+  async function loadHistory() {
+    if (!session) return;
+
+    setHistoryLoading(true);
+
+    const res = await supabase
+      .from("v_student_grade_history")
+      .select(
+        "module_id,module_name,module_order,level_id,level_name,level_order,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total,observation",
+      )
+      .eq("student_id", session.user.id)
+      .order("level_order", { ascending: true })
+      .order("module_order", { ascending: true });
+
+    setHistoryLoading(false);
+
+    if (res.error) {
+      setMsg("No se pudo cargar historial: " + res.error.message);
+      return;
+    }
+
+    setHistoryData((res.data ?? []) as GradeHistoryRow[]);
+  }
+
   function toggleGrades(moduleId: number) {
     setGradesOpen((prev) => {
       const n = new Set(prev);
@@ -166,6 +201,11 @@ export default function StudentDashboard() {
     if (gradesByModule[moduleId] === undefined) {
       void loadGrades(moduleId);
     }
+  }
+
+  function openHistory() {
+    setHistoryOpen(true);
+    loadHistory();
   }
 
   async function logout() {
@@ -189,55 +229,38 @@ export default function StudentDashboard() {
     return AVATARS.find((a) => a.key === key) ?? AVATARS[0];
   }, [profile?.avatar_key]);
 
-  // ========= LOAD =========
   useEffect(() => {
     if (!session) return;
 
     async function loadAll() {
       setMsg(null);
 
-      // 1) Perfil
-      const p = await supabase
-        .from("profiles")
-        .select(
-          "id,role,code,full_name,phone,likes,avatar_key,first_names,last_name_pat,last_name_mat,contact_email,shift,career_id"
-        )
-        .eq("id", session.user.id)
-        .single();
-
-      if (p.error) {
-        setMsg("No se pudo leer tu perfil: " + p.error.message);
-        return;
-      }
-      setProfile(p.data as ProfileRow);
-
-      // 2) Carrera
-      if (p.data?.career_id) {
+      if (profile?.career_id) {
         const c = await supabase
           .from("careers")
           .select("id,name")
-          .eq("id", p.data.career_id)
+          .eq("id", profile.career_id)
           .single();
 
         if (!c.error && c.data) setCareerName((c.data as CareerRow).name);
       }
 
-      // 3) Enrollment -> level
       const enr = await supabase
         .from("enrollments")
         .select("level_id")
         .eq("student_id", session.user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (enr.error) {
-        setMsg("No se pudo leer tu nivel (enrollments): " + enr.error.message);
+        setMsg("No se pudo leer tu nivel: " + enr.error.message);
         return;
       }
+
       const levelId = enr.data?.level_id;
       if (!levelId) {
-        setMsg(
-          "No tienes nivel asignado. Pide al admin/docente que te asigne un nivel."
-        );
+        setMsg("No tienes nivel asignado.");
         return;
       }
 
@@ -248,7 +271,6 @@ export default function StudentDashboard() {
         .single();
       if (!lv.error && lv.data) setLevel(lv.data as LevelRow);
 
-      // 4) Módulos
       const mods = await supabase
         .from("modules")
         .select("id,level_id,title,sort_order,is_active")
@@ -261,106 +283,65 @@ export default function StudentDashboard() {
       }
 
       const modList = ((mods.data ?? []) as ModuleRow[]).filter(
-        (m) => m.is_active !== false
+        (m) => m.is_active !== false,
       );
       setModules(modList);
 
       if (modList.length === 0) {
-        setMsg("Este nivel no tiene módulos todavía.");
+        setMsg("Este nivel no tiene módulos.");
         return;
       }
 
-      // 5) Progreso
       const moduleIds = modList.map((m) => m.id);
 
-      const lessonsRes = await supabase
-        .from("lessons")
-        .select("id,module_id")
+      // ✅ Cargar progreso usando la vista corregida
+      const progRes = await supabase
+        .from("v_module_progress")
+        .select(
+          "module_id,completed_sections,total_sections,progress_percent,is_unlocked_final",
+        )
+        .eq("student_id", session.user.id)
         .in("module_id", moduleIds);
 
-      if (lessonsRes.error) {
-        setMsg("No se pudo cargar lecciones: " + lessonsRes.error.message);
-        return;
-      }
-
-      const lessons = (lessonsRes.data ?? []) as {
-        id: number;
-        module_id: number;
-      }[];
-      const lessonIds = lessons.map((l) => l.id);
-
-      const lessonToModule = new Map<number, number>();
-      for (const l of lessons) lessonToModule.set(l.id, l.module_id);
-
-      let sections: { id: number; lesson_id: number }[] = [];
-      if (lessonIds.length) {
-        const secRes = await supabase
-          .from("lesson_sections")
-          .select("id,lesson_id")
-          .in("lesson_id", lessonIds);
-
-        if (secRes.error) {
-          setMsg("No se pudo cargar secciones: " + secRes.error.message);
-          return;
-        }
-        sections = (secRes.data ?? []) as { id: number; lesson_id: number }[];
-      }
-
-      const sectionToModule = new Map<number, number>();
-      for (const s of sections) {
-        const mid = lessonToModule.get(s.lesson_id);
-        if (mid) sectionToModule.set(s.id, mid);
-      }
-
-      const totalByModule: Record<number, number> = {};
-      for (const m of modList) totalByModule[m.id] = 0;
-      for (const s of sections) {
-        const mid = sectionToModule.get(s.id);
-        if (mid) totalByModule[mid] = (totalByModule[mid] ?? 0) + 1;
-      }
-
-      const progRes = await supabase
-        .from("student_section_progress")
-        .select("section_id")
-        .eq("student_id", session.user.id);
-
       if (progRes.error) {
+        console.error("Error cargando progreso:", progRes.error);
         setMsg("No se pudo cargar progreso: " + progRes.error.message);
         return;
       }
 
-      const rows = (progRes.data ?? []) as { section_id: number }[];
-      const completedSectionIds = new Set<number>(
-        rows.map((r) => Number(r.section_id))
-      );
-
-      const doneByModule: Record<number, number> = {};
-      for (const m of modList) doneByModule[m.id] = 0;
-
-      for (const sid of completedSectionIds) {
-        const mid = sectionToModule.get(sid);
-        if (mid) doneByModule[mid] = (doneByModule[mid] ?? 0) + 1;
-      }
+      console.log("Progreso raw:", progRes.data);
 
       const pbm: Record<number, ModuleProgress> = {};
-      for (const m of modList) {
-        const total = totalByModule[m.id] ?? 0;
-        const done = Math.min(doneByModule[m.id] ?? 0, total);
-        const pct = total > 0 ? (done / total) * 100 : 0;
-        pbm[m.id] = {
-          module_id: m.id,
-          total_sections: total,
-          completed_sections: done,
-          pct: clampPct(pct),
+      for (const r of (progRes.data ?? []) as any[]) {
+        const pct = Number(r.progress_percent ?? 0);
+        pbm[r.module_id] = {
+          module_id: r.module_id,
+          progress_percent: clampPct(pct),
+          is_unlocked_final: Boolean(r.is_unlocked_final),
         };
+        console.log(
+          `Módulo ${r.module_id}: ${pct}% (${r.completed_sections}/${r.total_sections})`,
+        );
       }
+
+      // Inicializar módulos sin progreso en 0%
+      for (const m of modList) {
+        if (!pbm[m.id]) {
+          pbm[m.id] = {
+            module_id: m.id,
+            progress_percent: 0,
+            is_unlocked_final: false,
+          };
+          console.log(`Módulo ${m.id}: 0% (sin progreso)`);
+        }
+      }
+
       setProgressByModule(pbm);
     }
 
     loadAll();
-  }, [session]);
+  }, [session, profile]);
 
-  // ========= SECUENCIAL =========
   const unlockedMap = useMemo(() => {
     const map: Record<number, boolean> = {};
     let okPrev = true;
@@ -368,8 +349,8 @@ export default function StudentDashboard() {
 
     for (const m of ordered) {
       map[m.id] = okPrev;
-      const pct = progressByModule[m.id]?.pct ?? 0;
-      if (pct < 100) okPrev = false;
+      const pct = progressByModule[m.id]?.progress_percent ?? 0;
+      if (pct < 70) okPrev = false;
     }
     return map;
   }, [modules, progressByModule]);
@@ -391,8 +372,8 @@ export default function StudentDashboard() {
       return;
     }
 
-    setProfile((p) => (p ? { ...p, avatar_key: newKey } : p));
     setAvatarOpen(false);
+    window.location.reload();
   }
 
   if (loading) return <div className="p-6">Cargando...</div>;
@@ -407,17 +388,24 @@ export default function StudentDashboard() {
             <h1 className="text-xl font-bold">Panel del Estudiante</h1>
           </div>
 
-          <button
-            onClick={logout}
-            className="rounded-xl px-3 py-2 bg-white text-black"
-          >
-            Cerrar sesión
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={openHistory}
+              className="rounded-xl px-3 py-2 border border-slate-800 hover:bg-slate-900"
+            >
+              📊 Notas Históricas
+            </button>
+            <button
+              onClick={logout}
+              className="rounded-xl px-3 py-2 bg-white text-black"
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-        {/* PERFIL */}
         <section className="bg-slate-950 rounded-2xl border border-slate-800 p-6 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between">
             <div className="flex items-center gap-4">
@@ -449,7 +437,6 @@ export default function StudentDashboard() {
             </button>
           </div>
 
-          {/* datos personales */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-2xl border border-slate-800 p-4 bg-slate-950">
               <div className="text-xs text-slate-400">Nombres</div>
@@ -486,12 +473,11 @@ export default function StudentDashboard() {
           )}
         </section>
 
-        {/* MODULOS */}
         <section className="bg-slate-950 rounded-2xl border border-slate-800 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Módulos (secuenciales)</h2>
             <div className="text-sm text-slate-400">
-              Completa 100% para desbloquear el siguiente.
+              Completa 70% para desbloquear el siguiente.
             </div>
           </div>
 
@@ -501,14 +487,13 @@ export default function StudentDashboard() {
               .sort((a, b) => a.sort_order - b.sort_order)
               .map((m) => {
                 const prog = progressByModule[m.id];
-                const pct = prog?.pct ?? 0;
+                const pct = prog?.progress_percent ?? 0;
                 const unlocked = unlockedMap[m.id] ?? false;
+                const canFinal = prog?.is_unlocked_final ?? false;
 
                 const isGradesOpen = gradesOpen.has(m.id);
                 const isGradesLoading = gradesLoadingByModule[m.id] ?? false;
                 const grade = gradesByModule[m.id];
-
-                const hpSuggested = suggestedHacerProceso(pct);
 
                 return (
                   <div
@@ -531,21 +516,16 @@ export default function StudentDashboard() {
                     <ProgressBar value={pct} />
 
                     <div className="text-sm text-slate-300">
-                      Secciones completadas:{" "}
-                      <b>{prog?.completed_sections ?? 0}</b> /{" "}
-                      <b>{prog?.total_sections ?? 0}</b>
-                      <div className="mt-1">
-                        Evaluación final:{" "}
-                        <b
-                          className={
-                            pct >= 70 ? "text-emerald-400" : "text-slate-400"
-                          }
-                        >
-                          {pct >= 70
-                            ? "Habilitada ✅ (70%)"
-                            : "Bloqueada 🔒 (70%)"}
-                        </b>
-                      </div>
+                      Evaluación final:{" "}
+                      <b
+                        className={
+                          canFinal ? "text-emerald-400" : "text-slate-400"
+                        }
+                      >
+                        {canFinal
+                          ? "Habilitada ✅ (70%)"
+                          : "Bloqueada 🔒 (70%)"}
+                      </b>
                     </div>
 
                     <button
@@ -554,14 +534,13 @@ export default function StudentDashboard() {
                       onClick={() => nav(`/student/module/${m.id}`)}
                       title={
                         !unlocked
-                          ? "Completa el módulo anterior al 100% para desbloquear"
+                          ? "Completa el módulo anterior al 70% para desbloquear"
                           : "Entrar"
                       }
                     >
                       {unlocked ? "Entrar" : "Bloqueado"}
                     </button>
 
-                    {/* Calificaciones */}
                     <button
                       type="button"
                       className="rounded-xl px-3 py-2 border border-slate-800 hover:bg-slate-900 w-full"
@@ -581,80 +560,82 @@ export default function StudentDashboard() {
                         ) : grade ? (
                           (() => {
                             const g = grade as ModuleGradeRow;
-
-                            // ✅ Hacer-Proceso: si docente puso override -> usarlo, si no -> sugerido por progreso
-                            const hpFinal =
-                              g.hacer_proceso === null ||
-                              g.hacer_proceso === undefined
-                                ? hpSuggested
-                                : num0(g.hacer_proceso);
-
-                            const total = calcTotal(g, hpFinal);
+                            const total = calcTotal(g, pct);
+                            const obs = getObservation(total);
 
                             return (
-                              <table className="min-w-full text-sm">
-                                <thead>
-                                  <tr className="text-left text-slate-200">
-                                    <th className="py-2 pr-3">Ser (10)</th>
-                                    <th className="py-2 pr-3">Saber (30)</th>
-                                    <th className="py-2 pr-3">
-                                      Hacer-Proceso (20)
-                                    </th>
-                                    <th className="py-2 pr-3">
-                                      Hacer-Producto (20)
-                                    </th>
-                                    <th className="py-2 pr-3">Decidir (10)</th>
-                                    <th className="py-2 pr-3">Auto Ser (5)</th>
-                                    <th className="py-2 pr-3">
-                                      Auto Decidir (5)
-                                    </th>
-                                    <th className="py-2 pr-3 font-semibold">
-                                      Total (100)
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <tr className="border-t border-slate-800 text-slate-100">
-                                    <td className="py-2 pr-3">{num0(g.ser)}</td>
-                                    <td className="py-2 pr-3">
-                                      {num0(g.saber)}
-                                    </td>
-                                    <td className="py-2 pr-3">
-                                      {hpFinal}
-                                      {(g.hacer_proceso === null ||
-                                        g.hacer_proceso === undefined) && (
-                                        <span className="ml-2 text-xs text-slate-400">
-                                          (sugerido por progreso: {hpSuggested})
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="py-2 pr-3">
-                                      {num0(g.hacer_producto)}
-                                    </td>
-                                    <td className="py-2 pr-3">
-                                      {num0(g.decidir)}
-                                    </td>
-                                    <td className="py-2 pr-3">
-                                      {num0(g.auto_ser)}
-                                    </td>
-                                    <td className="py-2 pr-3">
-                                      {num0(g.auto_decidir)}
-                                    </td>
-                                    <td className="py-2 pr-3 font-semibold">
-                                      {total}
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </table>
+                              <div className="space-y-3">
+                                <table className="min-w-full text-xs">
+                                  <thead>
+                                    <tr className="text-left text-slate-200">
+                                      <th className="py-1 pr-2">Ser</th>
+                                      <th className="py-1 pr-2">Saber</th>
+                                      <th className="py-1 pr-2">H-Pro</th>
+                                      <th className="py-1 pr-2">H-Prod</th>
+                                      <th className="py-1 pr-2">Dec</th>
+                                      <th className="py-1 pr-2">A-Ser</th>
+                                      <th className="py-1 pr-2">A-Dec</th>
+                                      <th className="py-1 pr-2 font-semibold">
+                                        Total
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr className="border-t border-slate-800 text-slate-100">
+                                      <td className="py-1 pr-2">
+                                        {num0(g.ser)}
+                                      </td>
+                                      <td className="py-1 pr-2">
+                                        {num0(g.saber)}
+                                      </td>
+                                      <td className="py-1 pr-2">
+                                        {g.hacer_proceso === null ||
+                                        g.hacer_proceso === undefined
+                                          ? `${Math.round((pct / 100) * 20)}`
+                                          : num0(g.hacer_proceso)}
+                                      </td>
+                                      <td className="py-1 pr-2">
+                                        {num0(g.hacer_producto)}
+                                      </td>
+                                      <td className="py-1 pr-2">
+                                        {num0(g.decidir)}
+                                      </td>
+                                      <td className="py-1 pr-2">
+                                        {num0(g.auto_ser)}
+                                      </td>
+                                      <td className="py-1 pr-2">
+                                        {num0(g.auto_decidir)}
+                                      </td>
+                                      <td className="py-1 pr-2 font-semibold">
+                                        {total}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                                <div className="text-sm">
+                                  <span className="text-slate-400">
+                                    Observación:
+                                  </span>{" "}
+                                  <span
+                                    className={
+                                      obs.includes("Excelente")
+                                        ? "text-emerald-400 font-semibold"
+                                        : obs.includes("Promovido")
+                                          ? "text-emerald-400"
+                                          : obs.includes("Postergado")
+                                            ? "text-amber-400"
+                                            : "text-rose-400"
+                                    }
+                                  >
+                                    {obs}
+                                  </span>
+                                </div>
+                              </div>
                             );
                           })()
                         ) : (
                           <div className="text-sm text-slate-300">
-                            Sin calificaciones aún para este módulo.
-                            <div className="text-xs text-slate-400 mt-1">
-                              Hacer-Proceso sugerido por tu progreso:{" "}
-                              {hpSuggested}/20
-                            </div>
+                            Sin calificaciones aún.
                           </div>
                         )}
                       </div>
@@ -668,7 +649,7 @@ export default function StudentDashboard() {
 
       {/* MODAL AVATAR */}
       {avatarOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow max-w-xl w-full p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -705,6 +686,91 @@ export default function StudentDashboard() {
 
             {savingAvatar && (
               <div className="text-sm text-slate-300">Guardando...</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ MODAL NOTAS HISTÓRICAS */}
+      {historyOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-950 rounded-2xl border border-slate-800 shadow max-w-6xl w-full max-h-[90vh] overflow-auto p-5 space-y-4">
+            <div className="flex items-center justify-between sticky top-0 bg-slate-950 pb-3 border-b border-slate-800">
+              <div>
+                <div className="text-lg font-bold">📊 Notas Históricas</div>
+                <div className="text-sm text-slate-400">
+                  Historial completo de calificaciones por módulo
+                </div>
+              </div>
+              <button
+                className="rounded-xl px-3 py-2 border border-slate-800 hover:bg-slate-900"
+                onClick={() => setHistoryOpen(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {historyLoading ? (
+              <div className="text-center py-8 text-slate-400">
+                Cargando historial...
+              </div>
+            ) : historyData.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                No tienes calificaciones registradas aún.
+              </div>
+            ) : (
+              <div className="overflow-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-900 sticky top-0">
+                    <tr className="text-left border-b border-slate-800">
+                      <th className="p-3">Nivel</th>
+                      <th className="p-3">Módulo</th>
+                      <th className="p-3">Ser</th>
+                      <th className="p-3">Saber</th>
+                      <th className="p-3">H-Pro</th>
+                      <th className="p-3">H-Prod</th>
+                      <th className="p-3">Dec</th>
+                      <th className="p-3">A-Ser</th>
+                      <th className="p-3">A-Dec</th>
+                      <th className="p-3 font-semibold">Total</th>
+                      <th className="p-3">Observación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyData.map((row) => (
+                      <tr
+                        key={row.module_id}
+                        className="border-b border-slate-800"
+                      >
+                        <td className="p-3 text-slate-300">{row.level_name}</td>
+                        <td className="p-3 font-semibold">{row.module_name}</td>
+                        <td className="p-3">{row.ser}</td>
+                        <td className="p-3">{row.saber}</td>
+                        <td className="p-3">{row.hacer_proceso}</td>
+                        <td className="p-3">{row.hacer_producto}</td>
+                        <td className="p-3">{row.decidir}</td>
+                        <td className="p-3">{row.auto_ser}</td>
+                        <td className="p-3">{row.auto_decidir}</td>
+                        <td className="p-3 font-semibold">{row.total}</td>
+                        <td
+                          className={
+                            "p-3 " +
+                            (row.observation.includes("Excelente")
+                              ? "text-emerald-400 font-semibold"
+                              : row.observation.includes("Promovido")
+                                ? "text-emerald-400"
+                                : row.observation.includes("Postergado")
+                                  ? "text-amber-400"
+                                  : "text-rose-400")
+                          }
+                        >
+                          {row.observation}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

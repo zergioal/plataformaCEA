@@ -9,8 +9,8 @@ type Section = {
   lesson_id: number;
   title: string;
   sort_order: number;
-  kind: "text" | "video" | "image" | string;
-  payload: any;
+  kind: "text" | "video" | "image" | "link" | "html" | string;
+  content_json: any;
 };
 
 function clampPct(x: number) {
@@ -33,21 +33,22 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 function renderSection(section: Section) {
-  const p = section.payload ?? {};
+  const content = section.content_json ?? {};
+
   if (section.kind === "text") {
     return (
       <div
         className="prose max-w-none"
-        dangerouslySetInnerHTML={{ __html: String(p.html ?? "") }}
+        dangerouslySetInnerHTML={{ __html: String(content.text ?? "") }}
       />
     );
   }
 
   if (section.kind === "video") {
-    const url = String(p.url ?? "");
+    const url = String(content.url ?? "");
     return (
       <div className="space-y-3">
-        <div className="font-semibold">{p.title ?? "Video"}</div>
+        <div className="font-semibold">{section.title}</div>
         <div className="aspect-video w-full overflow-hidden rounded-2xl border bg-black">
           <iframe
             className="w-full h-full"
@@ -62,11 +63,46 @@ function renderSection(section: Section) {
   }
 
   if (section.kind === "image") {
-    const url = String(p.url ?? "");
+    const url = String(content.url ?? "");
     return (
       <div className="space-y-3">
-        <div className="font-semibold">{p.title ?? "Imagen"}</div>
-        <img src={url} className="w-full rounded-2xl border" />
+        <div className="font-semibold">{section.title}</div>
+        <img
+          src={url}
+          alt={content.alt || section.title}
+          className="w-full rounded-2xl border"
+        />
+      </div>
+    );
+  }
+
+  if (section.kind === "html") {
+    const html = String(content.html ?? "");
+    return (
+      <div className="space-y-3">
+        <div className="font-semibold">{section.title}</div>
+        <div
+          className="w-full rounded-2xl border p-4 bg-white"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </div>
+    );
+  }
+
+  if (section.kind === "link") {
+    const url = String(content.url ?? "");
+    const label = String(content.label ?? "Visitar enlace");
+    return (
+      <div className="space-y-3">
+        <div className="font-semibold">{section.title}</div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        >
+          {label}
+        </a>
       </div>
     );
   }
@@ -140,7 +176,7 @@ export default function ModulePlayer() {
       const ids = ls.map((x) => x.id);
       const secRes = await supabase
         .from("lesson_sections")
-        .select("id,lesson_id,title,sort_order,kind,payload")
+        .select("id,lesson_id,title,sort_order,kind,content_json")
         .in("lesson_id", ids)
         .order("lesson_id")
         .order("sort_order");
@@ -165,7 +201,7 @@ export default function ModulePlayer() {
       }
 
       const set = new Set<number>(
-        (progRes.data ?? []).map((r: any) => r.section_id)
+        (progRes.data ?? []).map((r: any) => r.section_id),
       );
       setDoneIds(set);
 
@@ -383,7 +419,7 @@ export default function ModulePlayer() {
                 disabled={!canFinal}
                 onClick={() =>
                   alert(
-                    "Luego: evaluación final del módulo (docente califica manualmente)"
+                    "Luego: evaluación final del módulo (docente califica manualmente)",
                   )
                 }
               >

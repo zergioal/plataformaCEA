@@ -1,3 +1,326 @@
+/* cea-plataforma/web/src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    /* Colores principales CEA */
+    --cea-primary: #013658;
+    --cea-primary-dark: #001f3d;
+    --cea-primary-light: #024a7a;
+    --cea-accent: #0088cc;
+    --cea-accent-light: #33a3d9;
+
+    /* Grises minimalistas */
+    --cea-gray-50: #f8fafc;
+    --cea-gray-100: #f1f5f9;
+    --cea-gray-200: #e2e8f0;
+    --cea-gray-300: #cbd5e1;
+    --cea-gray-400: #94a3b8;
+    --cea-gray-500: #64748b;
+    --cea-gray-600: #475569;
+    --cea-gray-700: #334155;
+    --cea-gray-800: #1e293b;
+    --cea-gray-900: #0f172a;
+
+    /* Estados */
+    --cea-success: #10b981;
+    --cea-warning: #f59e0b;
+    --cea-error: #ef4444;
+    --cea-info: #3b82f6;
+
+    /* Sombras minimalistas */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+
+  * {
+    @apply border-gray-200;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      system-ui,
+      sans-serif;
+  }
+
+  /* Scrollbar minimalista */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+}
+
+@layer components {
+  /* Botones CEA */
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-medium text-white transition-all;
+    background-color: var(--cea-primary);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--cea-primary-light);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    @apply scale-[0.98];
+  }
+
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all active:scale-[0.98];
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 rounded-lg font-medium bg-red-500 text-white hover:bg-red-600 transition-all active:scale-[0.98];
+  }
+
+  /* Cards CEA */
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+  }
+
+  .card-hover {
+    @apply card hover:shadow-md transition-all cursor-pointer;
+  }
+
+  /* Inputs CEA */
+  .input {
+    @apply w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 outline-none transition-all;
+  }
+
+  .input:focus {
+    @apply ring-2 ring-blue-500/20 border-blue-500;
+  }
+
+  .input:disabled {
+    @apply bg-gray-100 cursor-not-allowed;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary {
+    @apply badge text-white;
+    background-color: var(--cea-primary);
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-100 text-yellow-800;
+  }
+
+  .badge-error {
+    @apply badge bg-red-100 text-red-800;
+  }
+
+  .badge-gray {
+    @apply badge bg-gray-100 text-gray-800;
+  }
+
+  /* Progress bar CEA */
+  .progress-container {
+    @apply w-full h-2 bg-gray-200 rounded-full overflow-hidden;
+  }
+
+  .progress-bar {
+    @apply h-full rounded-full transition-all duration-300;
+    background-color: var(--cea-primary);
+  }
+
+  /* Headers */
+  .page-header {
+    @apply bg-white border-b border-gray-200;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-gray-900;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-gray-500;
+  }
+
+  /* Tables */
+  .table-container {
+    @apply overflow-auto rounded-xl border border-gray-200;
+  }
+
+  .table {
+    @apply min-w-full text-sm;
+  }
+
+  .table thead {
+    @apply bg-gray-50;
+  }
+
+  .table th {
+    @apply text-left p-3 font-medium text-gray-700;
+  }
+
+  .table td {
+    @apply p-3 text-gray-600;
+  }
+
+  .table tbody tr {
+    @apply border-t border-gray-200 hover:bg-gray-50 transition-colors;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50;
+  }
+
+  .modal {
+    @apply bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto;
+  }
+
+  .modal-header {
+    @apply sticky top-0 bg-white border-b border-gray-200 p-6;
+  }
+
+  .modal-body {
+    @apply p-6;
+  }
+
+  .modal-footer {
+    @apply sticky bottom-0 bg-white border-t border-gray-200 p-6 flex justify-end gap-3;
+  }
+
+  /* Alerts */
+  .alert {
+    @apply rounded-lg p-4 border;
+  }
+
+  .alert-success {
+    @apply alert bg-green-50 border-green-200 text-green-800;
+  }
+
+  .alert-error {
+    @apply alert bg-red-50 border-red-200 text-red-800;
+  }
+
+  .alert-warning {
+    @apply alert bg-yellow-50 border-yellow-200 text-yellow-800;
+  }
+
+  .alert-info {
+    @apply alert bg-blue-50 border-blue-200 text-blue-800;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-gray-300 border-t-blue-600;
+  }
+
+  /* Breadcrumbs */
+  .breadcrumb {
+    @apply flex items-center gap-2 text-sm;
+  }
+
+  .breadcrumb-item {
+    @apply text-gray-500 hover:text-gray-700 transition-colors;
+  }
+
+  .breadcrumb-separator {
+    @apply text-gray-300;
+  }
+
+  /* Stats cards */
+  .stat-card {
+    @apply card p-6;
+  }
+
+  .stat-label {
+    @apply text-sm font-medium text-gray-500;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-gray-900 mt-2;
+  }
+
+  .stat-change {
+    @apply text-sm mt-2;
+  }
+
+  /* Empty states */
+  .empty-state {
+    @apply text-center py-12 px-6;
+  }
+
+  .empty-state-icon {
+    @apply text-6xl mb-4 opacity-20;
+  }
+
+  .empty-state-title {
+    @apply text-lg font-medium text-gray-900 mb-2;
+  }
+
+  .empty-state-text {
+    @apply text-sm text-gray-500;
+  }
+}
+
+@layer utilities {
+  /* Utilidades personalizadas CEA */
+  .text-cea-primary {
+    color: var(--cea-primary);
+  }
+
+  .bg-cea-primary {
+    background-color: var(--cea-primary);
+  }
+
+  .border-cea-primary {
+    border-color: var(--cea-primary);
+  }
+
+  .ring-cea-primary {
+    --tw-ring-color: var(--cea-primary);
+  }
+
+  /* Animaciones suaves */
+  .transition-cea {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  /* Sombras personalizadas */
+  .shadow-cea-sm {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .shadow-cea-md {
+    box-shadow: var(--shadow-md);
+  }
+
+  .shadow-cea-lg {
+    box-shadow: var(--shadow-lg);
+  }
+}
