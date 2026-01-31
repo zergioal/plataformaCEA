@@ -1,10 +1,13 @@
 // cea-plataforma/web/src/pages/TeacherModuleGrades.tsx
 // 🎨 VERSIÓN FINAL: Mejoras UX + Colores dinámicos + Mensajes amigables
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
+import logoCea from "../assets/logo-cea.png";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type ModuleRow = {
   id: number;
@@ -60,12 +63,29 @@ export default function TeacherModuleGrades() {
   const [loadingData, setLoadingData] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Estados para el reporte PDF
+  const currentMonth = new Date().getMonth() + 1;
+  const currentYear = new Date().getFullYear();
+  const defaultSemester = `${currentMonth <= 6 ? 1 : 2}/${currentYear}`;
+
+  const [facilitator, setFacilitator] = useState("");
+  const [director, setDirector] = useState("Lic. Germana Calle Villca");
+  const [semester, setSemester] = useState(defaultSemester);
+  const [editingReport, setEditingReport] = useState(false);
+  const [tempFacilitator, setTempFacilitator] = useState("");
+  const [tempDirector, setTempDirector] = useState(director);
+  const [tempSemester, setTempSemester] = useState(semester);
+
   const isTeacherish = role === "teacher" || role === "admin";
   const mid = parseInt(moduleId ?? "", 10);
   const invalidMid = isNaN(mid) || mid <= 0;
-
+  // Ref para evitar recargas al cambiar de pestaña/ventana
+  const loadedModuleRef = useRef<number | null>(null);
   useEffect(() => {
     if (!session || !isTeacherish || invalidMid) return;
+    // Solo cargar si el módulo cambió o no se ha cargado aún
+    if (loadedModuleRef.current === mid) return;
+    loadedModuleRef.current = mid;
     loadAll();
   }, [session, isTeacherish, mid]);
 
@@ -76,7 +96,7 @@ export default function TeacherModuleGrades() {
     try {
       const { data: teacherProfile, error: profError } = await supabase
         .from("profiles")
-        .select("career_id, shift")
+        .select("career_id, shift, full_name")
         .eq("id", session!.user.id)
         .single();
 
@@ -87,6 +107,12 @@ export default function TeacherModuleGrades() {
       }
 
       setTeacherShift(teacherProfile.shift || "");
+      if (!facilitator) {
+        const fullName = teacherProfile.full_name || "";
+        const facilitatorName = fullName ? `Lic. ${fullName}` : "";
+        setFacilitator(facilitatorName);
+        setTempFacilitator(facilitatorName);
+      }
 
       // Cargar nombre de la carrera
       if (teacherProfile.career_id) {
@@ -295,6 +321,15 @@ export default function TeacherModuleGrades() {
     return "text-red-400";
   }
 
+  function getObservation(total: number): { text: string; color: string } {
+    if (total === 0) return { text: "Retirado", color: "text-white" };
+    if (total >= 1 && total <= 50)
+      return { text: "Postergado", color: "text-red-400" };
+    if (total >= 51 && total <= 75)
+      return { text: "Promovido", color: "text-emerald-400" };
+    return { text: "Promovido Excelente", color: "text-blue-400" };
+  }
+
   function parseErrorMessage(error: string): string {
     // Mensajes amigables para constraints
     if (error.includes("check_ser_range")) {
@@ -367,6 +402,229 @@ export default function TeacherModuleGrades() {
     }
   }
 
+  function handleEditReport() {
+    setTempFacilitator(facilitator);
+    setTempDirector(director);
+    setTempSemester(semester);
+    setEditingReport(true);
+  }
+
+  function handleSaveReport() {
+    setFacilitator(tempFacilitator);
+    setDirector(tempDirector);
+    setSemester(tempSemester);
+    setEditingReport(false);
+  }
+
+  function handleCancelEdit() {
+    setEditingReport(false);
+  }
+
+  async function generatePDF() {
+    // Orientación horizontal (landscape)
+    const doc = new jsPDF({ orientation: "landscape" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // Cargar logo como base64
+    const logoImg = new Image();
+    logoImg.src = logoCea;
+
+    await new Promise((resolve) => {
+      logoImg.onload = resolve;
+    });
+
+    // Convertir imagen a base64
+    const canvas = document.createElement("canvas");
+    canvas.width = logoImg.width;
+    canvas.height = logoImg.height;
+    const ctx = canvas.getContext("2d");
+    ctx?.drawImage(logoImg, 0, 0);
+    const logoBase64 = canvas.toDataURL("image/png");
+
+    // Logo arriba izquierda, pequeño
+    const logoWidth = 18;
+    const logoHeight = 18;
+    doc.addImage(logoBase64, "PNG", 10, 8, logoWidth, logoHeight);
+
+    // Título más pequeño, al lado del logo
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("REPORTE DE CALIFICACIONES", 32, 18);
+
+    // Capitalizar turno
+    const turnoCapitalized =
+      teacherShift.charAt(0).toUpperCase() +
+      teacherShift.slice(1).toLowerCase();
+
+    // Datos generales con subtítulos en negrita
+    doc.setFontSize(9);
+    const startY = 30;
+    const leftX = 10;
+    const midX = pageWidth / 3;
+    const rightX = (pageWidth / 3) * 2;
+
+    // Columna izquierda
+    doc.setFont("helvetica", "bold");
+    doc.text("CEA:", leftX, startY);
+    doc.setFont("helvetica", "normal");
+    doc.text("Madre María Oliva", leftX + 12, startY);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Facilitador(a):", leftX, startY + 6);
+    doc.setFont("helvetica", "normal");
+    doc.text(facilitator, leftX + 28, startY + 6);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Director(a):", leftX, startY + 12);
+    doc.setFont("helvetica", "normal");
+    doc.text(director, leftX + 24, startY + 12);
+
+    // Columna medio
+    doc.setFont("helvetica", "bold");
+    doc.text("Carrera:", midX, startY);
+    doc.setFont("helvetica", "normal");
+    doc.text(careerName, midX + 18, startY);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Módulo:", midX, startY + 6);
+    doc.setFont("helvetica", "normal");
+    doc.text(moduleRow?.title || "", midX + 17, startY + 6);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Nivel:", midX, startY + 12);
+    doc.setFont("helvetica", "normal");
+    doc.text(levelRow?.name || "", midX + 13, startY + 12);
+
+    // Columna derecha
+    doc.setFont("helvetica", "bold");
+    doc.text("Semestre:", rightX, startY);
+    doc.setFont("helvetica", "normal");
+    doc.text(semester, rightX + 20, startY);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Turno:", rightX, startY + 6);
+    doc.setFont("helvetica", "normal");
+    doc.text(turnoCapitalized, rightX + 14, startY + 6);
+
+    // Tabla de calificaciones con todas las columnas
+    const tableData = rows.map((row, index) => {
+      const obs = getObservation(row.total);
+      return [
+        index + 1,
+        row.student.code || "",
+        row.student.full_name || "",
+        row.grade.ser ?? "",
+        row.grade.saber ?? "",
+        row.grade.hacer_proceso ?? row.suggestedHP,
+        row.grade.hacer_producto ?? "",
+        row.grade.decidir ?? "",
+        row.grade.auto_ser ?? "",
+        row.grade.auto_decidir ?? "",
+        row.total,
+        obs.text,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: startY + 18,
+      head: [
+        [
+          "#",
+          "Código",
+          "Participante",
+          "SER\n(10)",
+          "SABER\n(30)",
+          "H.Proc\n(20)",
+          "H.Prod\n(20)",
+          "DEC\n(10)",
+          "A.SER\n(5)",
+          "A.DEC\n(5)",
+          "TOTAL\n(100)",
+          "OBS",
+        ],
+      ],
+      body: tableData,
+      theme: "grid",
+      headStyles: {
+        fillColor: [41, 65, 122],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
+        fontSize: 7,
+        cellPadding: 2,
+      },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 8 },
+        1: { halign: "center", cellWidth: 18 },
+        2: { halign: "left", cellWidth: 55 },
+        3: { halign: "center", cellWidth: 14 },
+        4: { halign: "center", cellWidth: 14 },
+        5: { halign: "center", cellWidth: 14 },
+        6: { halign: "center", cellWidth: 14 },
+        7: { halign: "center", cellWidth: 14 },
+        8: { halign: "center", cellWidth: 14 },
+        9: { halign: "center", cellWidth: 14 },
+        10: { halign: "center", cellWidth: 16, fontStyle: "bold" },
+        11: { halign: "center", cellWidth: 32 },
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      didParseCell: function (data) {
+        // Colores para columna OBS
+        if (data.section === "body" && data.column.index === 11) {
+          const obs = data.cell.raw as string;
+          if (obs === "Retirado") {
+            data.cell.styles.textColor = [100, 100, 100];
+          } else if (obs === "Postergado") {
+            data.cell.styles.textColor = [220, 53, 69];
+          } else if (obs === "Promovido") {
+            data.cell.styles.textColor = [40, 167, 69];
+          } else if (obs === "Promovido Excelente") {
+            data.cell.styles.textColor = [0, 123, 255];
+          }
+        }
+        // Colores para columna TOTAL
+        if (data.section === "body" && data.column.index === 10) {
+          const total = data.cell.raw as number;
+          if (total === 0) {
+            data.cell.styles.textColor = [100, 100, 100];
+          } else if (total >= 1 && total <= 50) {
+            data.cell.styles.textColor = [220, 53, 69];
+          } else if (total >= 51 && total <= 75) {
+            data.cell.styles.textColor = [40, 167, 69];
+          } else if (total >= 76) {
+            data.cell.styles.textColor = [0, 123, 255];
+          }
+        }
+      },
+    });
+
+    // Espacio para firmas
+    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } })
+      .lastAutoTable.finalY;
+    const firmasY = Math.min(finalY + 30, pageHeight - 25);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+
+    // Línea de firma Dirección (izquierda, más centrada)
+    const firmaLeftX = pageWidth / 4;
+    doc.line(firmaLeftX - 35, firmasY, firmaLeftX + 35, firmasY);
+    doc.text("Dirección", firmaLeftX - 12, firmasY + 5);
+
+    // Línea de firma Facilitador (derecha, más centrada)
+    const firmaRightX = (pageWidth / 4) * 3;
+    doc.line(firmaRightX - 35, firmasY, firmaRightX + 35, firmasY);
+    doc.text("Facilitador(a)", firmaRightX - 15, firmasY + 5);
+
+    // Descargar PDF
+    const fileName = `Calificaciones_${moduleRow?.title?.replace(/\s+/g, "_") || "Modulo"}_${semester.replace("/", "-")}.pdf`;
+    doc.save(fileName);
+  }
+
   if (loading)
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -400,11 +658,26 @@ export default function TeacherModuleGrades() {
             </svg>
             <span className="font-medium">Volver a Módulos</span>
           </button>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <img
+              src={logoCea}
+              alt="CEA Logo"
+              className="h-24 w-24 sm:h-32 sm:w-32 lg:h-40 lg:w-40 rounded-xl object-contain p-1"
+            />
+            <div className="text-center sm:text-left">
+              <div className="text-slate-400 text-xs sm:text-sm font-medium mb-1 tracking-wide uppercase">
+                CEA Madre María Oliva
+              </div>
+              <h1 className="text-xl sm:text-2xl font-display font-bold text-white tracking-tight">
+                Calificaciones por Módulo
+              </h1>
+            </div>
+          </div>
           <div className="text-slate-400 text-sm font-medium mb-1">
             {levelRow?.name ?? "Cargando..."}
           </div>
-          <h1 className="text-3xl font-bold text-white">
-            {moduleRow?.title ?? "Cargando módulo..."}
+          <h1 className="text-3xl font-bold text-blue-400">
+            Calificaciones de: {moduleRow?.title ?? "Cargando módulo..."}
           </h1>
           <p className="text-slate-400 mt-1">
             {careerName} · Turno {teacherShift}
@@ -521,6 +794,9 @@ export default function TeacherModuleGrades() {
                       </span>
                     </th>
                     <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                      OBS
+                    </th>
+                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
                       Acciones
                     </th>
                   </tr>
@@ -561,7 +837,7 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4">
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="10"
                           value={row.grade.ser ?? ""}
@@ -580,7 +856,7 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4">
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="30"
                           value={row.grade.saber ?? ""}
@@ -600,7 +876,7 @@ export default function TeacherModuleGrades() {
                         <div className="flex flex-col items-center gap-1">
                           <input
                             type="number"
-                            className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all"
+                            className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             min="0"
                             max="20"
                             value={row.grade.hacer_proceso ?? ""}
@@ -623,7 +899,7 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4">
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="20"
                           value={row.grade.hacer_producto ?? ""}
@@ -642,7 +918,7 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4">
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="10"
                           value={row.grade.decidir ?? ""}
@@ -661,7 +937,7 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4">
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="5"
                           value={row.grade.auto_ser ?? ""}
@@ -680,7 +956,7 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4">
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           min="0"
                           max="5"
                           value={row.grade.auto_decidir ?? ""}
@@ -698,14 +974,19 @@ export default function TeacherModuleGrades() {
                       {/* TOTAL */}
                       <td className="px-3 py-4 text-center">
                         <div
-                          className={`text-xl font-bold ${
-                            row.total >= 51
-                              ? "text-emerald-400"
-                              : "text-red-400"
-                          }`}
+                          className={`text-xl font-bold ${getObservation(row.total).color}`}
                         >
                           {row.total}
                         </div>
+                      </td>
+
+                      {/* OBS */}
+                      <td className="px-3 py-4 text-center">
+                        <span
+                          className={`text-sm font-semibold ${getObservation(row.total).color}`}
+                        >
+                          {getObservation(row.total).text}
+                        </span>
                       </td>
 
                       {/* Acciones */}
@@ -722,6 +1003,158 @@ export default function TeacherModuleGrades() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Sección de Reporte PDF */}
+        {rows.length > 0 && (
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <svg
+                className="w-6 h-6 text-red-400"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h6v6h6v10H6z" />
+                <path d="M9 13h6v2H9zm0 3h6v2H9zm0-6h2v2H9z" />
+              </svg>
+              Generar Reporte PDF
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">
+                  Facilitador(a) / Docente
+                </label>
+                {editingReport ? (
+                  <input
+                    type="text"
+                    value={tempFacilitator}
+                    onChange={(e) => setTempFacilitator(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                ) : (
+                  <div className="px-3 py-2 bg-slate-800/30 border border-slate-700/30 rounded-lg text-white text-sm">
+                    {facilitator || "Sin nombre"}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">
+                  Director(a) del CEA
+                </label>
+                {editingReport ? (
+                  <input
+                    type="text"
+                    value={tempDirector}
+                    onChange={(e) => setTempDirector(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                ) : (
+                  <div className="px-3 py-2 bg-slate-800/30 border border-slate-700/30 rounded-lg text-white text-sm">
+                    {director}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">
+                  Semestre
+                </label>
+                {editingReport ? (
+                  <input
+                    type="text"
+                    value={tempSemester}
+                    onChange={(e) => setTempSemester(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    placeholder="1/2026"
+                  />
+                ) : (
+                  <div className="px-3 py-2 bg-slate-800/30 border border-slate-700/30 rounded-lg text-white text-sm">
+                    {semester}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              {editingReport ? (
+                <>
+                  <button
+                    onClick={handleSaveReport}
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 flex items-center gap-2"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    Guardar
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg font-medium transition-all duration-200 flex items-center gap-2"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleEditReport}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  Editar datos
+                </button>
+              )}
+
+              <button
+                onClick={generatePDF}
+                className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-red-900/30 flex items-center gap-2"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+                  <path d="M12 18l4-4h-3v-4h-2v4H8l4 4z" />
+                </svg>
+                Descargar PDF
+              </button>
             </div>
           </div>
         )}

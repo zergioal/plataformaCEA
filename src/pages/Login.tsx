@@ -73,7 +73,7 @@ export default function Login() {
             Plataforma CEA
           </h1>
           <p className="text-gray-500">
-            Centro de Educación Alternativa Madre María Oliva
+            Centro de Educación Alternativa "Madre María Oliva"
           </p>
         </div>
 
@@ -88,12 +88,12 @@ export default function Login() {
               className="input"
               value={user}
               onChange={(e) => setUser(e.target.value)}
-              placeholder="Ej: ADMIN, SI0001"
+              placeholder="Ejm: SI-0000"
               autoComplete="username"
               autoFocus
             />
             <p className="text-xs text-gray-500">
-              Ingresa solo tu código (sin @cea.local)
+              Ingresa tu código de participante
             </p>
           </div>
 
@@ -148,9 +148,14 @@ export default function Login() {
           <div className="text-center pt-2">
             <p className="text-xs text-gray-500">
               ¿Olvidaste tu contraseña?{" "}
-              <span className="text-cea-primary font-medium">
+              <a
+                href="https://wa.me/59170745899?text=Hola%20soy%20...%20y%20olvid%C3%A9%20mi%20contrase%C3%B1a"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cea-primary font-medium hover:underline"
+              >
                 Contacta al administrador
-              </span>
+              </a>
             </p>
           </div>
         </form>

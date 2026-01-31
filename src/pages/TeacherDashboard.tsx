@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
+import logoCea from "../assets/logo-cea.png";
 
 type ProfileData = {
   id: string;
@@ -883,27 +884,37 @@ export default function TeacherDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Header */}
+      {/* Header - RESPONSIVE */}
       <header className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800/50 shadow-xl">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-slate-400 text-sm font-medium mb-1">
-                CEA Madre María Oliva
+        <div className="px-4 sm:px-6 py-4 sm:py-6">
+          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <img
+                src={logoCea}
+                alt="CEA Logo"
+                className="h-24 w-24 sm:h-32 sm:w-32 lg:h-40 lg:w-40 rounded-xl object-contain p-1"
+              />
+              <div className="text-center sm:text-left">
+                <div className="text-slate-400 text-xs sm:text-sm font-medium mb-1 tracking-wide uppercase">
+                  CEA Madre María Oliva
+                </div>
+                <h1 className="text-xl sm:text-2xl font-display font-bold text-white tracking-tight">
+                  Panel Docente
+                </h1>
               </div>
-              <h1 className="text-3xl font-bold text-white">Panel Docente</h1>
             </div>
             <button
-              className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-red-900/30"
+              className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-red-900/30 text-sm sm:text-base"
               onClick={logout}
             >
-              Cerrar sesión
+              <span className="sm:hidden">Salir</span>
+              <span className="hidden sm:inline">Cerrar sesión</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <main className="mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         {msg && (
           <div
             className={`px-6 py-4 rounded-xl font-medium animate-in fade-in slide-in-from-top-2 duration-300 ${
@@ -916,12 +927,12 @@ export default function TeacherDashboard() {
           </div>
         )}
 
-        {/* Perfil del docente */}
-        <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-8 shadow-2xl">
-          <div className="flex items-start gap-8">
+        {/* Perfil del docente - RESPONSIVE */}
+        <section className="w-full max-w-5xl mx-auto bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 lg:p-8 shadow-2xl">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 lg:gap-8">
             <div className="flex-shrink-0">
               <div className="relative group">
-                <div className="w-32 h-32 rounded-2xl overflow-hidden border-4 border-slate-700/50 shadow-xl">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 rounded-2xl overflow-hidden border-4 border-slate-700/50 shadow-xl">
                   <img
                     src={avatar.url}
                     alt={avatar.label}
@@ -929,11 +940,11 @@ export default function TeacherDashboard() {
                   />
                 </div>
                 <button
-                  className="absolute -bottom-3 -right-3 w-12 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-center hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg shadow-blue-900/50 group-hover:scale-110"
+                  className="absolute -bottom-2 -right-2 sm:-bottom-3 sm:-right-3 w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-center hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg shadow-blue-900/50 group-hover:scale-110"
                   onClick={() => setShowAvatarModal(true)}
                 >
                   <svg
-                    className="w-5 h-5"
+                    className="w-4 h-4 sm:w-5 sm:h-5"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -949,43 +960,54 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
-            <div className="flex-1">
-              <div className="flex items-start justify-between mb-6">
+            <div className="flex-1 w-full text-center sm:text-left">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4 sm:mb-6">
                 <div>
-                  <div className="text-sm text-slate-400 mb-1">
+                  <div className="text-sm text-slate-400 mb-1 font-mono">
                     {profileData?.code ?? ""}
                   </div>
-                  <h2 className="text-3xl font-bold text-white mb-2">
+                  <h2 className="text-2xl sm:text-3xl font-display font-bold text-white mb-2 tracking-tight">
                     {profileData?.full_name ?? "Docente"}
                   </h2>
-                  <div className="flex items-center gap-3 text-slate-300">
-                    <span className="px-3 py-1 bg-slate-800/50 rounded-lg text-sm">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-3 text-slate-300">
+                    <span className="px-2 sm:px-3 py-1 bg-slate-800/50 rounded-lg text-xs sm:text-sm">
                       {careerName}
                     </span>
-                    <span className="px-3 py-1 bg-slate-800/50 rounded-lg text-sm capitalize">
+                    <span className="px-2 sm:px-3 py-1 bg-slate-800/50 rounded-lg text-xs sm:text-sm capitalize">
                       {profileData?.shift ?? ""}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex flex-wrap justify-center sm:justify-end gap-2 sm:gap-3">
                   <Link
                     to="/teacher/content"
-                    className="px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30"
+                    className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 text-sm sm:text-base"
                   >
-                    ✏️ Editar Contenido
+                    <span className="sm:hidden">✏️</span>
+                    <span className="hidden sm:inline">
+                      ✏️ Editar Contenido
+                    </span>
                   </Link>
                   <Link
                     to="/teacher/modules"
-                    className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-900/30"
+                    className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-900/30 text-sm sm:text-base"
                   >
-                    📚 Calificaciones
+                    <span className="sm:hidden">📚</span>
+                    <span className="hidden sm:inline">📚 Calificaciones</span>
                   </Link>
                   <button
-                    className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all duration-200 border border-slate-700/50"
+                    className="px-3 sm:px-5 py-2 sm:py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all duration-200 border border-slate-700/50 text-sm sm:text-base"
                     onClick={() => setEditMode(!editMode)}
                   >
-                    {editMode ? "Cancelar" : "Editar Perfil"}
+                    {editMode ? (
+                      "Cancelar"
+                    ) : (
+                      <>
+                        <span className="sm:hidden">Editar</span>
+                        <span className="hidden sm:inline">Editar Perfil</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1062,13 +1084,15 @@ export default function TeacherDashboard() {
           </div>
         </section>
 
-        {/* Lista de estudiantes */}
+        {/* Lista de estudiantes - RESPONSIVE */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-white">Mis Estudiantes</h2>
-            <div className="flex gap-3 items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-white">
+              Mis Estudiantes
+            </h2>
+            <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
               <select
-                className="px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
                 value={selectedLevelFilter ?? ""}
                 onChange={(e) =>
                   setSelectedLevelFilter(
@@ -1084,18 +1108,18 @@ export default function TeacherDashboard() {
                 ))}
               </select>
               <select
-                className="px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
                 value={sortOrder}
                 onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
               >
-                <option value="asc">A → Z (Apellido)</option>
-                <option value="desc">Z → A (Apellido)</option>
+                <option value="asc">A → Z</option>
+                <option value="desc">Z → A</option>
               </select>
               <button
-                className="px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30"
+                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 text-sm sm:text-base"
                 onClick={() => setShowAddStudent(true)}
               >
-                + Añadir Estudiante
+                + <span className="hidden sm:inline">Añadir </span>Estudiante
               </button>
             </div>
           </div>

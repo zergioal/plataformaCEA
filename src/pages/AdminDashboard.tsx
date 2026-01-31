@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import logoCea from "../assets/logo-cea.png";
 
 type Shift = "tarde" | "noche";
 type UserRole = "student" | "teacher" | "admin";
@@ -1524,27 +1525,41 @@ export default function AdminDashboard() {
             alignItems: "center",
           }}
         >
-          <div>
-            <div
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <img
+              src={logoCea}
+              alt="CEA Logo"
               style={{
-                fontSize: "12px",
-                color: "#71717a",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
+                height: "128px",
+                width: "128px",
+                borderRadius: "12px",
+                objectFit: "contain",
+                background: "none",
+                padding: "4px",
               }}
-            >
-              Panel Administrador
+            />
+            <div>
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#71717a",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
+                }}
+              >
+                CEA Madre María Oliva
+              </div>
+              <h1
+                style={{
+                  fontSize: "24px",
+                  fontWeight: "700",
+                  color: "#fff",
+                  margin: "4px 0 0",
+                }}
+              >
+                Panel de Administración
+              </h1>
             </div>
-            <h1
-              style={{
-                fontSize: "24px",
-                fontWeight: "700",
-                color: "#fff",
-                margin: "4px 0 0",
-              }}
-            >
-              Gestión de Usuarios
-            </h1>
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button

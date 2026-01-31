@@ -1280,7 +1280,7 @@ export default function TeacherContentManager() {
                           }}
                           onClick={() => openEditModule(module)}
                         >
-                          ✏️ Editar
+                          ✏️ Editar nombre
                         </button>
                         <button
                           style={{
@@ -1290,7 +1290,7 @@ export default function TeacherContentManager() {
                           }}
                           onClick={() => goToLessons(module)}
                         >
-                          Ver Lecciones →
+                          Editar Lecciones →
                         </button>
                       </div>
                     </div>
@@ -1475,7 +1475,7 @@ export default function TeacherContentManager() {
                           }}
                           onClick={() => openEditLesson(lesson)}
                         >
-                          Editar
+                          Editar título
                         </button>
                         <button
                           style={{
@@ -1485,7 +1485,7 @@ export default function TeacherContentManager() {
                           }}
                           onClick={() => goToSections(lesson)}
                         >
-                          Contenido →
+                          Editar Contenido →
                         </button>
                         <button
                           style={{
@@ -1666,8 +1666,7 @@ export default function TeacherContentManager() {
                               }
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.transform =
-                                "translateY(0)";
+                              e.currentTarget.style.transform = "translateY(0)";
                               e.currentTarget.style.boxShadow =
                                 idx === 0
                                   ? "none"
@@ -1713,8 +1712,7 @@ export default function TeacherContentManager() {
                               }
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.transform =
-                                "translateY(0)";
+                              e.currentTarget.style.transform = "translateY(0)";
                               e.currentTarget.style.boxShadow =
                                 idx === sections.length - 1
                                   ? "none"
