@@ -1,0 +1,13 @@
+# Configuración de Netlify para React SPA
+
+[build]
+  # Comando para construir el proyecto
+  command = "npm run build"
+  # Carpeta donde se genera el build
+  publish = "dist"
+
+# Redirigir todas las rutas a index.html (necesario para React Router)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
