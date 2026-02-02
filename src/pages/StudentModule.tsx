@@ -112,7 +112,7 @@ export default function StudentModule() {
 
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [modules, setModules] = useState<ModuleRow[]>([]);
+  const [, setModules] = useState<ModuleRow[]>([]);
   const [moduleRow, setModuleRow] = useState<ModuleRow | null>(null);
 
   const [lessons, setLessons] = useState<LessonRow[]>([]);
@@ -140,7 +140,7 @@ export default function StudentModule() {
       const enr = await supabase
         .from("enrollments")
         .select("level_id")
-        .eq("student_id", session.user.id)
+        .eq("student_id", session!.user.id)
         .maybeSingle();
 
       if (enr.error) {
@@ -227,7 +227,7 @@ export default function StudentModule() {
       const progRes = await supabase
         .from("student_section_progress")
         .select("section_id")
-        .eq("student_id", session.user.id);
+        .eq("student_id", session!.user.id);
 
       if (progRes.error) {
         setMsg("No se pudo cargar progreso: " + progRes.error.message);

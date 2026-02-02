@@ -234,7 +234,7 @@ export default function StudentDashboard() {
       const enr = await supabase
         .from("enrollments")
         .select("level_id")
-        .eq("student_id", session.user.id)
+        .eq("student_id", session!.user.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -286,7 +286,7 @@ export default function StudentDashboard() {
         .select(
           "module_id,completed_sections,total_sections,progress_percent,is_unlocked_final",
         )
-        .eq("student_id", session.user.id)
+        .eq("student_id", session!.user.id)
         .in("module_id", moduleIds);
 
       if (progRes.error) {

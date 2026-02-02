@@ -50,7 +50,7 @@ export default function TeacherModules() {
         const { data: teacherProfile, error: profError } = await supabase
           .from("profiles")
           .select("career_id")
-          .eq("id", session.user.id)
+          .eq("id", session!.user.id)
           .single();
 
         if (profError || !teacherProfile?.career_id) {

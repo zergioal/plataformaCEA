@@ -181,7 +181,7 @@ export default function TeacherDashboard() {
         .select(
           "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift",
         )
-        .eq("id", session.user.id)
+        .eq("id", session!.user.id)
         .single();
 
       if (profErr) {

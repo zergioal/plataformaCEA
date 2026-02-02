@@ -193,7 +193,7 @@ export default function ModulePlayer() {
       const progRes = await supabase
         .from("student_section_progress")
         .select("section_id")
-        .eq("student_id", session.user.id);
+        .eq("student_id", session!.user.id);
 
       if (progRes.error) {
         setMsg("No se pudo cargar progreso: " + progRes.error.message);

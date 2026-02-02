@@ -1,7 +1,8 @@
 // cea-plataforma/web/src/pages/AdminDashboard.tsx
 // VERSIÓN MODO OSCURO (NEGRO/GRIS) + GESTIÓN COMPLETA + PDFs
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactElement } from "react";
 import { supabase } from "../lib/supabase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -3013,7 +3014,7 @@ export default function AdminDashboard() {
                           gradesByLevel.get(key)!.push(g);
                         }
 
-                        const rows: JSX.Element[] = [];
+                        const rows: ReactElement[] = [];
                         gradesByLevel.forEach((grades, levelName) => {
                           rows.push(
                             <tr key={`level-${levelName}`}>
