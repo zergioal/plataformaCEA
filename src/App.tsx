@@ -4,6 +4,7 @@ import AppRedirect from "./components/AppRedirect";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RequireRole from "./components/RequireRole";
 
+// Páginas protegidas
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminContentManager from "./pages/AdminContentManager";
@@ -15,11 +16,30 @@ import StudentDashboard from "./pages/StudentDashboard";
 import StudentModule from "./pages/StudentModule";
 import TeacherContentManager from "./pages/TeacherContentManager";
 
+// Páginas públicas
+import { PublicLayout } from "./components/public";
+import {
+  HomePage,
+  SistemasPage,
+  GastronomiaPage,
+  ContaduriaPage,
+  TextilPage,
+} from "./pages/public";
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/app" replace />} />
+        {/* ===== RUTAS PÚBLICAS ===== */}
+        <Route path="/" element={<PublicLayout />}>
+          <Route index element={<HomePage />} />
+          <Route path="carreras/sistemas" element={<SistemasPage />} />
+          <Route path="carreras/gastronomia" element={<GastronomiaPage />} />
+          <Route path="carreras/contaduria" element={<ContaduriaPage />} />
+          <Route path="carreras/textil" element={<TextilPage />} />
+        </Route>
+
+        {/* ===== AUTENTICACIÓN ===== */}
         <Route path="/login" element={<Login />} />
         <Route
           path="/app"
@@ -133,7 +153,7 @@ export default function App() {
         />
 
         {/* FALLBACK */}
-        <Route path="*" element={<Login />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

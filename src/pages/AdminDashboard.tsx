@@ -2,7 +2,6 @@
 // VERSIÓN MODO OSCURO (NEGRO/GRIS) + GESTIÓN COMPLETA + PDFs
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -206,7 +205,6 @@ const darkStyles = {
 };
 
 export default function AdminDashboard() {
-  const nav = useNavigate();
   const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "");
   const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
 
@@ -308,6 +306,19 @@ export default function AdminDashboard() {
   const [messageResolve, setMessageResolve] = useState<(() => void) | null>(
     null,
   );
+
+  // ========== CUENTAS BLOQUEADAS ==========
+  type LockedAccount = {
+    id: string;
+    code: string | null;
+    full_name: string | null;
+    role: UserRole | null;
+    locked_at: string | null;
+    failed_attempts: number;
+  };
+  const [lockedAccounts, setLockedAccounts] = useState<LockedAccount[]>([]);
+  const [loadingLocked, setLoadingLocked] = useState(false);
+  const [unlockingId, setUnlockingId] = useState<string | null>(null);
 
   // ========== FUNCIONES HELPER ==========
   function showMessage(
@@ -433,6 +444,41 @@ export default function AdminDashboard() {
     setLoadingStudents(false);
   }, [levels]);
 
+  // Cargar cuentas bloqueadas
+  const loadLockedAccounts = useCallback(async () => {
+    setLoadingLocked(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,code,full_name,role,locked_at,failed_attempts")
+      .eq("locked", true)
+      .order("locked_at", { ascending: false });
+
+    setLoadingLocked(false);
+    if (error) {
+      console.error("Error cargando cuentas bloqueadas:", error);
+      return;
+    }
+    setLockedAccounts((data as LockedAccount[]) ?? []);
+  }, []);
+
+  // Desbloquear cuenta
+  async function unlockAccount(userId: string, userCode: string | null) {
+    if (!confirm(`¿Desbloquear la cuenta ${userCode ?? userId}?`)) return;
+
+    setUnlockingId(userId);
+    const { error } = await supabase.rpc("unlock_account", { p_user_id: userId });
+
+    if (error) {
+      setUnlockingId(null);
+      await showMessage("Error", "No se pudo desbloquear la cuenta: " + error.message, "error");
+      return;
+    }
+
+    await showMessage("Cuenta desbloqueada", `La cuenta ${userCode ?? ""} ha sido desbloqueada exitosamente.`, "success");
+    setUnlockingId(null);
+    void loadLockedAccounts();
+  }
+
   useEffect(() => {
     void loadCatalogs();
   }, [loadCatalogs]);
@@ -441,8 +487,9 @@ export default function AdminDashboard() {
     if (careers.length > 0 && levels.length > 0) {
       void loadTeachers();
       void loadStudents();
+      void loadLockedAccounts();
     }
-  }, [careers.length, levels.length, loadTeachers, loadStudents]);
+  }, [careers.length, levels.length, loadTeachers, loadStudents, loadLockedAccounts]);
 
   // ========== FUNCIONES DE CARRERAS ==========
   const studentsPerCareer = useMemo(() => {
@@ -1563,12 +1610,6 @@ export default function AdminDashboard() {
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button
-              style={darkStyles.btnSecondary}
-              onClick={() => nav("/admin/content")}
-            >
-              📚 Contenido
-            </button>
-            <button
               style={darkStyles.btnPrimary}
               onClick={() => supabase.auth.signOut()}
             >
@@ -1603,6 +1644,147 @@ export default function AdminDashboard() {
               {msg}
             </pre>
           </div>
+        )}
+
+        {/* SECCIÓN CUENTAS BLOQUEADAS */}
+        {(lockedAccounts.length > 0 || loadingLocked) && (
+          <section
+            style={{
+              ...darkStyles.card,
+              padding: "24px",
+              marginBottom: "24px",
+              border: "2px solid rgba(239, 68, 68, 0.4)",
+              background: "linear-gradient(135deg, rgba(127, 29, 29, 0.3) 0%, rgba(30, 30, 30, 0.95) 100%)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  color: "#fca5a5",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                🔒 Cuentas Bloqueadas ({lockedAccounts.length})
+              </h2>
+              <button
+                style={{ ...darkStyles.btnSecondary, padding: "6px 12px", fontSize: "13px" }}
+                onClick={() => void loadLockedAccounts()}
+                disabled={loadingLocked}
+              >
+                {loadingLocked ? "Cargando..." : "🔄 Actualizar"}
+              </button>
+            </div>
+
+            {loadingLocked ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#a1a1aa" }}>
+                Cargando cuentas bloqueadas...
+              </div>
+            ) : lockedAccounts.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#86efac" }}>
+                ✅ No hay cuentas bloqueadas
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Código</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Nombre</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Rol</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Intentos</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Bloqueado</th>
+                      <th style={{ padding: "12px", textAlign: "center", color: "#a1a1aa", fontSize: "13px" }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lockedAccounts.map((acc) => (
+                      <tr
+                        key={acc.id}
+                        style={{
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                          background: "rgba(239, 68, 68, 0.05)",
+                        }}
+                      >
+                        <td style={{ padding: "12px", color: "#fff", fontFamily: "monospace" }}>
+                          {acc.code || "—"}
+                        </td>
+                        <td style={{ padding: "12px", color: "#fff" }}>
+                          {acc.full_name || "Sin nombre"}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          <span
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "500",
+                              background:
+                                acc.role === "teacher"
+                                  ? "rgba(59, 130, 246, 0.2)"
+                                  : acc.role === "student"
+                                    ? "rgba(34, 197, 94, 0.2)"
+                                    : "rgba(168, 85, 247, 0.2)",
+                              color:
+                                acc.role === "teacher"
+                                  ? "#93c5fd"
+                                  : acc.role === "student"
+                                    ? "#86efac"
+                                    : "#c4b5fd",
+                            }}
+                          >
+                            {acc.role === "teacher" ? "Docente" : acc.role === "student" ? "Estudiante" : acc.role}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px", color: "#fca5a5", fontWeight: "600" }}>
+                          {acc.failed_attempts}
+                        </td>
+                        <td style={{ padding: "12px", color: "#a1a1aa", fontSize: "13px" }}>
+                          {acc.locked_at
+                            ? new Date(acc.locked_at).toLocaleString("es-BO", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                        <td style={{ padding: "12px", textAlign: "center" }}>
+                          <button
+                            style={{
+                              ...darkStyles.btnPrimary,
+                              padding: "6px 12px",
+                              fontSize: "13px",
+                              background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                            }}
+                            onClick={() => void unlockAccount(acc.id, acc.code)}
+                            disabled={unlockingId === acc.id}
+                          >
+                            {unlockingId === acc.id ? "..." : "🔓 Desbloquear"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p style={{ marginTop: "12px", fontSize: "12px", color: "#a1a1aa" }}>
+              Las cuentas se bloquean automáticamente después de 5 intentos fallidos de inicio de sesión.
+            </p>
+          </section>
         )}
 
         {/* SECCIÓN CARRERAS */}

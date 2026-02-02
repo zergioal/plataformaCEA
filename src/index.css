@@ -46,7 +46,12 @@
   }
 
   /* Headings con Space Grotesk */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display font-bold tracking-tight;
   }
 
@@ -63,7 +68,9 @@
   }
 
   /* Código con fuente monoespaciada */
-  code, pre, .font-mono {
+  code,
+  pre,
+  .font-mono {
     font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
   }
 
@@ -115,7 +122,8 @@
 
   /* Cards CEA */
   .card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+    @apply rounded-xl border border-gray-200 shadow-sm;
+    background-color: rgba(255, 255, 255, 0.72);
   }
 
   .card-hover {
@@ -338,5 +346,336 @@
 
   .shadow-cea-lg {
     box-shadow: var(--shadow-lg);
+  }
+}
+
+/* ========================================
+   COMPONENTES PÚBLICOS (Sitio Institucional)
+   ======================================== */
+
+@layer components {
+  /* Layout público con fondo de imagen tenue */
+  .public-layout {
+    @apply relative;
+  }
+
+  .public-bg-image {
+    @apply fixed inset-0 pointer-events-none z-0;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    opacity: 0.22; /* ajusta 0.12–0.28 según tu foto */
+  }
+
+  /* Header público */
+  .public-header {
+    @apply py-6 text-center;
+    background-color: rgba(255, 255, 255, 0); /* totalmente transparente */
+  }
+
+  .public-header-subtitle {
+    font-size: clamp(0.95rem, 1.2vw, 1.15rem);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: rgba(15, 23, 42, 0.78);
+    margin-top: 0.25rem;
+  }
+
+  .public-header-title {
+    /* Tamaño fluido: crece con la pantalla sin exagerar */
+    font-size: clamp(2rem, 3.5vw, 3.6rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+
+    /* Apariencia */
+    font-weight: 800;
+    color: var(--cea-primary);
+
+    /* Centrarlo bonito y evitar líneas muy largas */
+    max-width: 20ch;
+    margin: 0.25rem auto 0;
+
+    /* Legibilidad sin blur */
+    text-shadow: 0 2px 10px rgba(255, 255, 255, 0.75);
+  }
+
+  .public-header-logo {
+    @apply h-32 w-auto mx-auto mb-4;
+  }
+
+  .public-header-subtitle {
+    @apply text-gray-600 font-light text-lg;
+  }
+
+  .public-header-title {
+    @apply text-4xl lg:text-5xl font-bold;
+    color: var(--cea-primary);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Navegación pública sticky */
+  .public-nav {
+    @apply sticky top-0 z-50 py-3 shadow-md;
+    background-color: rgba(1, 54, 88, 0.75); /* azul con transparencia */
+  }
+
+  .public-nav-container {
+    @apply max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-4;
+  }
+
+  .public-nav-links {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .public-nav-link {
+    @apply text-white/90 hover:text-white font-medium px-4 py-2 rounded-lg
+           transition-all duration-200 hover:bg-white/10;
+  }
+
+  .public-nav-link.active {
+    @apply text-white bg-white/20;
+  }
+
+  /* Botón LOGIN destacado (dorado/amarillo) */
+  .btn-login {
+    @apply font-bold px-6 py-2 rounded-lg shadow-lg
+           hover:shadow-xl hover:scale-105 transition-all duration-300;
+    background: linear-gradient(135deg, #f59e0b 0%, #eab308 100%);
+    color: rgb(255, 255, 255);
+  }
+
+  .btn-login:hover {
+    background: linear-gradient(135deg, #fbbf24 0%, #facc15 100%);
+  }
+
+  /* Footer público */
+  .public-footer {
+    @apply text-white py-8 text-center;
+    background-color: rgba(1, 54, 88, 0.78);
+  }
+
+  .public-footer-map {
+    @apply w-full max-w-4xl h-72 rounded-xl border-none shadow-lg mx-auto;
+  }
+
+  /* Carrusel */
+  .carousel-container {
+    @apply relative overflow-hidden rounded-xl shadow-xl;
+  }
+
+  .carousel-slides {
+    @apply relative h-80 md:h-96 lg:h-[450px];
+  }
+
+  .carousel-slide {
+    @apply absolute inset-0 transition-opacity duration-700 ease-in-out;
+  }
+
+  .carousel-slide.active {
+    @apply opacity-100 z-10;
+  }
+
+  .carousel-slide.inactive {
+    @apply opacity-0 z-0;
+  }
+
+  .carousel-slide img {
+    @apply w-full h-full object-cover;
+  }
+
+  .carousel-control {
+    @apply absolute top-1/2 -translate-y-1/2 z-20
+           bg-black/40 hover:bg-black/60 text-white
+           w-12 h-12 rounded-full flex items-center justify-center
+           transition-all duration-200 cursor-pointer;
+  }
+
+  .carousel-control-prev {
+    @apply carousel-control left-4;
+  }
+
+  .carousel-control-next {
+    @apply carousel-control right-4;
+  }
+
+  .carousel-indicators {
+    @apply absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20;
+  }
+
+  .carousel-indicator {
+    @apply w-3 h-3 rounded-full bg-white/50 hover:bg-white/80
+           transition-all duration-200 cursor-pointer;
+  }
+
+  .carousel-indicator.active {
+    @apply bg-white w-8;
+  }
+
+  /* Tarjetas de carrera */
+  .career-card {
+    @apply card overflow-hidden cursor-pointer
+           hover:shadow-xl transition-all duration-300 hover:-translate-y-2;
+  }
+
+  .career-card-image {
+    @apply aspect-video w-full object-cover transition-transform duration-500;
+  }
+
+  .career-card:hover .career-card-image {
+    @apply scale-105;
+  }
+
+  .career-card-body {
+    @apply p-4 text-center;
+  }
+
+  .career-card-title {
+    @apply font-semibold text-gray-900 transition-colors;
+  }
+
+  .career-card:hover .career-card-title {
+    @apply text-blue-600;
+  }
+
+  /* Tarjetas de nivel técnico */
+  .level-card {
+    @apply card p-5 h-full hover:shadow-lg transition-all duration-300 hover:-translate-y-1;
+  }
+
+  .level-card-title {
+    @apply text-lg font-semibold text-center mb-4 pb-3 border-b border-gray-200;
+  }
+
+  .level-card-list {
+    @apply space-y-2 text-sm text-gray-600;
+  }
+
+  .level-card-list li {
+    @apply flex items-start gap-2;
+  }
+
+  .level-card-list li::before {
+    content: "•";
+    @apply text-blue-500 font-bold;
+  }
+
+  /* Sección animada al scroll */
+  .animate-on-scroll {
+    @apply opacity-0 translate-y-8 transition-all duration-700 ease-out;
+  }
+
+  .animate-on-scroll.visible {
+    @apply opacity-100 translate-y-0;
+  }
+
+  /* Header de carrera con gradiente animado */
+  .career-header {
+    @apply text-white py-16 px-4 text-center;
+    background-size: 200% 200%;
+    animation: gradientMove 15s ease infinite;
+  }
+
+  @keyframes gradientMove {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .career-header-title {
+    @apply text-4xl lg:text-5xl font-bold mb-4;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .career-header-description {
+    @apply text-lg text-white/90 max-w-2xl mx-auto;
+  }
+
+  /* Galería de imágenes */
+  .image-gallery {
+    @apply grid grid-cols-1 md:grid-cols-3 gap-6;
+  }
+
+  .gallery-image {
+    @apply rounded-xl shadow-lg overflow-hidden hover:shadow-xl
+           transition-all duration-300 hover:scale-[1.02];
+  }
+
+  .gallery-image img {
+    @apply w-full h-48 object-cover;
+  }
+
+  /* Sección de institucional */
+  .institutional-card {
+    @apply card p-6 h-full hover:shadow-lg transition-all duration-300;
+  }
+
+  .institutional-card-title {
+    @apply text-xl font-bold text-gray-900 mb-3;
+    color: var(--cea-primary);
+  }
+
+  .institutional-card-text {
+    @apply text-gray-600 leading-relaxed;
+  }
+
+  /* Lista de requisitos */
+  .requirements-list {
+    @apply max-w-xl mx-auto space-y-3;
+  }
+
+  .requirement-item {
+    @apply flex items-center gap-3 p-4 bg-white rounded-xl shadow-sm
+           border border-gray-100 hover:shadow-md transition-all;
+  }
+
+  .requirement-icon {
+    @apply text-2xl;
+  }
+
+  .requirement-text {
+    @apply text-gray-700;
+  }
+
+  /* Contacto */
+  .contact-item {
+    @apply flex items-center justify-center gap-2 text-gray-700;
+  }
+
+  .social-btn {
+    @apply px-6 py-3 rounded-full font-semibold transition-all duration-300
+           hover:scale-105 hover:shadow-lg;
+  }
+
+  .social-btn-whatsapp {
+    @apply social-btn bg-green-500 text-white hover:bg-green-600;
+  }
+
+  .social-btn-facebook {
+    @apply social-btn bg-blue-600 text-white hover:bg-blue-700;
+  }
+
+  .social-btn-tiktok {
+    @apply social-btn bg-gray-900 text-white hover:bg-gray-800;
+  }
+
+  /* Menú hamburguesa móvil */
+  .mobile-menu-btn {
+    @apply lg:hidden p-2 text-white hover:bg-white/10 rounded-lg transition-colors;
+  }
+
+  .mobile-menu {
+    @apply lg:hidden w-full py-4 space-y-2;
+  }
+
+  .mobile-menu-link {
+    @apply block w-full text-left text-white/90 hover:text-white
+           font-medium px-4 py-3 rounded-lg hover:bg-white/10 transition-all;
   }
 }

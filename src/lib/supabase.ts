@@ -15,5 +15,6 @@ export const supabase = createClient(url, anon, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storage: sessionStorage, // Sesión se borra al cerrar el navegador
   },
 });
