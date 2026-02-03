@@ -9,7 +9,7 @@ type Section = {
   lesson_id: number;
   title: string;
   sort_order: number;
-  kind: "text" | "video" | "image" | "link" | "html" | string;
+  kind: "text" | "video" | "image" | "link" | "html" | "drive" | string;
   content_json: any;
 };
 
@@ -152,6 +152,49 @@ function renderSection(section: Section) {
           className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
         >
           {label}
+        </a>
+      </div>
+    );
+  }
+
+  // Tipo específico para Google Drive (más simple y confiable)
+  if (section.kind === "drive") {
+    const driveId = String(content.driveId ?? "");
+    const originalUrl = String(content.originalUrl ?? "");
+
+    if (!driveId) {
+      return (
+        <div className="text-sm text-red-500">
+          Error: No se encontró el ID del archivo de Drive
+        </div>
+      );
+    }
+
+    // Usar el preview de Google Drive
+    const embedUrl = `https://drive.google.com/file/d/${driveId}/preview`;
+
+    return (
+      <div className="space-y-3">
+        <div className="font-semibold">{section.title}</div>
+        <div
+          className="w-full rounded-2xl border overflow-hidden bg-white"
+          style={{ height: "600px" }}
+        >
+          <iframe
+            src={embedUrl}
+            className="w-full h-full"
+            title={section.title}
+            allow="autoplay"
+            allowFullScreen
+          />
+        </div>
+        <a
+          href={originalUrl || `https://drive.google.com/file/d/${driveId}/view`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+        >
+          Abrir en Drive
         </a>
       </div>
     );

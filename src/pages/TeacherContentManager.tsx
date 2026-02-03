@@ -38,19 +38,21 @@ type ContentJson = {
   alt?: string;
   label?: string;
   html?: string;
+  driveId?: string;
+  originalUrl?: string;
 };
 
 type Section = {
   id: number;
   lesson_id: number;
   title: string;
-  kind: "text" | "video" | "image" | "link" | "html";
+  kind: "text" | "video" | "image" | "link" | "html" | "drive";
   content_json: ContentJson;
   sort_order: number;
   is_active: boolean;
 };
 
-type SectionKind = "text" | "video" | "image" | "link" | "html";
+type SectionKind = "text" | "video" | "image" | "link" | "html" | "drive";
 
 // ========== ESTILOS MODO OSCURO ==========
 const styles = {
@@ -728,6 +730,30 @@ export default function TeacherContentManager() {
         return;
       }
       content_json = { html: content };
+    } else if (sectionKind === "drive") {
+      if (!content) {
+        setMsg("El link de Google Drive es obligatorio");
+        return;
+      }
+      // Extraer el ID del archivo de Drive
+      const drivePatterns = [
+        /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
+        /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/,
+      ];
+      let fileId: string | null = null;
+      for (const pattern of drivePatterns) {
+        const match = content.match(pattern);
+        if (match) {
+          fileId = match[1];
+          break;
+        }
+      }
+      if (!fileId) {
+        setMsg("El link no parece ser de Google Drive válido");
+        return;
+      }
+      content_json = { driveId: fileId, originalUrl: content };
     }
 
     setSavingSection(true);
@@ -2051,6 +2077,7 @@ export default function TeacherContentManager() {
                   <option value="video">🎬 Video (URL)</option>
                   <option value="image">🖼️ Imagen (URL)</option>
                   <option value="link">🔗 Enlace</option>
+                  <option value="drive">📁 Google Drive</option>
                   <option value="html">💻 HTML</option>
                 </select>
               </div>
@@ -2071,6 +2098,8 @@ export default function TeacherContentManager() {
                 {sectionKind === "image" &&
                   "URL de la imagen * (Imgur, Google Drive, etc.)"}
                 {sectionKind === "link" && "URL del enlace *"}
+                {sectionKind === "drive" &&
+                  "Link de Google Drive * (Pegar link compartido)"}
                 {sectionKind === "html" && "Código HTML *"}
               </label>
               <textarea
@@ -2093,7 +2122,9 @@ export default function TeacherContentManager() {
                         ? "https://i.imgur.com/..."
                         : sectionKind === "link"
                           ? "https://ejemplo.com/recurso"
-                          : "<div>Tu código HTML aquí</div>"
+                          : sectionKind === "drive"
+                            ? "https://drive.google.com/file/d/.../view?usp=sharing"
+                            : "<div>Tu código HTML aquí</div>"
                 }
               />
               {sectionKind === "image" && (
