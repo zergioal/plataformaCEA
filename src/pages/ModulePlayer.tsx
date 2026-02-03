@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
@@ -95,35 +95,45 @@ function renderSection(section: Section) {
   }
 
   if (section.kind === "html") {
-    const html = String(content.html ?? "");
+    let html = String(content.html ?? "");
+
+    // Si el HTML contiene un documento completo, extraer solo el contenido del body o el iframe
+    if (
+      html.includes("<!doctype") ||
+      html.includes("<html") ||
+      html.includes("<body")
+    ) {
+      // Intentar extraer el iframe directamente
+      const iframeMatch = html.match(/<iframe[^>]*>[\s\S]*?<\/iframe>/i);
+      if (iframeMatch) {
+        html = iframeMatch[0];
+      }
+    }
+
     // Detectar si contiene iframe para darle altura adecuada
     const hasIframe = html.toLowerCase().includes("<iframe");
 
     if (hasIframe) {
-      // Para iframes, usar un contenedor que fuerza el tamaño completo
+      // Para iframes de Drive/PDF, usar altura casi completa de la pantalla
       return (
         <div className="space-y-3">
           <div className="font-semibold">{section.title}</div>
           <div
             className="w-full rounded-2xl border overflow-hidden bg-white"
-            style={{ height: "calc(100vh - 250px)", minHeight: "500px" }}
+            style={{ height: "calc(100vh - 180px)", minHeight: "700px" }}
           >
-            <style>{`
-              .html-iframe-container iframe {
-                width: 100% !important;
-                height: 100% !important;
-                border: 0 !important;
-                display: block;
-              }
-              .html-iframe-container > * {
-                width: 100%;
-                height: 100%;
-              }
-            `}</style>
-            <div
-              className="html-iframe-container"
-              style={{ width: "100%", height: "100%" }}
-              dangerouslySetInnerHTML={{ __html: html }}
+            <iframe
+              srcDoc={`
+                <!DOCTYPE html>
+                <html style="height:100%;margin:0;">
+                <body style="height:100%;margin:0;overflow:hidden;">
+                  ${html.replace(/style="[^"]*"/gi, "")}
+                </body>
+                </html>
+              `}
+              style={{ width: "100%", height: "100%", border: "none" }}
+              title={section.title}
+              allowFullScreen
             />
           </div>
         </div>
@@ -246,26 +256,32 @@ function renderSection(section: Section) {
   );
 }
 
-// Helper para cache de estado del módulo
-const MODULE_CACHE_KEY = "module_player_state_";
+// Cache COMPLETO del módulo - guarda todo el estado
+const MODULE_CACHE_KEY = "module_player_full_";
 
-function getModuleCache(moduleId: number) {
+interface ModuleStateCache {
+  moduleName: string;
+  lessons: Lesson[];
+  sections: Section[];
+  doneIds: number[];
+  activeLessonId: number | null;
+  activeSectionId: number | null;
+}
+
+function getModuleCache(moduleId: number): ModuleStateCache | null {
   try {
-    const cached = sessionStorage.getItem(MODULE_CACHE_KEY + moduleId);
-    return cached ? JSON.parse(cached) : null;
+    const raw = sessionStorage.getItem(MODULE_CACHE_KEY + moduleId);
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function setModuleCache(
-  moduleId: number,
-  data: { lessonId: number | null; sectionId: number | null },
-) {
+function saveModuleCache(moduleId: number, state: ModuleStateCache) {
   try {
-    sessionStorage.setItem(MODULE_CACHE_KEY + moduleId, JSON.stringify(data));
+    sessionStorage.setItem(MODULE_CACHE_KEY + moduleId, JSON.stringify(state));
   } catch {
-    // Ignorar errores de storage
+    // Ignorar errores
   }
 }
 
@@ -276,43 +292,57 @@ export default function ModulePlayer() {
 
   const mid = Number(moduleId);
 
-  // Intentar restaurar estado del cache
-  const cachedState = useMemo(() => getModuleCache(mid), [mid]);
+  // Cargar estado inicial desde cache
+  const initialState = useMemo(() => getModuleCache(mid), [mid]);
 
-  const [moduleName, setModuleName] = useState<string>("Módulo");
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
+  const [moduleName, setModuleName] = useState<string>(
+    initialState?.moduleName ?? "Módulo",
+  );
+  const [lessons, setLessons] = useState<Lesson[]>(initialState?.lessons ?? []);
+  const [sections, setSections] = useState<Section[]>(
+    initialState?.sections ?? [],
+  );
+  const [doneIds, setDoneIds] = useState<Set<number>>(
+    new Set(initialState?.doneIds ?? []),
+  );
   const [activeLessonId, setActiveLessonId] = useState<number | null>(
-    cachedState?.lessonId ?? null,
+    initialState?.activeLessonId ?? null,
   );
   const [activeSectionId, setActiveSectionId] = useState<number | null>(
-    cachedState?.sectionId ?? null,
+    initialState?.activeSectionId ?? null,
   );
   const [msg, setMsg] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState(!!initialState);
 
-  // Ref para evitar recargas innecesarias al cambiar de pestaña
-  const loadedModuleRef = useRef<number | null>(null);
-
-  // Guardar estado en cache cuando cambie
+  // Guardar TODO el estado en cache cuando cambie navegación
   useEffect(() => {
-    if (activeLessonId !== null || activeSectionId !== null) {
-      setModuleCache(mid, {
-        lessonId: activeLessonId,
-        sectionId: activeSectionId,
+    if (dataLoaded && lessons.length > 0) {
+      saveModuleCache(mid, {
+        moduleName,
+        lessons,
+        sections,
+        doneIds: Array.from(doneIds),
+        activeLessonId,
+        activeSectionId,
       });
     }
-  }, [mid, activeLessonId, activeSectionId]);
+  }, [
+    mid,
+    moduleName,
+    lessons,
+    sections,
+    doneIds,
+    activeLessonId,
+    activeSectionId,
+    dataLoaded,
+  ]);
 
+  // Solo cargar de la API si NO tenemos datos en cache
   useEffect(() => {
     if (!session || !Number.isFinite(mid)) return;
-    // Si ya cargamos este módulo, no recargar
-    if (loadedModuleRef.current === mid) return;
+    if (dataLoaded) return; // Ya tenemos datos del cache, no recargar
 
-    // Marcar como cargado ANTES de la función async para evitar race conditions
-    loadedModuleRef.current = mid;
-
-    async function load() {
+    async function loadFromAPI() {
       setMsg(null);
 
       // módulo
@@ -326,7 +356,8 @@ export default function ModulePlayer() {
         setMsg("No se pudo cargar el módulo: " + modRes.error.message);
         return;
       }
-      setModuleName(String(modRes.data?.name ?? "Módulo"));
+      const loadedModuleName = String(modRes.data?.name ?? "Módulo");
+      setModuleName(loadedModuleName);
 
       // lecciones
       const lesRes = await supabase
@@ -343,25 +374,17 @@ export default function ModulePlayer() {
       const ls = (lesRes.data ?? []) as Lesson[];
       setLessons(ls);
 
-      // Obtener cache actual
-      const cache = getModuleCache(mid);
-      const cachedLessonId = cache?.lessonId;
-      const cachedSectionId = cache?.sectionId;
+      const firstLessonId = ls[0]?.id ?? null;
 
-      // Usar cached lesson si existe y es válido, sino usar el primero
-      const validCachedLesson =
-        cachedLessonId && ls.some((l) => l.id === cachedLessonId);
-      const targetLessonId = validCachedLesson
-        ? cachedLessonId
-        : (ls[0]?.id ?? null);
-
-      setActiveLessonId(targetLessonId);
-
-      if (!targetLessonId) {
+      if (!firstLessonId) {
         setSections([]);
+        setActiveLessonId(null);
         setActiveSectionId(null);
+        setDataLoaded(true);
         return;
       }
+
+      setActiveLessonId(firstLessonId);
 
       // secciones (todas las lecciones del módulo)
       const ids = ls.map((x) => x.id);
@@ -391,22 +414,21 @@ export default function ModulePlayer() {
         return;
       }
 
-      const set = new Set<number>(
-        (progRes.data ?? []).map((r: any) => r.section_id),
+      const doneArray = (progRes.data ?? []).map(
+        (r: { section_id: number }) => r.section_id,
       );
-      setDoneIds(set);
+      setDoneIds(new Set(doneArray));
 
-      // Usar cached section si existe y es válido, sino usar la primera de la lección activa
-      const validCachedSection =
-        cachedSectionId && ss.some((s) => s.id === cachedSectionId);
-      const targetSectionId = validCachedSection
-        ? cachedSectionId
-        : (ss.find((s) => s.lesson_id === targetLessonId)?.id ?? null);
+      // Primera sección de la primera lección
+      const firstSectionId =
+        ss.find((s) => s.lesson_id === firstLessonId)?.id ?? null;
+      setActiveSectionId(firstSectionId);
 
-      setActiveSectionId(targetSectionId);
+      setDataLoaded(true);
     }
 
-    load();
+    loadFromAPI();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, mid]);
 
   const sectionsByLesson = useMemo(() => {
