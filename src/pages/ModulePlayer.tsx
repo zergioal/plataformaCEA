@@ -242,8 +242,10 @@ export default function ModulePlayer() {
     // Si ya cargamos este módulo, no recargar
     if (loadedModuleRef.current === mid) return;
 
+    // Marcar como cargado ANTES de la función async para evitar race conditions
+    loadedModuleRef.current = mid;
+
     async function load() {
-      loadedModuleRef.current = mid;
       setMsg(null);
 
       // módulo

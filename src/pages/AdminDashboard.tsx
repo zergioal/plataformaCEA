@@ -1612,7 +1612,7 @@ export default function AdminDashboard() {
           <div style={{ display: "flex", gap: "12px" }}>
             <button
               style={darkStyles.btnPrimary}
-              onClick={() => supabase.auth.signOut()}
+              onClick={() => supabase.auth.signOut({ scope: 'local' })}
             >
               Cerrar sesión
             </button>

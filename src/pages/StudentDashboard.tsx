@@ -195,7 +195,7 @@ export default function StudentDashboard() {
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     nav("/login", { replace: true });
   }
 
