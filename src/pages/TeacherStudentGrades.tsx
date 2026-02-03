@@ -1,7 +1,7 @@
 // cea-plataforma/web/src/pages/StudentGradesHistory.tsx
 // 🎨 Historial + Boletín PDF por Nivel con mejoras estéticas
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
@@ -60,8 +60,14 @@ export default function StudentGradesHistory() {
 
   const isTeacherish = role === "teacher" || role === "admin";
 
+  // Ref para evitar recargas al cambiar de pestaña/ventana
+  const loadedStudentRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!session || !isTeacherish || !studentId) return;
+    // Solo cargar si el estudiante cambió o no se ha cargado aún
+    if (loadedStudentRef.current === studentId) return;
+    loadedStudentRef.current = studentId;
 
     async function load() {
       setLoadingData(true);

@@ -610,15 +610,15 @@ export default function TeacherModuleGrades() {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
 
-    // Línea de firma Dirección (izquierda, más centrada)
+    // Línea de firma Facilitador (izquierda, más centrada)
     const firmaLeftX = pageWidth / 4;
     doc.line(firmaLeftX - 35, firmasY, firmaLeftX + 35, firmasY);
-    doc.text("Dirección", firmaLeftX - 12, firmasY + 5);
+    doc.text("Facilitador(a)", firmaLeftX - 12, firmasY + 5);
 
-    // Línea de firma Facilitador (derecha, más centrada)
+    // Línea de firma Dirección (derecha, más centrada)
     const firmaRightX = (pageWidth / 4) * 3;
     doc.line(firmaRightX - 35, firmasY, firmaRightX + 35, firmasY);
-    doc.text("Facilitador(a)", firmaRightX - 15, firmasY + 5);
+    doc.text("Dirección", firmaRightX - 15, firmasY + 5);
 
     // Descargar PDF
     const fileName = `Calificaciones_${moduleRow?.title?.replace(/\s+/g, "_") || "Modulo"}_${semester.replace("/", "-")}.pdf`;

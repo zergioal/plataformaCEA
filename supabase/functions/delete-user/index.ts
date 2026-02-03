@@ -1,6 +1,6 @@
 // supabase/functions/delete-user/index.ts
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -46,16 +46,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verificar que sea admin
+    // Verificar que sea admin o teacher
     const { data: profile } = await anonClient
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
 
-    if (profile?.role !== "admin") {
+    const callerRole = profile?.role;
+    if (!["admin", "teacher"].includes(callerRole)) {
       return new Response(
-        JSON.stringify({ error: "Only admin can delete users" }),
+        JSON.stringify({ error: "Only admin or teacher can delete users" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -89,16 +90,28 @@ Deno.serve(async (req) => {
       },
     });
 
-    // Verificar que el usuario a eliminar no es admin
+    // Verificar el rol del usuario a eliminar
     const { data: targetProfile } = await adminClient
       .from("profiles")
       .select("role, code")
       .eq("id", user_id)
       .single();
 
+    // No se puede eliminar admin
     if (targetProfile?.role === "admin") {
       return new Response(
         JSON.stringify({ error: "Cannot delete admin users" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Teachers solo pueden eliminar estudiantes
+    if (callerRole === "teacher" && targetProfile?.role !== "student") {
+      return new Response(
+        JSON.stringify({ error: "Teachers can only delete students" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

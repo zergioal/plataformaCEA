@@ -808,8 +808,12 @@ export default function TeacherDashboard() {
         return;
       }
 
-      setMsg("✅ Estudiante eliminado");
       await loadStudents(profileData.career_id, profileData.shift, levels);
+      await showMessage(
+        "✅ Estudiante eliminado",
+        `El estudiante ${studentCode} ha sido eliminado correctamente.`,
+        "success",
+      );
     } catch (error) {
       setMsg(`Error: ${error}`);
     }
@@ -1367,14 +1371,8 @@ export default function TeacherDashboard() {
 
       {/* Modal Añadir Estudiante */}
       {showAddStudent && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowAddStudent(false)}
-        >
-          <div
-            className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-white">
                 Añadir Estudiante
@@ -1576,14 +1574,8 @@ export default function TeacherDashboard() {
 
       {/* Modal Editar Estudiante */}
       {showEditStudent && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-          onClick={() => setShowEditStudent(false)}
-        >
-          <div
-            className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-white">
                 Editar Estudiante
