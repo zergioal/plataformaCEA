@@ -96,11 +96,14 @@ function renderSection(section: Section) {
 
   if (section.kind === "html") {
     const html = String(content.html ?? "");
+    // Detectar si contiene iframe para darle altura adecuada
+    const hasIframe = html.toLowerCase().includes("<iframe");
     return (
       <div className="space-y-3">
         <div className="font-semibold">{section.title}</div>
         <div
-          className="w-full rounded-2xl border p-4 bg-white"
+          className="w-full rounded-2xl border overflow-hidden bg-white"
+          style={hasIframe ? { height: "700px" } : { padding: "16px" }}
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
