@@ -112,27 +112,26 @@ function renderSection(section: Section) {
     const label = String(content.label ?? "Visitar enlace");
     const driveFileId = extractDriveFileId(url);
 
-    // Si es un archivo de Google Drive, mostrarlo embebido automáticamente
+    // Si es un archivo de Google Drive
     if (driveFileId) {
-      const embedUrl = `https://drive.google.com/file/d/${driveFileId}/preview`;
+      // URL que funciona para imágenes compartidas públicamente
+      const imageUrl = `https://lh3.googleusercontent.com/d/${driveFileId}`;
+
       return (
         <div className="space-y-3">
           <div className="font-semibold">{section.title}</div>
-          <div className="w-full rounded-2xl border overflow-hidden bg-gray-100" style={{ height: "600px" }}>
-            <iframe
-              src={embedUrl}
-              className="w-full h-full"
-              title={section.title}
-              allow="autoplay"
-            />
-          </div>
+          <img
+            src={imageUrl}
+            alt={section.title}
+            className="w-full rounded-2xl border max-h-[600px] object-contain bg-gray-100"
+          />
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+            className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
           >
-            Abrir en nueva pestaña
+            Abrir en Drive
           </a>
         </div>
       );
