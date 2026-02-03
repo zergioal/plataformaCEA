@@ -17,6 +17,48 @@ function clampPct(x: number) {
   return Math.max(0, Math.min(100, Math.round(x)));
 }
 
+// Función para extraer el ID de archivo de Google Drive
+function extractDriveFileId(url: string): string | null {
+  // Formatos soportados:
+  // https://drive.google.com/file/d/FILE_ID/view
+  // https://drive.google.com/open?id=FILE_ID
+  // https://drive.google.com/uc?id=FILE_ID
+  const patterns = [
+    /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
+    /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Detectar si es un link a PDF (por extensión o contexto)
+function isPdfLink(url: string, label: string): boolean {
+  const lowerUrl = url.toLowerCase();
+  const lowerLabel = label.toLowerCase();
+  return (
+    lowerUrl.includes(".pdf") ||
+    lowerLabel.includes("pdf") ||
+    lowerLabel.includes("documento") ||
+    lowerLabel.includes("lectura")
+  );
+}
+
+// Detectar si es un link a imagen
+function isImageLink(url: string, label: string): boolean {
+  const lowerUrl = url.toLowerCase();
+  const lowerLabel = label.toLowerCase();
+  const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
+  return (
+    imageExtensions.some((ext) => lowerUrl.includes(ext)) ||
+    lowerLabel.includes("imagen") ||
+    lowerLabel.includes("foto")
+  );
+}
+
 function ProgressBar({ value }: { value: number }) {
   const v = clampPct(value);
   return (
@@ -92,6 +134,58 @@ function renderSection(section: Section) {
   if (section.kind === "link") {
     const url = String(content.url ?? "");
     const label = String(content.label ?? "Visitar enlace");
+    const driveFileId = extractDriveFileId(url);
+
+    // Si es un PDF de Google Drive, mostrarlo embebido
+    if (driveFileId && isPdfLink(url, label)) {
+      const embedUrl = `https://drive.google.com/file/d/${driveFileId}/preview`;
+      return (
+        <div className="space-y-3">
+          <div className="font-semibold">{section.title}</div>
+          <div className="w-full rounded-2xl border overflow-hidden bg-gray-100" style={{ height: "600px" }}>
+            <iframe
+              src={embedUrl}
+              className="w-full h-full"
+              title={section.title}
+              allow="autoplay"
+            />
+          </div>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+          >
+            Abrir en nueva pestaña
+          </a>
+        </div>
+      );
+    }
+
+    // Si es una imagen de Google Drive, mostrarla directamente
+    if (driveFileId && isImageLink(url, label)) {
+      const imageUrl = `https://drive.google.com/uc?export=view&id=${driveFileId}`;
+      return (
+        <div className="space-y-3">
+          <div className="font-semibold">{section.title}</div>
+          <img
+            src={imageUrl}
+            alt={section.title}
+            className="w-full rounded-2xl border"
+          />
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+          >
+            Ver original
+          </a>
+        </div>
+      );
+    }
+
+    // Link normal
     return (
       <div className="space-y-3">
         <div className="font-semibold">{section.title}</div>

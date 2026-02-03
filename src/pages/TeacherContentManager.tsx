@@ -1804,8 +1804,8 @@ export default function TeacherContentManager() {
 
       {/* Modal Editar Módulo */}
       {showEditModule && editingModule && (
-        <div style={styles.modal} onClick={closeEditModule}>
-          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modal}>
+          <div style={styles.modalContent}>
             <div
               style={{
                 display: "flex",
@@ -1896,8 +1896,8 @@ export default function TeacherContentManager() {
 
       {/* Modal Lección */}
       {showLessonModal && (
-        <div style={styles.modal} onClick={closeLessonModal}>
-          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modal}>
+          <div style={styles.modalContent}>
             <div
               style={{
                 display: "flex",
@@ -1972,11 +1972,8 @@ export default function TeacherContentManager() {
 
       {/* Modal Sección */}
       {showSectionModal && (
-        <div style={styles.modal} onClick={closeSectionModal}>
-          <div
-            style={{ ...styles.modalContent, maxWidth: "700px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div style={styles.modal}>
+          <div style={{ ...styles.modalContent, maxWidth: "700px" }}>
             <div
               style={{
                 display: "flex",
