@@ -224,6 +224,7 @@ const KIND_COLORS: Record<string, { bg: string; color: string }> = {
   image: { bg: "rgba(34, 197, 94, 0.2)", color: "#86efac" },
   link: { bg: "rgba(168, 85, 247, 0.2)", color: "#d8b4fe" },
   html: { bg: "rgba(251, 146, 60, 0.2)", color: "#fed7aa" },
+  drive: { bg: "rgba(234, 179, 8, 0.2)", color: "#fde047" },
 };
 
 const KIND_LABELS: Record<string, string> = {
@@ -232,6 +233,7 @@ const KIND_LABELS: Record<string, string> = {
   image: "🖼️ Imagen",
   link: "🔗 Enlace",
   html: "💻 HTML",
+  drive: "📁 Google Drive",
 };
 
 // Cache key para este componente
@@ -675,6 +677,8 @@ export default function TeacherContentManager() {
       setSectionContent(content?.url ?? "");
     } else if (section.kind === "html") {
       setSectionContent(content?.html ?? "");
+    } else if (section.kind === "drive") {
+      setSectionContent(content?.originalUrl ?? "");
     }
 
     setShowSectionModal(true);
@@ -1650,6 +1654,11 @@ export default function TeacherContentManager() {
                                 💻 Código HTML (
                                 {(section.content_json?.html ?? "").length}{" "}
                                 caracteres)
+                              </span>
+                            )}
+                            {section.kind === "drive" && (
+                              <span>
+                                📁 {section.content_json?.originalUrl ?? ""}
                               </span>
                             )}
                           </div>
