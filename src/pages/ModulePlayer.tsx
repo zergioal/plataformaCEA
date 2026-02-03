@@ -98,16 +98,43 @@ function renderSection(section: Section) {
     const html = String(content.html ?? "");
     // Detectar si contiene iframe para darle altura adecuada
     const hasIframe = html.toLowerCase().includes("<iframe");
+
+    if (hasIframe) {
+      // Para iframes, usar un contenedor que fuerza el tamaño completo
+      return (
+        <div className="space-y-3">
+          <div className="font-semibold">{section.title}</div>
+          <div
+            className="w-full rounded-2xl border overflow-hidden bg-white"
+            style={{ height: "calc(100vh - 250px)", minHeight: "500px" }}
+          >
+            <style>{`
+              .html-iframe-container iframe {
+                width: 100% !important;
+                height: 100% !important;
+                border: 0 !important;
+                display: block;
+              }
+              .html-iframe-container > * {
+                width: 100%;
+                height: 100%;
+              }
+            `}</style>
+            <div
+              className="html-iframe-container"
+              style={{ width: "100%", height: "100%" }}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-3">
         <div className="font-semibold">{section.title}</div>
         <div
-          className="w-full rounded-2xl border overflow-hidden bg-white"
-          style={
-            hasIframe
-              ? { height: "85vh", minHeight: "600px" }
-              : { padding: "16px" }
-          }
+          className="w-full rounded-2xl border overflow-hidden bg-white p-4"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
@@ -219,23 +246,63 @@ function renderSection(section: Section) {
   );
 }
 
+// Helper para cache de estado del módulo
+const MODULE_CACHE_KEY = "module_player_state_";
+
+function getModuleCache(moduleId: number) {
+  try {
+    const cached = sessionStorage.getItem(MODULE_CACHE_KEY + moduleId);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setModuleCache(
+  moduleId: number,
+  data: { lessonId: number | null; sectionId: number | null },
+) {
+  try {
+    sessionStorage.setItem(MODULE_CACHE_KEY + moduleId, JSON.stringify(data));
+  } catch {
+    // Ignorar errores de storage
+  }
+}
+
 export default function ModulePlayer() {
   const nav = useNavigate();
   const { moduleId } = useParams();
   const { loading, session, profile } = useRole();
 
+  const mid = Number(moduleId);
+
+  // Intentar restaurar estado del cache
+  const cachedState = useMemo(() => getModuleCache(mid), [mid]);
+
   const [moduleName, setModuleName] = useState<string>("Módulo");
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [doneIds, setDoneIds] = useState<Set<number>>(new Set());
-  const [activeLessonId, setActiveLessonId] = useState<number | null>(null);
-  const [activeSectionId, setActiveSectionId] = useState<number | null>(null);
+  const [activeLessonId, setActiveLessonId] = useState<number | null>(
+    cachedState?.lessonId ?? null,
+  );
+  const [activeSectionId, setActiveSectionId] = useState<number | null>(
+    cachedState?.sectionId ?? null,
+  );
   const [msg, setMsg] = useState<string | null>(null);
 
   // Ref para evitar recargas innecesarias al cambiar de pestaña
   const loadedModuleRef = useRef<number | null>(null);
 
-  const mid = Number(moduleId);
+  // Guardar estado en cache cuando cambie
+  useEffect(() => {
+    if (activeLessonId !== null || activeSectionId !== null) {
+      setModuleCache(mid, {
+        lessonId: activeLessonId,
+        sectionId: activeSectionId,
+      });
+    }
+  }, [mid, activeLessonId, activeSectionId]);
 
   useEffect(() => {
     if (!session || !Number.isFinite(mid)) return;
@@ -276,10 +343,21 @@ export default function ModulePlayer() {
       const ls = (lesRes.data ?? []) as Lesson[];
       setLessons(ls);
 
-      const firstLesson = ls[0]?.id ?? null;
-      setActiveLessonId(firstLesson);
+      // Obtener cache actual
+      const cache = getModuleCache(mid);
+      const cachedLessonId = cache?.lessonId;
+      const cachedSectionId = cache?.sectionId;
 
-      if (!firstLesson) {
+      // Usar cached lesson si existe y es válido, sino usar el primero
+      const validCachedLesson =
+        cachedLessonId && ls.some((l) => l.id === cachedLessonId);
+      const targetLessonId = validCachedLesson
+        ? cachedLessonId
+        : (ls[0]?.id ?? null);
+
+      setActiveLessonId(targetLessonId);
+
+      if (!targetLessonId) {
         setSections([]);
         setActiveSectionId(null);
         return;
@@ -318,10 +396,14 @@ export default function ModulePlayer() {
       );
       setDoneIds(set);
 
-      // sección inicial
-      const firstSection =
-        ss.find((s) => s.lesson_id === firstLesson)?.id ?? null;
-      setActiveSectionId(firstSection);
+      // Usar cached section si existe y es válido, sino usar la primera de la lección activa
+      const validCachedSection =
+        cachedSectionId && ss.some((s) => s.id === cachedSectionId);
+      const targetSectionId = validCachedSection
+        ? cachedSectionId
+        : (ss.find((s) => s.lesson_id === targetLessonId)?.id ?? null);
+
+      setActiveSectionId(targetSectionId);
     }
 
     load();
