@@ -114,17 +114,21 @@ function renderSection(section: Section) {
 
     // Si es un archivo de Google Drive
     if (driveFileId) {
-      // URL que funciona para imágenes compartidas públicamente
-      const imageUrl = `https://lh3.googleusercontent.com/d/${driveFileId}`;
+      // Usar Google Docs Viewer que es más confiable para embeber
+      const embedUrl = `https://docs.google.com/viewer?srcid=${driveFileId}&pid=explorer&efh=false&a=v&chrome=false&embedded=true`;
 
       return (
         <div className="space-y-3">
           <div className="font-semibold">{section.title}</div>
-          <img
-            src={imageUrl}
-            alt={section.title}
-            className="w-full rounded-2xl border max-h-[600px] object-contain bg-gray-100"
-          />
+          <div className="w-full rounded-2xl border overflow-hidden bg-white" style={{ height: "600px" }}>
+            <iframe
+              src={embedUrl}
+              className="w-full h-full"
+              title={section.title}
+              frameBorder="0"
+              allowFullScreen
+            />
+          </div>
           <a
             href={url}
             target="_blank"
