@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
@@ -103,7 +103,11 @@ function renderSection(section: Section) {
         <div className="font-semibold">{section.title}</div>
         <div
           className="w-full rounded-2xl border overflow-hidden bg-white"
-          style={hasIframe ? { height: "700px" } : { padding: "16px" }}
+          style={
+            hasIframe
+              ? { height: "85vh", minHeight: "600px" }
+              : { padding: "16px" }
+          }
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
@@ -123,7 +127,10 @@ function renderSection(section: Section) {
       return (
         <div className="space-y-3">
           <div className="font-semibold">{section.title}</div>
-          <div className="w-full rounded-2xl border overflow-hidden bg-white" style={{ height: "600px" }}>
+          <div
+            className="w-full rounded-2xl border overflow-hidden bg-white"
+            style={{ height: "600px" }}
+          >
             <iframe
               src={embedUrl}
               className="w-full h-full"
@@ -192,7 +199,9 @@ function renderSection(section: Section) {
           />
         </div>
         <a
-          href={originalUrl || `https://drive.google.com/file/d/${driveId}/view`}
+          href={
+            originalUrl || `https://drive.google.com/file/d/${driveId}/view`
+          }
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
@@ -223,12 +232,18 @@ export default function ModulePlayer() {
   const [activeSectionId, setActiveSectionId] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Ref para evitar recargas innecesarias al cambiar de pestaña
+  const loadedModuleRef = useRef<number | null>(null);
+
   const mid = Number(moduleId);
 
   useEffect(() => {
     if (!session || !Number.isFinite(mid)) return;
+    // Si ya cargamos este módulo, no recargar
+    if (loadedModuleRef.current === mid) return;
 
     async function load() {
+      loadedModuleRef.current = mid;
       setMsg(null);
 
       // módulo
