@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
+import logoCea from "../assets/logo-cea.png";
 
 function toEmail(userOrEmail: string) {
   const u = userOrEmail.trim().toLowerCase();
@@ -245,7 +246,7 @@ export default function Login() {
         {/* Logo y título */}
         <div className="text-center mb-8">
           <img
-            src="src/assets/logo-cea.png"
+            src={logoCea}
             alt="Logo CEA"
             className="mx-auto mb-4 h-48 w-auto object-contain"
           />
