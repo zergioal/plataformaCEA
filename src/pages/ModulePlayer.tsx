@@ -35,30 +35,6 @@ function extractDriveFileId(url: string): string | null {
   return null;
 }
 
-// Detectar si es un link a PDF (por extensión o contexto)
-function isPdfLink(url: string, label: string): boolean {
-  const lowerUrl = url.toLowerCase();
-  const lowerLabel = label.toLowerCase();
-  return (
-    lowerUrl.includes(".pdf") ||
-    lowerLabel.includes("pdf") ||
-    lowerLabel.includes("documento") ||
-    lowerLabel.includes("lectura")
-  );
-}
-
-// Detectar si es un link a imagen
-function isImageLink(url: string, label: string): boolean {
-  const lowerUrl = url.toLowerCase();
-  const lowerLabel = label.toLowerCase();
-  const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
-  return (
-    imageExtensions.some((ext) => lowerUrl.includes(ext)) ||
-    lowerLabel.includes("imagen") ||
-    lowerLabel.includes("foto")
-  );
-}
-
 function ProgressBar({ value }: { value: number }) {
   const v = clampPct(value);
   return (
@@ -136,8 +112,8 @@ function renderSection(section: Section) {
     const label = String(content.label ?? "Visitar enlace");
     const driveFileId = extractDriveFileId(url);
 
-    // Si es un PDF de Google Drive, mostrarlo embebido
-    if (driveFileId && isPdfLink(url, label)) {
+    // Si es un archivo de Google Drive, mostrarlo embebido automáticamente
+    if (driveFileId) {
       const embedUrl = `https://drive.google.com/file/d/${driveFileId}/preview`;
       return (
         <div className="space-y-3">
@@ -162,30 +138,7 @@ function renderSection(section: Section) {
       );
     }
 
-    // Si es una imagen de Google Drive, mostrarla directamente
-    if (driveFileId && isImageLink(url, label)) {
-      const imageUrl = `https://drive.google.com/uc?export=view&id=${driveFileId}`;
-      return (
-        <div className="space-y-3">
-          <div className="font-semibold">{section.title}</div>
-          <img
-            src={imageUrl}
-            alt={section.title}
-            className="w-full rounded-2xl border"
-          />
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
-          >
-            Ver original
-          </a>
-        </div>
-      );
-    }
-
-    // Link normal
+    // Link normal (no es de Google Drive)
     return (
       <div className="space-y-3">
         <div className="font-semibold">{section.title}</div>
