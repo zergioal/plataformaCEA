@@ -1,7 +1,7 @@
 // cea-plataforma/web/src/pages/TeacherDashboard.tsx
 // 🎨 PARTE 1: Dashboard oscuro + Modales funcionando + Nueva estructura de tabla
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
@@ -44,6 +44,7 @@ type Student = {
   carnet_number?: string | null;
   gender?: string | null;
   birth_date?: string | null;
+  is_active?: boolean;
 };
 
 const AVATARS = Array.from({ length: 20 }, (_, i) => ({
@@ -129,6 +130,10 @@ export default function TeacherDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Estado para mostrar estudiantes inactivos
+  const [showInactiveStudents, setShowInactiveStudents] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
 
   const isTeacherish = role === "teacher" || role === "admin";
 
@@ -235,7 +240,7 @@ export default function TeacherDashboard() {
     const { data: studentsData, error: studentsError } = await supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active",
       )
       .eq("role", "student")
       .eq("career_id", careerId)
@@ -338,6 +343,7 @@ export default function TeacherDashboard() {
         level_name: levelInfo?.name ?? null,
         level_sort_order: levelInfo?.sort_order ?? null,
         can_ascend: canAscend,
+        is_active: s.is_active !== false, // Por defecto activo si es null/undefined
       });
     }
 
@@ -349,6 +355,13 @@ export default function TeacherDashboard() {
   // Aplicar filtros y ordenamiento
   useEffect(() => {
     let filtered = students;
+
+    // Filtro por activos/inactivos
+    if (showInactiveStudents) {
+      filtered = filtered.filter((s) => s.is_active === false);
+    } else {
+      filtered = filtered.filter((s) => s.is_active !== false);
+    }
 
     // Filtro por nivel
     if (selectedLevelFilter !== null) {
@@ -368,7 +381,7 @@ export default function TeacherDashboard() {
     });
 
     setFilteredStudents(sorted);
-  }, [selectedLevelFilter, sortOrder, students]);
+  }, [selectedLevelFilter, sortOrder, students, showInactiveStudents]);
 
   async function saveProfile() {
     if (!session) return;
@@ -819,6 +832,60 @@ export default function TeacherDashboard() {
     }
   }
 
+  async function handleToggleActive(
+    studentId: string,
+    studentName: string,
+    currentlyActive: boolean,
+  ) {
+    const action = currentlyActive ? "desactivar" : "activar";
+    const newStatus = !currentlyActive;
+
+    if (
+      !confirm(
+        `¿Estás seguro de ${action} a ${studentName}?\n\n${
+          currentlyActive
+            ? "El estudiante no podrá acceder al sistema."
+            : "El estudiante podrá acceder nuevamente al sistema."
+        }`,
+      )
+    ) {
+      return;
+    }
+
+    if (!profileData?.career_id || !profileData?.shift) {
+      setMsg("Error: No se pudo obtener datos del docente");
+      return;
+    }
+
+    setTogglingActive(true);
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_active: newStatus })
+        .eq("id", studentId);
+
+      if (error) {
+        setMsg(`Error: ${error.message}`);
+        setTogglingActive(false);
+        return;
+      }
+
+      await loadStudents(profileData.career_id, profileData.shift, levels);
+      await showMessage(
+        newStatus ? "✅ Estudiante activado" : "✅ Estudiante desactivado",
+        newStatus
+          ? `${studentName} ha sido activado y puede acceder al sistema.`
+          : `${studentName} ha sido desactivado y no podrá acceder al sistema.`,
+        "success",
+      );
+      setTogglingActive(false);
+    } catch (error) {
+      setMsg(`Error: ${error}`);
+      setTogglingActive(false);
+    }
+  }
+
   async function handleAscend(
     studentId: string,
     currentLevelSortOrder: number | null,
@@ -868,10 +935,149 @@ export default function TeacherDashboard() {
     }
   }
 
+  // Función para generar nombre VCF normalizado (sin tildes, espacios como _)
+  function normalizeForVCF(text: string): string {
+    return text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Quitar tildes
+      .replace(/\s+/g, "_") // Espacios a guiones bajos
+      .replace(/[^a-zA-Z0-9_]/g, ""); // Solo letras, números y _
+  }
+
+  // Función para abreviar el nombre del nivel
+  function abbreviateLevel(levelName: string): string {
+    // Mapeo de niveles conocidos
+    const abbreviations: { [key: string]: string } = {
+      "Técnico Básico 1": "TecBas1",
+      "Técnico Básico 2": "TecBas2",
+      "Técnico Auxiliar 1": "TecAux1",
+      "Técnico Auxiliar 2": "TecAux2",
+      "Técnico Medio 1": "TecMed1",
+      "Técnico Medio 2": "TecMed2",
+    };
+
+    if (abbreviations[levelName]) {
+      return abbreviations[levelName];
+    }
+
+    // Si no está en el mapeo, crear abreviatura automática
+    return normalizeForVCF(levelName).substring(0, 10);
+  }
+
+  // Función para exportar contactos a VCF
+  function exportContactsToVCF() {
+    if (filteredStudents.length === 0) {
+      showMessage(
+        "Sin contactos",
+        "No hay estudiantes para exportar con los filtros actuales.",
+        "warning"
+      );
+      return;
+    }
+
+    // Agrupar estudiantes por nivel para mantener numeración separada
+    const studentsByLevel = new Map<string, Student[]>();
+
+    for (const student of filteredStudents) {
+      const levelKey = student.level_name ?? "SinNivel";
+      if (!studentsByLevel.has(levelKey)) {
+        studentsByLevel.set(levelKey, []);
+      }
+      studentsByLevel.get(levelKey)!.push(student);
+    }
+
+    // Generar VCF
+    let vcfContent = "";
+
+    for (const [levelName, students] of studentsByLevel) {
+      const levelPrefix = abbreviateLevel(levelName);
+
+      // Ordenar estudiantes por apellido dentro del nivel
+      const sortedStudents = [...students].sort((a, b) => {
+        const aName = (a.last_name_pat || "").toLowerCase();
+        const bName = (b.last_name_pat || "").toLowerCase();
+        return aName.localeCompare(bName);
+      });
+
+      sortedStudents.forEach((student, index) => {
+        const number = String(index + 1).padStart(2, "0");
+        const apPaterno = normalizeForVCF(student.last_name_pat || "");
+        const apMaterno = normalizeForVCF(student.last_name_mat || "");
+        const nombres = normalizeForVCF(student.first_names || "");
+        const codSis = student.code || "";
+
+        // Construir nombre del contacto
+        const contactName = `${levelPrefix}_${number}_${apPaterno}_${apMaterno}_${nombres}_${codSis}`;
+
+        // Formatear número de teléfono (agregar +591 si no tiene código de país)
+        let phone = (student.phone || "").replace(/\D/g, ""); // Solo dígitos
+        if (phone && !phone.startsWith("591")) {
+          phone = "591" + phone;
+        }
+        phone = "+" + phone;
+
+        vcfContent += `BEGIN:VCARD\r\n`;
+        vcfContent += `VERSION:2.1\r\n`;
+        vcfContent += `N:${contactName};;;;\r\n`;
+        vcfContent += `FN:${contactName}\r\n`;
+        vcfContent += `TEL;CELL:${phone}\r\n`;
+        vcfContent += `END:VCARD\r\n`;
+      });
+    }
+
+    // Crear y descargar archivo
+    const blob = new Blob([vcfContent], { type: "text/vcard;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    // Nombre del archivo con fecha y nivel si está filtrado
+    const date = new Date().toISOString().split("T")[0];
+    const levelSuffix = selectedLevelFilter
+      ? "_" + abbreviateLevel(levels.find(l => l.id === selectedLevelFilter)?.name ?? "")
+      : "";
+    link.href = url;
+    link.download = `contactos${levelSuffix}_${date}.vcf`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showMessage(
+      "✅ Contactos exportados",
+      `Se han exportado ${filteredStudents.length} contactos en formato VCF.`,
+      "success"
+    );
+  }
+
   async function logout() {
-    await supabase.auth.signOut({ scope: 'local' });
+    await supabase.auth.signOut({ scope: "local" });
     nav("/login", { replace: true });
   }
+
+  // Estadísticas de estudiantes por nivel (solo activos)
+  const levelStats = useMemo(() => {
+    const activeStudents = students.filter((s) => s.is_active !== false);
+    const stats = levels.map((level) => {
+      const count = activeStudents.filter((s) => s.level_id === level.id).length;
+      return {
+        id: level.id,
+        name: level.name,
+        shortName: level.name.replace("Técnico ", "").replace(" ", ""),
+        count,
+        sortOrder: level.sort_order,
+      };
+    });
+    return stats.sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [students, levels]);
+
+  const totalActiveStudents = useMemo(() => {
+    return students.filter((s) => s.is_active !== false).length;
+  }, [students]);
+
+  const totalInactiveStudents = useMemo(() => {
+    return students.filter((s) => s.is_active === false).length;
+  }, [students]);
 
   if (loading)
     return (
@@ -1088,6 +1294,74 @@ export default function TeacherDashboard() {
           </div>
         </section>
 
+        {/* Estadísticas de estudiantes por nivel */}
+        <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+              📊 Estadísticas por Nivel
+            </h2>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-slate-400">
+                Total activos: <span className="text-emerald-400 font-bold">{totalActiveStudents}</span>
+              </span>
+              {totalInactiveStudents > 0 && (
+                <span className="text-slate-400">
+                  Inactivos: <span className="text-amber-400 font-bold">{totalInactiveStudents}</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Gráfico de barras visual */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {levelStats.map((stat) => {
+              const maxCount = Math.max(...levelStats.map((s) => s.count), 1);
+              const percentage = (stat.count / maxCount) * 100;
+              const colors = [
+                "from-blue-500 to-blue-600",
+                "from-cyan-500 to-cyan-600",
+                "from-emerald-500 to-emerald-600",
+                "from-purple-500 to-purple-600",
+              ];
+              const colorClass = colors[stat.sortOrder % colors.length];
+
+              return (
+                <div
+                  key={stat.id}
+                  className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30 hover:border-slate-600/50 transition-colors cursor-pointer"
+                  onClick={() => setSelectedLevelFilter(stat.id)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-slate-300 truncate">
+                      {stat.name}
+                    </span>
+                    <span className="text-2xl font-bold text-white ml-2">
+                      {stat.count}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {totalActiveStudents > 0
+                      ? Math.round((stat.count / totalActiveStudents) * 100)
+                      : 0}% del total
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {levelStats.length === 0 && (
+            <div className="text-center py-8 text-slate-400">
+              No hay niveles configurados
+            </div>
+          )}
+        </section>
+
         {/* Lista de estudiantes - RESPONSIVE */}
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -1125,8 +1399,39 @@ export default function TeacherDashboard() {
               >
                 + <span className="hidden sm:inline">Añadir </span>Estudiante
               </button>
+              <button
+                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-violet-900/30 text-sm sm:text-base"
+                onClick={exportContactsToVCF}
+                title="Exportar contactos de estudiantes en formato VCF"
+              >
+                📱 <span className="hidden sm:inline">Exportar </span>Contactos
+              </button>
+              <button
+                className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
+                  showInactiveStudents
+                    ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-lg shadow-amber-900/30"
+                    : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                }`}
+                onClick={() => setShowInactiveStudents(!showInactiveStudents)}
+                title={showInactiveStudents ? "Ver estudiantes activos" : "Ver estudiantes inactivos"}
+              >
+                {showInactiveStudents ? "👥 Ver Activos" : "👤 Ver Inactivos"}
+              </button>
             </div>
           </div>
+
+          {/* Indicador de modo inactivos */}
+          {showInactiveStudents && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+              <span className="text-amber-400 text-lg">⚠️</span>
+              <div>
+                <div className="text-amber-300 font-medium">Modo: Estudiantes Inactivos</div>
+                <div className="text-amber-400/70 text-sm">
+                  Estos estudiantes no pueden acceder al sistema. Puedes reactivarlos con el botón "Activar".
+                </div>
+              </div>
+            </div>
+          )}
 
           {loadingStudents ? (
             <div className="bg-slate-900 rounded-2xl border border-slate-700/50 p-12 text-center">
@@ -1152,6 +1457,9 @@ export default function TeacherDashboard() {
                 <table className="min-w-full">
                   <thead className="bg-slate-800/50">
                     <tr>
+                      <th className="px-2 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider w-12">
+                        N°
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
                         Código
                       </th>
@@ -1188,11 +1496,14 @@ export default function TeacherDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
-                    {filteredStudents.map((s) => (
+                    {filteredStudents.map((s, index) => (
                       <tr
                         key={s.id}
                         className="hover:bg-slate-800/30 transition-colors"
                       >
+                        <td className="px-2 py-3 whitespace-nowrap text-sm text-center text-slate-400 font-mono">
+                          {index + 1}
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-white font-mono">
                           {s.code || "-"}
                         </td>
@@ -1282,13 +1593,32 @@ export default function TeacherDashboard() {
                               Ascender
                             </button>
                             <button
-                              className="px-3 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                              className={`px-3 py-1.5 rounded-lg transition-colors ${
+                                s.is_active
+                                  ? "text-amber-400 hover:bg-amber-500/10"
+                                  : "text-emerald-400 hover:bg-emerald-500/10"
+                              }`}
                               onClick={() =>
-                                handleDeleteStudent(s.id, s.code ?? "")
+                                handleToggleActive(
+                                  s.id,
+                                  s.full_name ?? s.code ?? "",
+                                  s.is_active !== false,
+                                )
                               }
+                              disabled={togglingActive}
                             >
-                              Eliminar
+                              {s.is_active !== false ? "Desactivar" : "Activar"}
                             </button>
+                            {!showInactiveStudents && (
+                              <button
+                                className="px-3 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                onClick={() =>
+                                  handleDeleteStudent(s.id, s.code ?? "")
+                                }
+                              >
+                                Eliminar
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
