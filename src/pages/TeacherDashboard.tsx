@@ -47,38 +47,131 @@ type Student = {
   is_active?: boolean;
 };
 
+type AvatarItem = { key: string; label: string; url: string };
+
 const DV = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";
 const SI = "https://cdn.simpleicons.org";
+const TW = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg";
 
-const AVATARS: { key: string; label: string; url: string }[] = [
-  // ── Técnico Básico (av1-av4) ──
+const AVATARS_SISTEMAS: AvatarItem[] = [
   { key: "av1", label: "HTML5", url: `${DV}/html5/html5-original.svg` },
   { key: "av2", label: "CSS3", url: `${DV}/css3/css3-original.svg` },
-  { key: "av3", label: "Windows", url: `${DV}/windows11/windows11-original.svg` },
+  {
+    key: "av3",
+    label: "Windows",
+    url: `${DV}/windows11/windows11-original.svg`,
+  },
   { key: "av4", label: "Linux Mint", url: `${SI}/linuxmint/87CF3E` },
-  // ── Técnico Auxiliar (av5-av8) ──
   { key: "av5", label: "Python", url: `${DV}/python/python-original.svg` },
-  { key: "av6", label: "JavaScript", url: `${DV}/javascript/javascript-original.svg` },
+  {
+    key: "av6",
+    label: "JavaScript",
+    url: `${DV}/javascript/javascript-original.svg`,
+  },
   { key: "av7", label: "Git", url: `${DV}/git/git-original.svg` },
   { key: "av8", label: "VS Code", url: `${DV}/vscode/vscode-original.svg` },
-  // ── Técnico Medio I (av9-av12) ──
   { key: "av9", label: "React", url: `${DV}/react/react-original.svg` },
-  { key: "av10", label: "TypeScript", url: `${DV}/typescript/typescript-original.svg` },
+  {
+    key: "av10",
+    label: "TypeScript",
+    url: `${DV}/typescript/typescript-original.svg`,
+  },
   { key: "av11", label: "Node.js", url: `${DV}/nodejs/nodejs-original.svg` },
   { key: "av12", label: "Linux", url: `${DV}/linux/linux-original.svg` },
-  // ── Técnico Medio II (av13-av16) ──
   { key: "av13", label: "Docker", url: `${DV}/docker/docker-original.svg` },
-  { key: "av14", label: "Arch Linux", url: `${DV}/archlinux/archlinux-original.svg` },
-  { key: "av15", label: "PostgreSQL", url: `${DV}/postgresql/postgresql-original.svg` },
+  {
+    key: "av14",
+    label: "Arch Linux",
+    url: `${DV}/archlinux/archlinux-original.svg`,
+  },
+  {
+    key: "av15",
+    label: "PostgreSQL",
+    url: `${DV}/postgresql/postgresql-original.svg`,
+  },
   { key: "av16", label: "Android", url: `${DV}/android/android-original.svg` },
-  // ── Desafío (av17-av20) ──
   { key: "av17", label: "Arduino", url: `${DV}/arduino/arduino-original.svg` },
   { key: "av18", label: "Kali Linux", url: `${SI}/kalilinux/557C94` },
   { key: "av19", label: "Supabase", url: `${SI}/supabase/3FCF8E` },
   { key: "av20", label: "MySQL", url: `${DV}/mysql/mysql-original.svg` },
 ];
 
-const SPECIAL_AVATARS = AVATARS.slice(16); // av17-av20
+const AVATARS_GASTRONOMIA: AvatarItem[] = [
+  { key: "av1", label: "Sartén", url: `${TW}/1f373.svg` },
+  { key: "av2", label: "Ensalada", url: `${TW}/1f957.svg` },
+  { key: "av3", label: "Bebida", url: `${TW}/1f9c3.svg` },
+  { key: "av4", label: "Recetario", url: `${TW}/1f4d6.svg` },
+  { key: "av5", label: "Pastelería", url: `${TW}/1f382.svg` },
+  { key: "av6", label: "Internacional", url: `${TW}/1f30d.svg` },
+  { key: "av7", label: "Decoración", url: `${TW}/1f3a8.svg` },
+  { key: "av8", label: "Conservas", url: `${TW}/1f96b.svg` },
+  { key: "av9", label: "Pizza", url: `${TW}/1f355.svg` },
+  { key: "av10", label: "Marketing", url: `${TW}/1f4c8.svg` },
+  { key: "av11", label: "Panadería", url: `${TW}/1f950.svg` },
+  { key: "av12", label: "Alta Cocina", url: `${TW}/1f372.svg` },
+  { key: "av13", label: "Nutrición", url: `${TW}/1f951.svg` },
+  { key: "av14", label: "Costeo", url: `${TW}/1f4b0.svg` },
+  { key: "av15", label: "Eventos", url: `${TW}/1f3aa.svg` },
+  { key: "av16", label: "Servicio", url: `${TW}/1f377.svg` },
+  { key: "av17", label: "Estrella", url: `${TW}/2b50.svg` },
+  { key: "av18", label: "Trofeo", url: `${TW}/1f3c6.svg` },
+  { key: "av19", label: "Fuego", url: `${TW}/1f525.svg` },
+  { key: "av20", label: "Corona", url: `${TW}/1f451.svg` },
+];
+
+const AVATARS_CONTADURIA: AvatarItem[] = [
+  { key: "av1", label: "Ábaco", url: `${TW}/1f9ee.svg` },
+  { key: "av2", label: "Documentos", url: `${TW}/1f4cb.svg` },
+  { key: "av3", label: "Números", url: `${TW}/1f522.svg` },
+  { key: "av4", label: "Maletín", url: `${TW}/1f4bc.svg` },
+  { key: "av5", label: "Gráfico", url: `${TW}/1f4ca.svg` },
+  { key: "av6", label: "Banco", url: `${TW}/1f3e6.svg` },
+  { key: "av7", label: "Equipo", url: `${TW}/1f465.svg` },
+  { key: "av8", label: "Laptop", url: `${TW}/1f4bb.svg` },
+  { key: "av9", label: "Tendencia", url: `${TW}/1f4c8.svg` },
+  { key: "av10", label: "Auditoría", url: `${TW}/1f50d.svg` },
+  { key: "av11", label: "Empresa", url: `${TW}/1f3e2.svg` },
+  { key: "av12", label: "Idea", url: `${TW}/1f4a1.svg` },
+  { key: "av13", label: "Informe", url: `${TW}/1f4d1.svg` },
+  { key: "av14", label: "Gobierno", url: `${TW}/1f3db.svg` },
+  { key: "av15", label: "Diamante", url: `${TW}/1f48e.svg` },
+  { key: "av16", label: "Graduación", url: `${TW}/1f393.svg` },
+  { key: "av17", label: "Medalla", url: `${TW}/1f3c5.svg` },
+  { key: "av18", label: "Trofeo", url: `${TW}/1f3c6.svg` },
+  { key: "av19", label: "Estrella", url: `${TW}/2b50.svg` },
+  { key: "av20", label: "Corona", url: `${TW}/1f451.svg` },
+];
+
+const AVATARS_TEXTIL: AvatarItem[] = [
+  { key: "av1", label: "Hilo", url: `${TW}/1f9f5.svg` },
+  { key: "av2", label: "Aguja", url: `${TW}/1faa1.svg` },
+  { key: "av3", label: "Vestido", url: `${TW}/1f457.svg` },
+  { key: "av4", label: "Tijeras", url: `${TW}/2702.svg` },
+  { key: "av5", label: "Blusa", url: `${TW}/1f45a.svg` },
+  { key: "av6", label: "Fábrica", url: `${TW}/1f3ed.svg` },
+  { key: "av7", label: "Regla", url: `${TW}/1f4d0.svg` },
+  { key: "av8", label: "Tacón", url: `${TW}/1f460.svg` },
+  { key: "av9", label: "Corbata", url: `${TW}/1f454.svg` },
+  { key: "av10", label: "Pantalón", url: `${TW}/1f456.svg` },
+  { key: "av11", label: "Reciclaje", url: `${TW}/267b.svg` },
+  { key: "av12", label: "Paleta", url: `${TW}/1f3a8.svg` },
+  { key: "av13", label: "Kimono", url: `${TW}/1f458.svg` },
+  { key: "av14", label: "Abrigo", url: `${TW}/1f9e5.svg` },
+  { key: "av15", label: "Engranaje", url: `${TW}/2699.svg` },
+  { key: "av16", label: "Graduación", url: `${TW}/1f393.svg` },
+  { key: "av17", label: "Diamante", url: `${TW}/1f48e.svg` },
+  { key: "av18", label: "Trofeo", url: `${TW}/1f3c6.svg` },
+  { key: "av19", label: "Estrella", url: `${TW}/2b50.svg` },
+  { key: "av20", label: "Corona", url: `${TW}/1f451.svg` },
+];
+
+function getAvatarsForCareer(name: string): AvatarItem[] {
+  const n = name.toLowerCase();
+  if (n.includes("gastronom")) return AVATARS_GASTRONOMIA;
+  if (n.includes("contad")) return AVATARS_CONTADURIA;
+  if (n.includes("textil")) return AVATARS_TEXTIL;
+  return AVATARS_SISTEMAS;
+}
 
 export default function TeacherDashboard() {
   const nav = useNavigate();
@@ -1185,6 +1278,9 @@ export default function TeacherDashboard() {
     return students.filter((s) => s.is_active === false).length;
   }, [students]);
 
+  const avatars = useMemo(() => getAvatarsForCareer(careerName), [careerName]);
+  const specialAvatars = useMemo(() => avatars.slice(16), [avatars]);
+
   if (loading)
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -1195,8 +1291,8 @@ export default function TeacherDashboard() {
   if (!isTeacherish) return <Navigate to="/student" replace />;
 
   const avatar =
-    AVATARS.find((a) => a.key === (profileData?.avatar_key ?? "av1")) ??
-    AVATARS[0];
+    avatars.find((a) => a.key === (profileData?.avatar_key ?? "av1")) ??
+    avatars[0];
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -1806,7 +1902,7 @@ export default function TeacherDashboard() {
             </div>
 
             <div className="grid grid-cols-5 gap-3 mb-6">
-              {AVATARS.map((a) => (
+              {avatars.map((a) => (
                 <button
                   key={a.key}
                   className={`p-2 rounded-xl border-2 transition-all ${
@@ -2364,7 +2460,7 @@ export default function TeacherDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
-                {SPECIAL_AVATARS.map((a) => {
+                {specialAvatars.map((a) => {
                   const isUnlocked = avatarUnlockKeys.has(a.key);
                   return (
                     <div
