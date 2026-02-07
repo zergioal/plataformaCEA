@@ -48,34 +48,34 @@ type Student = {
 };
 
 const DV = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";
-const BOT = "https://api.dicebear.com/9.x/bottts/svg?seed=";
+const SI = "https://cdn.simpleicons.org";
 
 const AVATARS: { key: string; label: string; url: string }[] = [
   // ── Técnico Básico (av1-av4) ──
-  { key: "av1",  label: "Robot Básico",    url: `${BOT}basico-m-cea` },
-  { key: "av2",  label: "Robot Básica",    url: `${BOT}basica-f-cea` },
-  { key: "av3",  label: "HTML5",           url: `${DV}/html5/html5-original.svg` },
-  { key: "av4",  label: "Windows",         url: `${DV}/windows11/windows11-original.svg` },
+  { key: "av1", label: "HTML5", url: `${DV}/html5/html5-original.svg` },
+  { key: "av2", label: "CSS3", url: `${DV}/css3/css3-original.svg` },
+  { key: "av3", label: "Windows", url: `${DV}/windows11/windows11-original.svg` },
+  { key: "av4", label: "Linux Mint", url: `${SI}/linuxmint/87CF3E` },
   // ── Técnico Auxiliar (av5-av8) ──
-  { key: "av5",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-m-cea` },
-  { key: "av6",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-f-cea` },
-  { key: "av7",  label: "Python",           url: `${DV}/python/python-original.svg` },
-  { key: "av8",  label: "JavaScript",       url: `${DV}/javascript/javascript-original.svg` },
+  { key: "av5", label: "Python", url: `${DV}/python/python-original.svg` },
+  { key: "av6", label: "JavaScript", url: `${DV}/javascript/javascript-original.svg` },
+  { key: "av7", label: "Git", url: `${DV}/git/git-original.svg` },
+  { key: "av8", label: "VS Code", url: `${DV}/vscode/vscode-original.svg` },
   // ── Técnico Medio I (av9-av12) ──
-  { key: "av9",  label: "Robot Medio",      url: `${BOT}medio-m-cea` },
-  { key: "av10", label: "Robot Media",      url: `${BOT}media-f-cea` },
-  { key: "av11", label: "React",            url: `${DV}/react/react-original.svg` },
-  { key: "av12", label: "Linux",            url: `${DV}/linux/linux-original.svg` },
+  { key: "av9", label: "React", url: `${DV}/react/react-original.svg` },
+  { key: "av10", label: "TypeScript", url: `${DV}/typescript/typescript-original.svg` },
+  { key: "av11", label: "Node.js", url: `${DV}/nodejs/nodejs-original.svg` },
+  { key: "av12", label: "Linux", url: `${DV}/linux/linux-original.svg` },
   // ── Técnico Medio II (av13-av16) ──
-  { key: "av13", label: "Robot Avanzado",   url: `${BOT}avanzado-m-cea` },
-  { key: "av14", label: "Robot Avanzada",   url: `${BOT}avanzada-f-cea` },
-  { key: "av15", label: "Android",          url: `${DV}/android/android-original.svg` },
-  { key: "av16", label: "Ubuntu",           url: `${DV}/ubuntu/ubuntu-original.svg` },
+  { key: "av13", label: "Docker", url: `${DV}/docker/docker-original.svg` },
+  { key: "av14", label: "Arch Linux", url: `${DV}/archlinux/archlinux-original.svg` },
+  { key: "av15", label: "PostgreSQL", url: `${DV}/postgresql/postgresql-original.svg` },
+  { key: "av16", label: "Android", url: `${DV}/android/android-original.svg` },
   // ── Desafío (av17-av20) ──
-  { key: "av17", label: "Robot Elite",      url: `${BOT}elite-m-cea` },
-  { key: "av18", label: "Robot Elite",      url: `${BOT}elite-f-cea` },
-  { key: "av19", label: "Docker",           url: `${DV}/docker/docker-original.svg` },
-  { key: "av20", label: "Arch Linux",       url: `${DV}/archlinux/archlinux-original.svg` },
+  { key: "av17", label: "Arduino", url: `${DV}/arduino/arduino-original.svg` },
+  { key: "av18", label: "Kali Linux", url: `${SI}/kalilinux/557C94` },
+  { key: "av19", label: "Supabase", url: `${SI}/supabase/3FCF8E` },
+  { key: "av20", label: "MySQL", url: `${DV}/mysql/mysql-original.svg` },
 ];
 
 const SPECIAL_AVATARS = AVATARS.slice(16); // av17-av20
@@ -164,9 +164,13 @@ export default function TeacherDashboard() {
 
   // Estado para modal de avatares especiales
   const [showAvatarUnlockModal, setShowAvatarUnlockModal] = useState(false);
-  const [avatarUnlockStudentId, setAvatarUnlockStudentId] = useState<string | null>(null);
+  const [avatarUnlockStudentId, setAvatarUnlockStudentId] = useState<
+    string | null
+  >(null);
   const [avatarUnlockStudentName, setAvatarUnlockStudentName] = useState("");
-  const [avatarUnlockKeys, setAvatarUnlockKeys] = useState<Set<string>>(new Set());
+  const [avatarUnlockKeys, setAvatarUnlockKeys] = useState<Set<string>>(
+    new Set(),
+  );
   const [avatarUnlockLoading, setAvatarUnlockLoading] = useState(false);
   const [avatarUnlockSaving, setAvatarUnlockSaving] = useState(false);
 
@@ -1106,7 +1110,9 @@ export default function TeacherDashboard() {
       return;
     }
 
-    setAvatarUnlockKeys(new Set((data ?? []).map((u: { avatar_key: string }) => u.avatar_key)));
+    setAvatarUnlockKeys(
+      new Set((data ?? []).map((u: { avatar_key: string }) => u.avatar_key)),
+    );
   }
 
   async function toggleAvatarUnlock(avatarKey: string) {
@@ -1132,13 +1138,11 @@ export default function TeacherDashboard() {
         });
       }
     } else {
-      const { error } = await supabase
-        .from("student_avatar_unlocks")
-        .insert({
-          student_id: avatarUnlockStudentId,
-          avatar_key: avatarKey,
-          unlocked_by: session.user.id,
-        });
+      const { error } = await supabase.from("student_avatar_unlocks").insert({
+        student_id: avatarUnlockStudentId,
+        avatar_key: avatarKey,
+        unlocked_by: session.user.id,
+      });
 
       if (error) {
         setMsg("Error desbloqueando avatar: " + error.message);
@@ -1713,7 +1717,15 @@ export default function TeacherDashboard() {
                               onClick={() =>
                                 openAvatarUnlockModal(
                                   s.id,
-                                  [s.first_names, s.last_name_pat, s.last_name_mat].filter(Boolean).join(" ") || s.code || ""
+                                  [
+                                    s.first_names,
+                                    s.last_name_pat,
+                                    s.last_name_mat,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ") ||
+                                    s.code ||
+                                    "",
                                 )
                               }
                               title="Gestionar avatares de desafío"
@@ -2323,15 +2335,26 @@ export default function TeacherDashboard() {
                 className="text-slate-400 hover:text-white transition-colors"
                 onClick={() => setShowAvatarUnlockModal(false)}
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
 
             <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
               <p className="text-amber-400 text-sm">
-                Estos avatares especiales solo se desbloquean al completar un desafío. Activa o desactiva cada uno.
+                Estos avatares especiales solo se desbloquean al completar un
+                desafío. Activa o desactiva cada uno.
               </p>
             </div>
 
@@ -2372,7 +2395,11 @@ export default function TeacherDashboard() {
                           onClick={() => toggleAvatarUnlock(a.key)}
                           disabled={avatarUnlockSaving}
                         >
-                          {avatarUnlockSaving ? "..." : isUnlocked ? "Desbloqueado" : "Bloqueado"}
+                          {avatarUnlockSaving
+                            ? "..."
+                            : isUnlocked
+                              ? "Desbloqueado"
+                              : "Bloqueado"}
                         </button>
                       </div>
                     </div>

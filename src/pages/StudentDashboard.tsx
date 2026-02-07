@@ -58,34 +58,34 @@ function clampPct(x: number) {
 }
 
 const DV = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";
-const BOT = "https://api.dicebear.com/9.x/bottts/svg?seed=";
+const SI = "https://cdn.simpleicons.org";
 
 const AVATARS: { key: string; label: string; url: string }[] = [
   // ── Técnico Básico (av1-av4) ──
-  { key: "av1",  label: "Robot Básico",    url: `${BOT}basico-m-cea` },
-  { key: "av2",  label: "Robot Básica",    url: `${BOT}basica-f-cea` },
-  { key: "av3",  label: "HTML5",           url: `${DV}/html5/html5-original.svg` },
-  { key: "av4",  label: "Windows",         url: `${DV}/windows11/windows11-original.svg` },
+  { key: "av1",  label: "HTML5",       url: `${DV}/html5/html5-original.svg` },
+  { key: "av2",  label: "CSS3",        url: `${DV}/css3/css3-original.svg` },
+  { key: "av3",  label: "Windows",     url: `${DV}/windows11/windows11-original.svg` },
+  { key: "av4",  label: "Linux Mint",  url: `${SI}/linuxmint/87CF3E` },
   // ── Técnico Auxiliar (av5-av8) ──
-  { key: "av5",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-m-cea` },
-  { key: "av6",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-f-cea` },
-  { key: "av7",  label: "Python",           url: `${DV}/python/python-original.svg` },
-  { key: "av8",  label: "JavaScript",       url: `${DV}/javascript/javascript-original.svg` },
+  { key: "av5",  label: "Python",      url: `${DV}/python/python-original.svg` },
+  { key: "av6",  label: "JavaScript",  url: `${DV}/javascript/javascript-original.svg` },
+  { key: "av7",  label: "Git",         url: `${DV}/git/git-original.svg` },
+  { key: "av8",  label: "VS Code",     url: `${DV}/vscode/vscode-original.svg` },
   // ── Técnico Medio I (av9-av12) ──
-  { key: "av9",  label: "Robot Medio",      url: `${BOT}medio-m-cea` },
-  { key: "av10", label: "Robot Media",      url: `${BOT}media-f-cea` },
-  { key: "av11", label: "React",            url: `${DV}/react/react-original.svg` },
-  { key: "av12", label: "Linux",            url: `${DV}/linux/linux-original.svg` },
+  { key: "av9",  label: "React",       url: `${DV}/react/react-original.svg` },
+  { key: "av10", label: "TypeScript",  url: `${DV}/typescript/typescript-original.svg` },
+  { key: "av11", label: "Node.js",     url: `${DV}/nodejs/nodejs-original.svg` },
+  { key: "av12", label: "Linux",       url: `${DV}/linux/linux-original.svg` },
   // ── Técnico Medio II (av13-av16) ──
-  { key: "av13", label: "Robot Avanzado",   url: `${BOT}avanzado-m-cea` },
-  { key: "av14", label: "Robot Avanzada",   url: `${BOT}avanzada-f-cea` },
-  { key: "av15", label: "Android",          url: `${DV}/android/android-original.svg` },
-  { key: "av16", label: "Ubuntu",           url: `${DV}/ubuntu/ubuntu-original.svg` },
+  { key: "av13", label: "Docker",      url: `${DV}/docker/docker-original.svg` },
+  { key: "av14", label: "Arch Linux",  url: `${DV}/archlinux/archlinux-original.svg` },
+  { key: "av15", label: "PostgreSQL",  url: `${DV}/postgresql/postgresql-original.svg` },
+  { key: "av16", label: "Android",     url: `${DV}/android/android-original.svg` },
   // ── Desafío (av17-av20) ──
-  { key: "av17", label: "Robot Elite",      url: `${BOT}elite-m-cea` },
-  { key: "av18", label: "Robot Elite",      url: `${BOT}elite-f-cea` },
-  { key: "av19", label: "Docker",           url: `${DV}/docker/docker-original.svg` },
-  { key: "av20", label: "Arch Linux",       url: `${DV}/archlinux/archlinux-original.svg` },
+  { key: "av17", label: "Arduino",     url: `${DV}/arduino/arduino-original.svg` },
+  { key: "av18", label: "Kali Linux",  url: `${SI}/kalilinux/557C94` },
+  { key: "av19", label: "Supabase",    url: `${SI}/supabase/3FCF8E` },
+  { key: "av20", label: "MySQL",       url: `${DV}/mysql/mysql-original.svg` },
 ];
 
 // Nivel mínimo (sort_order) para desbloquear cada grupo de avatares

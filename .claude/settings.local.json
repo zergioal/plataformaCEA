@@ -4,7 +4,8 @@
       "Bash(npx supabase functions deploy update-user)",
       "Bash(npx supabase:*)",
       "Bash(curl:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:cdn.jsdelivr.net)"
     ]
   }
 }
