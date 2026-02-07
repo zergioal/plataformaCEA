@@ -47,11 +47,38 @@ type Student = {
   is_active?: boolean;
 };
 
-const AVATARS = Array.from({ length: 20 }, (_, i) => ({
-  key: `av${i + 1}`,
-  label: `Avatar ${i + 1}`,
-  url: `https://api.dicebear.com/9.x/thumbs/svg?seed=av${i + 1}-cea`,
-}));
+const DV = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";
+const BOT = "https://api.dicebear.com/9.x/bottts/svg?seed=";
+
+const AVATARS: { key: string; label: string; url: string }[] = [
+  // ── Técnico Básico (av1-av4) ──
+  { key: "av1",  label: "Robot Básico",    url: `${BOT}basico-m-cea` },
+  { key: "av2",  label: "Robot Básica",    url: `${BOT}basica-f-cea` },
+  { key: "av3",  label: "HTML5",           url: `${DV}/html5/html5-original.svg` },
+  { key: "av4",  label: "Windows",         url: `${DV}/windows11/windows11-original.svg` },
+  // ── Técnico Auxiliar (av5-av8) ──
+  { key: "av5",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-m-cea` },
+  { key: "av6",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-f-cea` },
+  { key: "av7",  label: "Python",           url: `${DV}/python/python-original.svg` },
+  { key: "av8",  label: "JavaScript",       url: `${DV}/javascript/javascript-original.svg` },
+  // ── Técnico Medio I (av9-av12) ──
+  { key: "av9",  label: "Robot Medio",      url: `${BOT}medio-m-cea` },
+  { key: "av10", label: "Robot Media",      url: `${BOT}media-f-cea` },
+  { key: "av11", label: "React",            url: `${DV}/react/react-original.svg` },
+  { key: "av12", label: "Linux",            url: `${DV}/linux/linux-original.svg` },
+  // ── Técnico Medio II (av13-av16) ──
+  { key: "av13", label: "Robot Avanzado",   url: `${BOT}avanzado-m-cea` },
+  { key: "av14", label: "Robot Avanzada",   url: `${BOT}avanzada-f-cea` },
+  { key: "av15", label: "Android",          url: `${DV}/android/android-original.svg` },
+  { key: "av16", label: "Ubuntu",           url: `${DV}/ubuntu/ubuntu-original.svg` },
+  // ── Desafío (av17-av20) ──
+  { key: "av17", label: "Robot Elite",      url: `${BOT}elite-m-cea` },
+  { key: "av18", label: "Robot Elite",      url: `${BOT}elite-f-cea` },
+  { key: "av19", label: "Docker",           url: `${DV}/docker/docker-original.svg` },
+  { key: "av20", label: "Arch Linux",       url: `${DV}/archlinux/archlinux-original.svg` },
+];
+
+const SPECIAL_AVATARS = AVATARS.slice(16); // av17-av20
 
 export default function TeacherDashboard() {
   const nav = useNavigate();
@@ -134,6 +161,14 @@ export default function TeacherDashboard() {
   // Estado para mostrar estudiantes inactivos
   const [showInactiveStudents, setShowInactiveStudents] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
+
+  // Estado para modal de avatares especiales
+  const [showAvatarUnlockModal, setShowAvatarUnlockModal] = useState(false);
+  const [avatarUnlockStudentId, setAvatarUnlockStudentId] = useState<string | null>(null);
+  const [avatarUnlockStudentName, setAvatarUnlockStudentName] = useState("");
+  const [avatarUnlockKeys, setAvatarUnlockKeys] = useState<Set<string>>(new Set());
+  const [avatarUnlockLoading, setAvatarUnlockLoading] = useState(false);
+  const [avatarUnlockSaving, setAvatarUnlockSaving] = useState(false);
 
   const isTeacherish = role === "teacher" || role === "admin";
 
@@ -1053,6 +1088,68 @@ export default function TeacherDashboard() {
     );
   }
 
+  async function openAvatarUnlockModal(studentId: string, studentName: string) {
+    setAvatarUnlockStudentId(studentId);
+    setAvatarUnlockStudentName(studentName);
+    setShowAvatarUnlockModal(true);
+    setAvatarUnlockLoading(true);
+
+    const { data, error } = await supabase
+      .from("student_avatar_unlocks")
+      .select("avatar_key")
+      .eq("student_id", studentId);
+
+    setAvatarUnlockLoading(false);
+
+    if (error) {
+      setMsg("Error cargando avatares: " + error.message);
+      return;
+    }
+
+    setAvatarUnlockKeys(new Set((data ?? []).map((u: { avatar_key: string }) => u.avatar_key)));
+  }
+
+  async function toggleAvatarUnlock(avatarKey: string) {
+    if (!avatarUnlockStudentId || !session) return;
+
+    setAvatarUnlockSaving(true);
+    const isCurrentlyUnlocked = avatarUnlockKeys.has(avatarKey);
+
+    if (isCurrentlyUnlocked) {
+      const { error } = await supabase
+        .from("student_avatar_unlocks")
+        .delete()
+        .eq("student_id", avatarUnlockStudentId)
+        .eq("avatar_key", avatarKey);
+
+      if (error) {
+        setMsg("Error bloqueando avatar: " + error.message);
+      } else {
+        setAvatarUnlockKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(avatarKey);
+          return next;
+        });
+      }
+    } else {
+      const { error } = await supabase
+        .from("student_avatar_unlocks")
+        .insert({
+          student_id: avatarUnlockStudentId,
+          avatar_key: avatarKey,
+          unlocked_by: session.user.id,
+        });
+
+      if (error) {
+        setMsg("Error desbloqueando avatar: " + error.message);
+      } else {
+        setAvatarUnlockKeys((prev) => new Set(prev).add(avatarKey));
+      }
+    }
+
+    setAvatarUnlockSaving(false);
+  }
+
   async function logout() {
     await supabase.auth.signOut({ scope: "local" });
     nav("/login", { replace: true });
@@ -1610,6 +1707,18 @@ export default function TeacherDashboard() {
                               }
                             >
                               Ascender
+                            </button>
+                            <button
+                              className="px-3 py-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                              onClick={() =>
+                                openAvatarUnlockModal(
+                                  s.id,
+                                  [s.first_names, s.last_name_pat, s.last_name_mat].filter(Boolean).join(" ") || s.code || ""
+                                )
+                              }
+                              title="Gestionar avatares de desafío"
+                            >
+                              Avatares
                             </button>
                             <button
                               className={`px-3 py-1.5 rounded-lg transition-colors ${
@@ -2187,6 +2296,97 @@ export default function TeacherDashboard() {
                   : "Actualizar Contraseña"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Desbloqueo de Avatares Especiales */}
+      {showAvatarUnlockModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={() => setShowAvatarUnlockModal(false)}
+        >
+          <div
+            className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-lg w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-white">
+                  Avatares de Desafío
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  {avatarUnlockStudentName}
+                </p>
+              </div>
+              <button
+                className="text-slate-400 hover:text-white transition-colors"
+                onClick={() => setShowAvatarUnlockModal(false)}
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <p className="text-amber-400 text-sm">
+                Estos avatares especiales solo se desbloquean al completar un desafío. Activa o desactiva cada uno.
+              </p>
+            </div>
+
+            {avatarUnlockLoading ? (
+              <div className="text-center py-8 text-slate-400">
+                Cargando avatares...
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {SPECIAL_AVATARS.map((a) => {
+                  const isUnlocked = avatarUnlockKeys.has(a.key);
+                  return (
+                    <div
+                      key={a.key}
+                      className={`rounded-xl border p-4 flex items-center gap-4 transition-all duration-200 ${
+                        isUnlocked
+                          ? "border-amber-500/30 bg-amber-500/5"
+                          : "border-slate-700/50 bg-slate-800/30"
+                      }`}
+                    >
+                      <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-slate-700/50 flex-shrink-0">
+                        <img
+                          src={a.url}
+                          alt={a.label}
+                          className={`w-full h-full ${!isUnlocked ? "grayscale opacity-50" : ""}`}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-white mb-1">
+                          {a.label}
+                        </div>
+                        <button
+                          className={`w-full px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            isUnlocked
+                              ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30"
+                              : "bg-slate-700/50 text-slate-400 hover:bg-slate-700 border border-slate-600/50"
+                          }`}
+                          onClick={() => toggleAvatarUnlock(a.key)}
+                          disabled={avatarUnlockSaving}
+                        >
+                          {avatarUnlockSaving ? "..." : isUnlocked ? "Desbloqueado" : "Bloqueado"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <button
+              className="w-full mt-6 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all"
+              onClick={() => setShowAvatarUnlockModal(false)}
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}

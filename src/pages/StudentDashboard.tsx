@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
 import logoCea from "../assets/logo-cea.png";
 
-type LevelRow = { id: number; name: string };
+type LevelRow = { id: number; name: string; sort_order: number };
 
 type ModuleRow = {
   id: number;
@@ -57,14 +57,52 @@ function clampPct(x: number) {
   return Math.max(0, Math.min(100, Math.round(x)));
 }
 
-const AVATARS = Array.from({ length: 20 }, (_, i) => {
-  const key = `av${i + 1}`;
-  return {
-    key,
-    label: `Avatar ${i + 1}`,
-    url: `https://api.dicebear.com/9.x/thumbs/svg?seed=${key}-cea`,
-  };
-});
+const DV = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";
+const BOT = "https://api.dicebear.com/9.x/bottts/svg?seed=";
+
+const AVATARS: { key: string; label: string; url: string }[] = [
+  // ── Técnico Básico (av1-av4) ──
+  { key: "av1",  label: "Robot Básico",    url: `${BOT}basico-m-cea` },
+  { key: "av2",  label: "Robot Básica",    url: `${BOT}basica-f-cea` },
+  { key: "av3",  label: "HTML5",           url: `${DV}/html5/html5-original.svg` },
+  { key: "av4",  label: "Windows",         url: `${DV}/windows11/windows11-original.svg` },
+  // ── Técnico Auxiliar (av5-av8) ──
+  { key: "av5",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-m-cea` },
+  { key: "av6",  label: "Robot Auxiliar",   url: `${BOT}auxiliar-f-cea` },
+  { key: "av7",  label: "Python",           url: `${DV}/python/python-original.svg` },
+  { key: "av8",  label: "JavaScript",       url: `${DV}/javascript/javascript-original.svg` },
+  // ── Técnico Medio I (av9-av12) ──
+  { key: "av9",  label: "Robot Medio",      url: `${BOT}medio-m-cea` },
+  { key: "av10", label: "Robot Media",      url: `${BOT}media-f-cea` },
+  { key: "av11", label: "React",            url: `${DV}/react/react-original.svg` },
+  { key: "av12", label: "Linux",            url: `${DV}/linux/linux-original.svg` },
+  // ── Técnico Medio II (av13-av16) ──
+  { key: "av13", label: "Robot Avanzado",   url: `${BOT}avanzado-m-cea` },
+  { key: "av14", label: "Robot Avanzada",   url: `${BOT}avanzada-f-cea` },
+  { key: "av15", label: "Android",          url: `${DV}/android/android-original.svg` },
+  { key: "av16", label: "Ubuntu",           url: `${DV}/ubuntu/ubuntu-original.svg` },
+  // ── Desafío (av17-av20) ──
+  { key: "av17", label: "Robot Elite",      url: `${BOT}elite-m-cea` },
+  { key: "av18", label: "Robot Elite",      url: `${BOT}elite-f-cea` },
+  { key: "av19", label: "Docker",           url: `${DV}/docker/docker-original.svg` },
+  { key: "av20", label: "Arch Linux",       url: `${DV}/archlinux/archlinux-original.svg` },
+];
+
+// Nivel mínimo (sort_order) para desbloquear cada grupo de avatares
+function getAvatarRequiredLevel(index: number): number | "special" {
+  if (index < 4) return 1;       // av1-av4: Técnico Básico (todos)
+  if (index < 8) return 2;       // av5-av8: Técnico Auxiliar
+  if (index < 12) return 3;      // av9-av12: Técnico Medio I
+  if (index < 16) return 4;      // av13-av16: Técnico Medio II
+  return "special";              // av17-av20: Desafío (docente desbloquea)
+}
+
+const LEVEL_NAMES: Record<number, string> = {
+  1: "Técnico Básico",
+  2: "Técnico Auxiliar",
+  3: "Técnico Medio I",
+  4: "Técnico Medio II",
+};
 
 export default function StudentDashboard() {
   const nav = useNavigate();
@@ -80,7 +118,15 @@ export default function StudentDashboard() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [selectedAvatarKey, setSelectedAvatarKey] = useState<string | null>(null);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [specialUnlocks, setSpecialUnlocks] = useState<Set<string>>(new Set());
+
+  // Editar perfil
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const [gradesOpen, setGradesOpen] = useState<Set<number>>(new Set());
   const [gradesByModule, setGradesByModule] = useState<
@@ -252,10 +298,20 @@ export default function StudentDashboard() {
 
       const lv = await supabase
         .from("levels")
-        .select("id,name")
+        .select("id,name,sort_order")
         .eq("id", levelId)
         .single();
       if (!lv.error && lv.data) setLevel(lv.data as LevelRow);
+
+      // Cargar avatares especiales desbloqueados
+      const unlocks = await supabase
+        .from("student_avatar_unlocks")
+        .select("avatar_key")
+        .eq("student_id", session!.user.id);
+
+      if (!unlocks.error && unlocks.data) {
+        setSpecialUnlocks(new Set(unlocks.data.map((u: { avatar_key: string }) => u.avatar_key)));
+      }
 
       const mods = await supabase
         .from("modules")
@@ -334,14 +390,19 @@ export default function StudentDashboard() {
     return map;
   }, [modules, progressByModule]);
 
-  async function setAvatarKey(newKey: string) {
-    if (!session) return;
+  function openAvatarModal() {
+    setSelectedAvatarKey(profile?.avatar_key?.trim() || "av1");
+    setAvatarOpen(true);
+  }
+
+  async function saveAvatar() {
+    if (!session || !selectedAvatarKey) return;
     setSavingAvatar(true);
     setMsg(null);
 
     const upd = await supabase
       .from("profiles")
-      .update({ avatar_key: newKey })
+      .update({ avatar_key: selectedAvatarKey })
       .eq("id", session.user.id);
 
     setSavingAvatar(false);
@@ -352,6 +413,36 @@ export default function StudentDashboard() {
     }
 
     setAvatarOpen(false);
+    window.location.reload();
+  }
+
+  function openEditProfile() {
+    setEditPhone(profile?.phone ?? "");
+    setEditEmail(profile?.contact_email ?? "");
+    setEditProfileOpen(true);
+  }
+
+  async function saveProfile() {
+    if (!session) return;
+    setSavingProfile(true);
+    setMsg(null);
+
+    const upd = await supabase
+      .from("profiles")
+      .update({
+        phone: editPhone.trim() || null,
+        contact_email: editEmail.trim() || null,
+      })
+      .eq("id", session.user.id);
+
+    setSavingProfile(false);
+
+    if (upd.error) {
+      setMsg("No se pudo actualizar perfil: " + upd.error.message);
+      return;
+    }
+
+    setEditProfileOpen(false);
     window.location.reload();
   }
 
@@ -425,14 +516,24 @@ export default function StudentDashboard() {
         {/* Tarjeta de perfil mejorada - RESPONSIVE */}
         <section className="w-full max-w-4xl mx-auto bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 lg:p-8 shadow-2xl">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 mb-6 sm:mb-8">
-            {/* Avatar y datos principales */}
+            {/* Avatar con botón editar en esquina */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5">
-              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl border-2 border-blue-500/30 bg-gradient-to-br from-slate-800 to-slate-900 overflow-hidden flex items-center justify-center shadow-xl shadow-blue-900/20 flex-shrink-0">
-                <img
-                  src={avatar.url}
-                  alt={avatar.label}
-                  className="h-full w-full"
-                />
+              <div className="relative group flex-shrink-0">
+                <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl border-2 border-blue-500/30 bg-gradient-to-br from-slate-800 to-slate-900 overflow-hidden flex items-center justify-center shadow-xl shadow-blue-900/20">
+                  <img
+                    src={avatar.url}
+                    alt={avatar.label}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <button
+                  className="absolute -bottom-2 -right-2 w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-center hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg shadow-blue-900/50 group-hover:scale-110"
+                  onClick={openAvatarModal}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
               </div>
 
               <div className="text-center sm:text-left">
@@ -459,26 +560,16 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Botón cambiar avatar - esquina superior derecha */}
+            {/* Botón Editar perfil */}
             <button
               className="self-center sm:self-start px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 text-slate-200 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 text-sm flex-shrink-0"
-              onClick={() => setAvatarOpen(true)}
+              onClick={openEditProfile}
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
-              <span className="hidden sm:inline">Cambiar avatar</span>
-              <span className="sm:hidden">Avatar</span>
+              <span className="hidden sm:inline">Editar perfil</span>
+              <span className="sm:hidden">Editar</span>
             </button>
           </div>
 
@@ -822,46 +913,193 @@ export default function StudentDashboard() {
         </section>
       </main>
 
-      {/* MODAL AVATAR - RESPONSIVE */}
+      {/* MODAL AVATAR - con desbloqueo por nivel + Cancelar/Guardar */}
       {avatarOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-slate-800 shadow w-full sm:max-w-xl p-4 sm:p-5 space-y-4 max-h-[85vh] overflow-auto">
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50"
+          onClick={() => setAvatarOpen(false)}
+        >
+          <div
+            className="bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-slate-800 shadow-2xl w-full sm:max-w-2xl p-4 sm:p-6 space-y-4 max-h-[85vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs sm:text-sm text-slate-400">
-                  Selecciona tu avatar
+                <h3 className="text-base sm:text-lg font-bold text-white">Selecciona tu avatar</h3>
+                <div className="text-xs text-slate-500 mt-1">
+                  Desbloquea más avatares subiendo de nivel
                 </div>
-                <div className="text-base sm:text-lg font-bold">Avatares</div>
               </div>
               <button
-                className="rounded-xl px-3 py-2 border border-slate-800 hover:bg-slate-900 text-sm"
+                className="text-slate-400 hover:text-white transition-colors"
                 onClick={() => setAvatarOpen(false)}
               >
-                Cerrar
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
             <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
-              {AVATARS.map((a) => (
-                <button
-                  key={a.key}
-                  className={
-                    "rounded-xl sm:rounded-2xl border border-slate-800 p-1.5 sm:p-2 hover:bg-slate-900 " +
-                    (avatar.key === a.key ? "ring-2 ring-white" : "")
-                  }
-                  onClick={() => setAvatarKey(a.key)}
-                  disabled={savingAvatar}
-                  title={a.label}
-                  type="button"
-                >
-                  <img src={a.url} alt={a.label} className="w-full h-auto" />
-                </button>
-              ))}
+              {AVATARS.map((a, index) => {
+                const req = getAvatarRequiredLevel(index);
+                const myLevel = level?.sort_order ?? 1;
+                const isUnlocked =
+                  req === "special"
+                    ? specialUnlocks.has(a.key)
+                    : myLevel >= req;
+                const isSelected = selectedAvatarKey === a.key;
+
+                return (
+                  <button
+                    key={a.key}
+                    className={
+                      "relative rounded-xl sm:rounded-2xl border-2 p-1.5 sm:p-2 transition-all duration-200 " +
+                      (isUnlocked
+                        ? isSelected
+                          ? "border-blue-500 ring-2 ring-blue-500/20 scale-105 bg-slate-800/50"
+                          : "border-slate-800 hover:border-slate-600 hover:bg-slate-900"
+                        : "border-slate-800/50 opacity-50 cursor-not-allowed")
+                    }
+                    onClick={() => isUnlocked && setSelectedAvatarKey(a.key)}
+                    disabled={!isUnlocked}
+                    title={
+                      isUnlocked
+                        ? a.label
+                        : req === "special"
+                          ? "Desbloqueable por desafío"
+                          : `Requiere: ${LEVEL_NAMES[req]}`
+                    }
+                    type="button"
+                  >
+                    <img
+                      src={a.url}
+                      alt={a.label}
+                      className={
+                        "w-full h-auto " +
+                        (!isUnlocked ? "grayscale" : "")
+                      }
+                    />
+                    {!isUnlocked && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/60 rounded-xl sm:rounded-2xl">
+                        {req === "special" ? (
+                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        )}
+                        <span className="text-[9px] sm:text-[10px] text-slate-300 mt-0.5 text-center leading-tight px-1">
+                          {req === "special" ? "Desafío" : LEVEL_NAMES[req]?.replace("Técnico ", "T. ")}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {savingAvatar && (
-              <div className="text-sm text-slate-300">Guardando...</div>
-            )}
+            {/* Leyenda */}
+            <div className="flex flex-wrap gap-3 text-xs text-slate-500 border-t border-slate-800 pt-3">
+              <span className="flex items-center gap-1">
+                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Bloqueado por nivel
+              </span>
+              <span className="flex items-center gap-1">
+                <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+                Desbloqueable por desafío
+              </span>
+            </div>
+
+            {/* Botones Cancelar / Guardar */}
+            <div className="flex gap-3 pt-2">
+              <button
+                className="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all"
+                onClick={() => setAvatarOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all shadow-lg shadow-blue-900/30 disabled:opacity-50"
+                onClick={saveAvatar}
+                disabled={savingAvatar || selectedAvatarKey === (profile?.avatar_key?.trim() || "av1")}
+              >
+                {savingAvatar ? "Guardando..." : "Guardar Avatar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR PERFIL */}
+      {editProfileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50"
+          onClick={() => setEditProfileOpen(false)}
+        >
+          <div
+            className="bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-slate-800 shadow-2xl w-full sm:max-w-md p-4 sm:p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-bold text-white">Editar perfil</h3>
+              <button
+                className="text-slate-400 hover:text-white transition-colors"
+                onClick={() => setEditProfileOpen(false)}
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Celular
+                </label>
+                <input
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="Ej: 72345678"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Correo electrónico
+                </label>
+                <input
+                  type="email"
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="Ej: correo@ejemplo.com"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                className="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all"
+                onClick={() => setEditProfileOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all shadow-lg shadow-emerald-900/30 disabled:opacity-50"
+                onClick={saveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? "Guardando..." : "Guardar Cambios"}
+              </button>
+            </div>
           </div>
         </div>
       )}
