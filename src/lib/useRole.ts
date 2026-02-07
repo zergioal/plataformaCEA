@@ -60,8 +60,12 @@ export function useRole() {
 
   useEffect(() => {
     let mounted = true;
+    let isLoading = false; // Evitar cargas concurrentes
 
     async function load() {
+      if (isLoading) return; // Prevenir llamadas simultáneas
+      isLoading = true;
+
       // Si ya tenemos datos en cache, no mostrar loading
       const hasCache = loadFromCache();
       if (!hasCache) {
@@ -71,7 +75,7 @@ export function useRole() {
       const { data } = await supabase.auth.getSession();
       const s = data.session;
 
-      if (!mounted) return;
+      if (!mounted) { isLoading = false; return; }
 
       setSession(s);
 
@@ -79,12 +83,11 @@ export function useRole() {
         setRole(null);
         setProfile(null);
         setLoading(false);
-        // Limpiar cache si no hay sesión
         sessionStorage.removeItem(SESSION_CACHE_KEY);
+        isLoading = false;
         return;
       }
 
-      // ✅ Cargar perfil completo
       const { data: p, error } = await supabase
         .from("profiles")
         .select(
@@ -93,7 +96,7 @@ export function useRole() {
         .eq("id", s.user.id)
         .single();
 
-      if (!mounted) return;
+      if (!mounted) { isLoading = false; return; }
 
       if (error) {
         console.error("Error cargando perfil:", error);
@@ -106,7 +109,6 @@ export function useRole() {
         setRole(newRole);
         setProfile(newProfile);
 
-        // Guardar en cache
         saveToCache({
           session: s,
           role: newRole,
@@ -115,13 +117,33 @@ export function useRole() {
       }
 
       setLoading(false);
+      isLoading = false;
     }
 
     load();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      // Solo recargar en eventos importantes, no en cada cambio
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "TOKEN_REFRESHED") {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setRole(null);
+        setProfile(null);
+        sessionStorage.removeItem(SESSION_CACHE_KEY);
+        return;
+      }
+
+      if (event === "TOKEN_REFRESHED" && newSession) {
+        // Solo actualizar la sesión, NO volver a cargar perfil
+        setSession(newSession);
+        const cached = loadFromCache();
+        if (cached) {
+          saveToCache({ ...cached, session: newSession });
+        }
+        return;
+      }
+
+      if (event === "SIGNED_IN") {
         load();
       }
     });

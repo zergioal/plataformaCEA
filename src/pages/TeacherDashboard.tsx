@@ -970,7 +970,7 @@ export default function TeacherDashboard() {
       showMessage(
         "Sin contactos",
         "No hay estudiantes para exportar con los filtros actuales.",
-        "warning"
+        "warning",
       );
       return;
     }
@@ -1033,7 +1033,10 @@ export default function TeacherDashboard() {
     // Nombre del archivo con fecha y nivel si está filtrado
     const date = new Date().toISOString().split("T")[0];
     const levelSuffix = selectedLevelFilter
-      ? "_" + abbreviateLevel(levels.find(l => l.id === selectedLevelFilter)?.name ?? "")
+      ? "_" +
+        abbreviateLevel(
+          levels.find((l) => l.id === selectedLevelFilter)?.name ?? "",
+        )
       : "";
     link.href = url;
     link.download = `contactos${levelSuffix}_${date}.vcf`;
@@ -1046,7 +1049,7 @@ export default function TeacherDashboard() {
     showMessage(
       "✅ Contactos exportados",
       `Se han exportado ${filteredStudents.length} contactos en formato VCF.`,
-      "success"
+      "success",
     );
   }
 
@@ -1059,7 +1062,9 @@ export default function TeacherDashboard() {
   const levelStats = useMemo(() => {
     const activeStudents = students.filter((s) => s.is_active !== false);
     const stats = levels.map((level) => {
-      const count = activeStudents.filter((s) => s.level_id === level.id).length;
+      const count = activeStudents.filter(
+        (s) => s.level_id === level.id,
+      ).length;
       return {
         id: level.id,
         name: level.name,
@@ -1302,11 +1307,17 @@ export default function TeacherDashboard() {
             </h2>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-slate-400">
-                Total activos: <span className="text-emerald-400 font-bold">{totalActiveStudents}</span>
+                Total activos:{" "}
+                <span className="text-emerald-400 font-bold">
+                  {totalActiveStudents}
+                </span>
               </span>
               {totalInactiveStudents > 0 && (
                 <span className="text-slate-400">
-                  Inactivos: <span className="text-amber-400 font-bold">{totalInactiveStudents}</span>
+                  Inactivos:{" "}
+                  <span className="text-amber-400 font-bold">
+                    {totalInactiveStudents}
+                  </span>
                 </span>
               )}
             </div>
@@ -1348,7 +1359,8 @@ export default function TeacherDashboard() {
                   <div className="mt-2 text-xs text-slate-500">
                     {totalActiveStudents > 0
                       ? Math.round((stat.count / totalActiveStudents) * 100)
-                      : 0}% del total
+                      : 0}
+                    % del total
                   </div>
                 </div>
               );
@@ -1413,7 +1425,11 @@ export default function TeacherDashboard() {
                     : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
                 }`}
                 onClick={() => setShowInactiveStudents(!showInactiveStudents)}
-                title={showInactiveStudents ? "Ver estudiantes activos" : "Ver estudiantes inactivos"}
+                title={
+                  showInactiveStudents
+                    ? "Ver estudiantes activos"
+                    : "Ver estudiantes inactivos"
+                }
               >
                 {showInactiveStudents ? "👥 Ver Activos" : "👤 Ver Inactivos"}
               </button>
@@ -1425,9 +1441,12 @@ export default function TeacherDashboard() {
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
               <span className="text-amber-400 text-lg">⚠️</span>
               <div>
-                <div className="text-amber-300 font-medium">Modo: Estudiantes Inactivos</div>
+                <div className="text-amber-300 font-medium">
+                  Modo: Estudiantes Inactivos
+                </div>
                 <div className="text-amber-400/70 text-sm">
-                  Estos estudiantes no pueden acceder al sistema. Puedes reactivarlos con el botón "Activar".
+                  Estos estudiantes no pueden acceder al sistema. Puedes
+                  reactivarlos con el botón "Activar".
                 </div>
               </div>
             </div>
