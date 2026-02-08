@@ -8,6 +8,10 @@ export default function AppRedirect() {
   if (!session) return <Navigate to="/login" replace />;
 
   const to =
-    role === "admin" ? "/admin" : role === "teacher" ? "/teacher" : "/student";
+    role === "admin" || role === "administrativo"
+      ? "/admin"
+      : role === "teacher"
+        ? "/teacher"
+        : "/student";
   return <Navigate to={to} replace />;
 }

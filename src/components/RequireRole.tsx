@@ -37,7 +37,7 @@ export default function RequireRole({
     const fallback =
       role === "student"
         ? "/student"
-        : role === "admin"
+        : role === "admin" || role === "administrativo"
           ? "/admin"
           : role === "teacher"
             ? "/teacher"

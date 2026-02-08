@@ -5,7 +5,8 @@
       "Bash(npx supabase:*)",
       "Bash(curl:*)",
       "Bash(npx tsc:*)",
-      "WebFetch(domain:cdn.jsdelivr.net)"
+      "WebFetch(domain:cdn.jsdelivr.net)",
+      "Bash(powershell -Command \"$bytes = [IO.File]::ReadAllBytes\\(''d:\\\\cea-plataforma\\\\web\\\\src\\\\assets\\\\logo-cea.png''\\); $b64 = [Convert]::ToBase64String\\($bytes\\); $uri = ''data:image/png;base64,'' + $b64; Set-Content -Path ''d:\\\\cea-plataforma\\\\web\\\\temp_logo_b64.txt'' -Value $uri -NoNewline\")"
     ]
   }
 }

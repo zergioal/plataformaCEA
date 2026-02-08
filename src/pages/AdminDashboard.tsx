@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactElement } from "react";
 import { supabase } from "../lib/supabase";
+import { useRole } from "../lib/useRole";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import logoCea from "../assets/logo-cea.png";
@@ -77,9 +78,24 @@ type ApiResponse = {
   error?: string;
 };
 
-// Logo Base64 para PDFs
-const LOGO_BASE64 =
-  "data:image/png;base64,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";
+// Función para cargar logo como Base64 para PDFs
+function loadLogoBase64(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject("No canvas context"); return; }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => reject("Error loading logo");
+    img.src = logoCea;
+  });
+}
 
 function randomPass(len = 10) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -206,6 +222,9 @@ const darkStyles = {
 };
 
 export default function AdminDashboard() {
+  const { role: authRole } = useRole();
+  const isReadOnly = authRole === "administrativo";
+
   const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "");
   const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
 
@@ -605,10 +624,11 @@ export default function AdminDashboard() {
     setPdfCareer(null);
   }
 
-  function addPdfHeader(doc: jsPDF, pageWidth: number) {
+  async function addPdfHeader(doc: jsPDF, pageWidth: number) {
     // Logo
     try {
-      doc.addImage(LOGO_BASE64, "PNG", 15, 10, 25, 25);
+      const logoData = await loadLogoBase64();
+      doc.addImage(logoData, "PNG", 15, 8, 28, 28);
     } catch (error) {
       console.error("Error cargando logo:", error);
     }
@@ -666,7 +686,7 @@ export default function AdminDashboard() {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
 
-      addPdfHeader(doc, pageWidth);
+      await addPdfHeader(doc, pageWidth);
 
       // Título
       doc.setFontSize(14);
@@ -837,7 +857,7 @@ export default function AdminDashboard() {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
 
-      addPdfHeader(doc, pageWidth);
+      await addPdfHeader(doc, pageWidth);
 
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
@@ -953,7 +973,7 @@ export default function AdminDashboard() {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
 
-      addPdfHeader(doc, pageWidth);
+      await addPdfHeader(doc, pageWidth);
 
       doc.setFontSize(13);
       doc.setFont("helvetica", "bold");
@@ -1761,6 +1781,7 @@ export default function AdminDashboard() {
                               })
                             : "—"}
                         </td>
+                        {!isReadOnly && (
                         <td style={{ padding: "12px", textAlign: "center" }}>
                           <button
                             style={{
@@ -1775,6 +1796,7 @@ export default function AdminDashboard() {
                             {unlockingId === acc.id ? "..." : "🔓 Desbloquear"}
                           </button>
                         </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -1821,7 +1843,7 @@ export default function AdminDashboard() {
                 value={careerSearch}
                 onChange={(e) => setCareerSearch(e.target.value)}
               />
-              {!showCareerForm && (
+              {!isReadOnly && !showCareerForm && (
                 <button
                   style={darkStyles.btnPrimary}
                   onClick={() => setShowCareerForm(true)}
@@ -1833,7 +1855,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Form Carrera */}
-          {showCareerForm && (
+          {!isReadOnly && showCareerForm && (
             <div
               style={{
                 background: "rgba(50, 50, 50, 0.5)",
@@ -1981,6 +2003,8 @@ export default function AdminDashboard() {
                           >
                             📄 PDF
                           </button>
+                          {!isReadOnly && (
+                          <>
                           <button
                             style={{
                               ...darkStyles.btnSecondary,
@@ -2004,6 +2028,8 @@ export default function AdminDashboard() {
                           >
                             Eliminar
                           </button>
+                          </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2061,16 +2087,18 @@ export default function AdminDashboard() {
               >
                 📄 PDF Docentes
               </button>
-              <button
-                style={darkStyles.btnPrimary}
-                onClick={() => {
-                  resetForm();
-                  setRole("teacher");
-                  setShowCreateModal(true);
-                }}
-              >
-                + Nuevo Docente
-              </button>
+              {!isReadOnly && (
+                <button
+                  style={darkStyles.btnPrimary}
+                  onClick={() => {
+                    resetForm();
+                    setRole("teacher");
+                    setShowCreateModal(true);
+                  }}
+                >
+                  + Nuevo Docente
+                </button>
+              )}
             </div>
           </div>
 
@@ -2161,47 +2189,49 @@ export default function AdminDashboard() {
                       {t.phone ?? "-"}
                     </td>
                     <td style={{ padding: "12px 16px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "6px",
-                          justifyContent: "center",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <button
+                      {!isReadOnly && (
+                        <div
                           style={{
-                            ...darkStyles.btnSecondary,
-                            padding: "5px 10px",
-                            fontSize: "11px",
+                            display: "flex",
+                            gap: "6px",
+                            justifyContent: "center",
+                            flexWrap: "wrap",
                           }}
-                          onClick={() => openEdit(t)}
                         >
-                          Editar
-                        </button>
-                        <button
-                          style={{
-                            ...darkStyles.btnSecondary,
-                            padding: "5px 10px",
-                            fontSize: "11px",
-                          }}
-                          onClick={() =>
-                            openResetPassword(t.id, t.code ?? t.id)
-                          }
-                        >
-                          Contraseña
-                        </button>
-                        <button
-                          style={{
-                            ...darkStyles.btnDanger,
-                            padding: "5px 10px",
-                            fontSize: "11px",
-                          }}
-                          onClick={() => deleteUser(t.id, t.code ?? t.id)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+                          <button
+                            style={{
+                              ...darkStyles.btnSecondary,
+                              padding: "5px 10px",
+                              fontSize: "11px",
+                            }}
+                            onClick={() => openEdit(t)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            style={{
+                              ...darkStyles.btnSecondary,
+                              padding: "5px 10px",
+                              fontSize: "11px",
+                            }}
+                            onClick={() =>
+                              openResetPassword(t.id, t.code ?? t.id)
+                            }
+                          >
+                            Contraseña
+                          </button>
+                          <button
+                            style={{
+                              ...darkStyles.btnDanger,
+                              padding: "5px 10px",
+                              fontSize: "11px",
+                            }}
+                            onClick={() => deleteUser(t.id, t.code ?? t.id)}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -2263,16 +2293,18 @@ export default function AdminDashboard() {
               <button style={darkStyles.btnSecondary} onClick={loadStudents}>
                 {loadingStudents ? "..." : "🔄"}
               </button>
-              <button
-                style={darkStyles.btnPrimary}
-                onClick={() => {
-                  resetForm();
-                  setRole("student");
-                  setShowCreateModal(true);
-                }}
-              >
-                + Nuevo Estudiante
-              </button>
+              {!isReadOnly && (
+                <button
+                  style={darkStyles.btnPrimary}
+                  onClick={() => {
+                    resetForm();
+                    setRole("student");
+                    setShowCreateModal(true);
+                  }}
+                >
+                  + Nuevo Estudiante
+                </button>
+              )}
             </div>
           </div>
 
@@ -2569,38 +2601,42 @@ export default function AdminDashboard() {
                         >
                           Notas
                         </button>
-                        <button
-                          style={{
-                            ...darkStyles.btnSecondary,
-                            padding: "5px 10px",
-                            fontSize: "11px",
-                          }}
-                          onClick={() => openEdit(s)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          style={{
-                            ...darkStyles.btnSecondary,
-                            padding: "5px 10px",
-                            fontSize: "11px",
-                          }}
-                          onClick={() =>
-                            openResetPassword(s.id, s.code ?? s.id)
-                          }
-                        >
-                          Contraseña
-                        </button>
-                        <button
-                          style={{
-                            ...darkStyles.btnDanger,
-                            padding: "5px 10px",
-                            fontSize: "11px",
-                          }}
-                          onClick={() => deleteUser(s.id, s.code ?? s.id)}
-                        >
-                          Eliminar
-                        </button>
+                        {!isReadOnly && (
+                          <>
+                            <button
+                              style={{
+                                ...darkStyles.btnSecondary,
+                                padding: "5px 10px",
+                                fontSize: "11px",
+                              }}
+                              onClick={() => openEdit(s)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              style={{
+                                ...darkStyles.btnSecondary,
+                                padding: "5px 10px",
+                                fontSize: "11px",
+                              }}
+                              onClick={() =>
+                                openResetPassword(s.id, s.code ?? s.id)
+                              }
+                            >
+                              Contraseña
+                            </button>
+                            <button
+                              style={{
+                                ...darkStyles.btnDanger,
+                                padding: "5px 10px",
+                                fontSize: "11px",
+                              }}
+                              onClick={() => deleteUser(s.id, s.code ?? s.id)}
+                            >
+                              Eliminar
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -3138,7 +3174,7 @@ export default function AdminDashboard() {
       )}
 
       {/* MODAL EDITAR USUARIO */}
-      {showEditModal && editingUser && (
+      {!isReadOnly && showEditModal && editingUser && (
         <div
           style={{
             position: "fixed",
@@ -3507,7 +3543,7 @@ export default function AdminDashboard() {
       )}
 
       {/* MODAL CREAR ESTUDIANTE/DOCENTE */}
-      {showCreateModal && (
+      {!isReadOnly && showCreateModal && (
         <div
           style={{
             position: "fixed",
@@ -3908,7 +3944,7 @@ export default function AdminDashboard() {
       )}
 
       {/* MODAL RESET PASSWORD */}
-      {showResetModal && (
+      {!isReadOnly && showResetModal && (
         <div
           style={{
             position: "fixed",
