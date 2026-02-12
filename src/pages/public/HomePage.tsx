@@ -2,19 +2,19 @@ import { useEffect, useRef } from "react";
 import { Carousel, CareerCard } from "../../components/public";
 import { careers, institutionalInfo } from "../../data/careers";
 
-// Imágenes temporales para el carrusel (usar placeholders hasta tener las reales)
+// Imágenes reales del CEA para el carrusel
 const carouselImages = [
-  { src: "https://placehold.co/1200x450/013658/white?text=CEA+Madre+Mar%C3%ADa+Oliva", alt: "CEA 1" },
-  { src: "https://placehold.co/1200x450/024a7a/white?text=Formaci%C3%B3n+T%C3%A9cnica", alt: "CEA 2" },
-  { src: "https://placehold.co/1200x450/0088cc/white?text=Educaci%C3%B3n+Alternativa", alt: "CEA 3" },
+  { src: "/images/CEA.jpeg", alt: "Fachada del Centro de Educación Alternativa Madre María Oliva en Cochabamba" },
+  { src: "/images/CEA1.jpeg", alt: "Estudiantes del CEA Madre María Oliva en actividades de formación técnica" },
+  { src: "/images/CEA2.jpeg", alt: "Instalaciones y talleres del CEA Madre María Oliva" },
 ];
 
-// Imágenes de carreras (placeholders)
+// Imágenes reales por carrera
 const careerImages: Record<string, string> = {
-  sistemas: "https://placehold.co/400x225/0088cc/white?text=Sistemas",
-  gastronomia: "https://placehold.co/400x225/dc2626/white?text=Gastronom%C3%ADa",
-  contaduria: "https://placehold.co/400x225/16a34a/white?text=Contadur%C3%ADa",
-  textil: "https://placehold.co/400x225/9333ea/white?text=Textil",
+  sistemas: "/images/Infor.jpg",
+  gastronomia: "/images/Gastro.jpg",
+  contaduria: "/images/Conta.jpg",
+  textil: "/images/text.jpg",
 };
 
 // Hook para animaciones al scroll
@@ -45,6 +45,11 @@ function useScrollAnimation() {
 export default function HomePage() {
   const containerRef = useScrollAnimation();
 
+  // SEO: título para la página principal
+  useEffect(() => {
+    document.title = "CEA Madre María Oliva | Centro de Educación Alternativa - Cochabamba, Bolivia";
+  }, []);
+
   return (
     <div ref={containerRef}>
       {/* Sección Institución */}
@@ -57,9 +62,9 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-6">
             {/* Nosotros */}
             <div className="animate-on-scroll institutional-card">
-              <h4 className="institutional-card-title">
+              <h3 className="institutional-card-title">
                 {institutionalInfo.about.title}
-              </h4>
+              </h3>
               <p className="institutional-card-text">
                 {institutionalInfo.about.content}
               </p>
@@ -67,9 +72,9 @@ export default function HomePage() {
 
             {/* Misión */}
             <div className="animate-on-scroll institutional-card" style={{ transitionDelay: "100ms" }}>
-              <h4 className="institutional-card-title">
+              <h3 className="institutional-card-title">
                 {institutionalInfo.mission.title}
-              </h4>
+              </h3>
               <p className="institutional-card-text">
                 {institutionalInfo.mission.content}
               </p>
@@ -77,9 +82,9 @@ export default function HomePage() {
 
             {/* Visión */}
             <div className="animate-on-scroll institutional-card" style={{ transitionDelay: "200ms" }}>
-              <h4 className="institutional-card-title">
+              <h3 className="institutional-card-title">
                 {institutionalInfo.vision.title}
-              </h4>
+              </h3>
               <p className="institutional-card-text">
                 {institutionalInfo.vision.content}
               </p>

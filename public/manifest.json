@@ -1,0 +1,21 @@
+{
+  "name": "CEA Madre María Oliva",
+  "short_name": "CEA MMO",
+  "description": "Centro de Educación Alternativa - Formación técnica profesional en Cochabamba, Bolivia",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#013658",
+  "icons": [
+    {
+      "src": "/images/logo3.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/logo3.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -6,6 +6,24 @@
   # Carpeta donde se genera el build
   publish = "dist"
 
+# Headers de seguridad y caché
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
 # Redirigir todas las rutas a index.html (necesario para React Router)
 [[redirects]]
   from = "/*"

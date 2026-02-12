@@ -32,15 +32,24 @@ function useScrollAnimation() {
   return ref;
 }
 
+// Imágenes reales de galería por carrera
+const GALLERY_IMAGES: Record<string, string[]> = {
+  sistemas: ["/images/Sis1.jpeg", "/images/Sis2.jpeg", "/images/Sis3.jpeg"],
+  gastronomia: ["/images/Gastro1.jpeg", "/images/Gastro2.jpeg", "/images/Gastro3.jpeg"],
+  contaduria: ["/images/Conta1.jpeg", "/images/Conta2.jpeg", "/images/Conta3.jpg"],
+  textil: ["/images/Text1.jpeg", "/images/Confec1.jpeg", "/images/Confec2.jpg"],
+};
+
 export default function CareerPage({ career, galleryImages }: CareerPageProps) {
   const containerRef = useScrollAnimation();
 
-  // Generar placeholders si no hay imágenes
-  const images = galleryImages || [
-    `https://placehold.co/400x200/${career.color.replace("#", "")}/white?text=${encodeURIComponent(career.name)}+1`,
-    `https://placehold.co/400x200/${career.color.replace("#", "")}/white?text=${encodeURIComponent(career.name)}+2`,
-    `https://placehold.co/400x200/${career.color.replace("#", "")}/white?text=${encodeURIComponent(career.name)}+3`,
-  ];
+  // SEO: título dinámico por carrera
+  useEffect(() => {
+    document.title = `${career.name} | CEA Madre María Oliva`;
+    return () => { document.title = "CEA Madre María Oliva | Centro de Educación Alternativa - Cochabamba, Bolivia"; };
+  }, [career.name]);
+
+  const images = galleryImages || GALLERY_IMAGES[career.id] || [];
 
   return (
     <div ref={containerRef}>
@@ -48,9 +57,9 @@ export default function CareerPage({ career, galleryImages }: CareerPageProps) {
       <section
         className={`career-header bg-gradient-to-r ${career.headerGradient}`}
       >
-        <h2 className="career-header-title animate-on-scroll">
+        <h1 className="career-header-title animate-on-scroll">
           {career.name}
-        </h2>
+        </h1>
         <p className="career-header-description animate-on-scroll">
           {career.description}
         </p>
@@ -89,7 +98,7 @@ export default function CareerPage({ career, galleryImages }: CareerPageProps) {
               >
                 <img
                   src={img}
-                  alt={`${career.name} - Imagen ${index + 1}`}
+                  alt={`Estudiantes de ${career.name} en CEA Madre María Oliva - Foto ${index + 1}`}
                 />
               </div>
             ))}

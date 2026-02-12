@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /student
+Disallow: /teacher
+Disallow: /login
+Disallow: /app
+
+Sitemap: https://ceamadremariaoliva.edu.bo/sitemap.xml
