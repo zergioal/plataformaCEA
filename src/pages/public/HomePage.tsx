@@ -4,9 +4,18 @@ import { careers, institutionalInfo } from "../../data/careers";
 
 // Imágenes reales del CEA para el carrusel
 const carouselImages = [
-  { src: "/images/CEA.jpeg", alt: "Fachada del Centro de Educación Alternativa Madre María Oliva en Cochabamba" },
-  { src: "/images/CEA1.jpeg", alt: "Estudiantes del CEA Madre María Oliva en actividades de formación técnica" },
-  { src: "/images/CEA2.jpeg", alt: "Instalaciones y talleres del CEA Madre María Oliva" },
+  {
+    src: "/images/CEA.jpeg",
+    alt: "Fachada del Centro de Educación Alternativa Madre María Oliva en Cochabamba",
+  },
+  {
+    src: "/images/CEA1.jpeg",
+    alt: "Estudiantes del CEA Madre María Oliva en actividades de formación técnica",
+  },
+  {
+    src: "/images/CEA2.jpeg",
+    alt: "Instalaciones y talleres del CEA Madre María Oliva",
+  },
 ];
 
 // Imágenes reales por carrera
@@ -30,7 +39,7 @@ function useScrollAnimation() {
           }
         });
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     const elements = ref.current?.querySelectorAll(".animate-on-scroll");
@@ -47,7 +56,8 @@ export default function HomePage() {
 
   // SEO: título para la página principal
   useEffect(() => {
-    document.title = "CEA Madre María Oliva | Centro de Educación Alternativa - Cochabamba, Bolivia";
+    document.title =
+      "CEA Madre María Oliva | Centro de Educación Alternativa - Cochabamba, Bolivia";
   }, []);
 
   return (
@@ -71,7 +81,10 @@ export default function HomePage() {
             </div>
 
             {/* Misión */}
-            <div className="animate-on-scroll institutional-card" style={{ transitionDelay: "100ms" }}>
+            <div
+              className="animate-on-scroll institutional-card"
+              style={{ transitionDelay: "100ms" }}
+            >
               <h3 className="institutional-card-title">
                 {institutionalInfo.mission.title}
               </h3>
@@ -81,7 +94,10 @@ export default function HomePage() {
             </div>
 
             {/* Visión */}
-            <div className="animate-on-scroll institutional-card" style={{ transitionDelay: "200ms" }}>
+            <div
+              className="animate-on-scroll institutional-card"
+              style={{ transitionDelay: "200ms" }}
+            >
               <h3 className="institutional-card-title">
                 {institutionalInfo.vision.title}
               </h3>
@@ -168,16 +184,32 @@ export default function HomePage() {
             </p>
             <p className="contact-item">
               <span>📱</span>
-              <span>Celular: <a href={`tel:${institutionalInfo.contact.mobile}`} className="text-blue-600 hover:underline">{institutionalInfo.contact.mobile}</a></span>
+              <span>
+                Celular:{" "}
+                <a
+                  href={`tel:${institutionalInfo.contact.mobile}`}
+                  className="text-blue-600 hover:underline"
+                >
+                  {institutionalInfo.contact.mobile}
+                </a>
+              </span>
             </p>
             <p className="contact-item">
               <span>📞</span>
-              <span>Teléfono: <a href={`tel:${institutionalInfo.contact.phone}`} className="text-blue-600 hover:underline">{institutionalInfo.contact.phone}</a></span>
+              <span>
+                Teléfono:{" "}
+                <a
+                  href={`tel:${institutionalInfo.contact.phone}`}
+                  className="text-blue-600 hover:underline"
+                >
+                  {institutionalInfo.contact.phone}
+                </a>
+              </span>
             </p>
-            <p className="contact-item">
+            {/* <p className="contact-item">
               <span>✉️</span>
               <span>Correo: <a href={`mailto:${institutionalInfo.contact.email}`} className="text-blue-600 hover:underline">{institutionalInfo.contact.email}</a></span>
-            </p>
+            </p> */}
           </div>
 
           {/* Botones de redes sociales */}
