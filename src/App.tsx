@@ -15,6 +15,7 @@ import TeacherStudentGrades from "./pages/TeacherStudentGrades";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentModule from "./pages/StudentModule";
 import TeacherContentManager from "./pages/TeacherContentManager";
+import TeacherAttendancePage from "./pages/TeacherAttendancePage";
 
 // Páginas públicas
 import { PublicLayout } from "./components/public";
@@ -102,6 +103,17 @@ export default function App() {
             <ProtectedRoute>
               <RequireRole allow={["teacher", "admin"]}>
                 <TeacherModules />
+              </RequireRole>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/attendance"
+          element={
+            <ProtectedRoute>
+              <RequireRole allow={["teacher", "admin"]}>
+                <TeacherAttendancePage />
               </RequireRole>
             </ProtectedRoute>
           }

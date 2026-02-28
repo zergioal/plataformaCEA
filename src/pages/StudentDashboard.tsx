@@ -65,115 +65,135 @@ const TW = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg";
 
 // ── Sistemas Informáticos ──
 const AVATARS_SISTEMAS: AvatarItem[] = [
-  { key: "av1",  label: "HTML5",       url: `${DV}/html5/html5-original.svg` },
-  { key: "av2",  label: "CSS3",        url: `${DV}/css3/css3-original.svg` },
-  { key: "av3",  label: "Windows",     url: `${DV}/windows11/windows11-original.svg` },
-  { key: "av4",  label: "Linux Mint",  url: `${SI}/linuxmint/87CF3E` },
-  { key: "av5",  label: "Python",      url: `${DV}/python/python-original.svg` },
-  { key: "av6",  label: "JavaScript",  url: `${DV}/javascript/javascript-original.svg` },
-  { key: "av7",  label: "Git",         url: `${DV}/git/git-original.svg` },
-  { key: "av8",  label: "VS Code",     url: `${DV}/vscode/vscode-original.svg` },
-  { key: "av9",  label: "React",       url: `${DV}/react/react-original.svg` },
-  { key: "av10", label: "TypeScript",  url: `${DV}/typescript/typescript-original.svg` },
-  { key: "av11", label: "Node.js",     url: `${DV}/nodejs/nodejs-original.svg` },
-  { key: "av12", label: "Linux",       url: `${DV}/linux/linux-original.svg` },
-  { key: "av13", label: "Docker",      url: `${DV}/docker/docker-original.svg` },
-  { key: "av14", label: "Arch Linux",  url: `${DV}/archlinux/archlinux-original.svg` },
-  { key: "av15", label: "PostgreSQL",  url: `${DV}/postgresql/postgresql-original.svg` },
-  { key: "av16", label: "Android",     url: `${DV}/android/android-original.svg` },
-  { key: "av17", label: "Arduino",     url: `${DV}/arduino/arduino-original.svg` },
-  { key: "av18", label: "Kali Linux",  url: `${SI}/kalilinux/557C94` },
-  { key: "av19", label: "Supabase",    url: `${SI}/supabase/3FCF8E` },
-  { key: "av20", label: "MySQL",       url: `${DV}/mysql/mysql-original.svg` },
+  { key: "av1", label: "HTML5", url: `${DV}/html5/html5-original.svg` },
+  { key: "av2", label: "CSS3", url: `${DV}/css3/css3-original.svg` },
+  {
+    key: "av3",
+    label: "Windows",
+    url: `${DV}/windows11/windows11-original.svg`,
+  },
+  { key: "av4", label: "Linux Mint", url: `${SI}/linuxmint/87CF3E` },
+  { key: "av5", label: "Python", url: `${DV}/python/python-original.svg` },
+  {
+    key: "av6",
+    label: "JavaScript",
+    url: `${DV}/javascript/javascript-original.svg`,
+  },
+  { key: "av7", label: "Git", url: `${DV}/git/git-original.svg` },
+  { key: "av8", label: "VS Code", url: `${DV}/vscode/vscode-original.svg` },
+  { key: "av9", label: "React", url: `${DV}/react/react-original.svg` },
+  {
+    key: "av10",
+    label: "TypeScript",
+    url: `${DV}/typescript/typescript-original.svg`,
+  },
+  { key: "av11", label: "Node.js", url: `${DV}/nodejs/nodejs-original.svg` },
+  { key: "av12", label: "Linux", url: `${DV}/linux/linux-original.svg` },
+  { key: "av13", label: "Docker", url: `${DV}/docker/docker-original.svg` },
+  {
+    key: "av14",
+    label: "Arch Linux",
+    url: `${DV}/archlinux/archlinux-original.svg`,
+  },
+  {
+    key: "av15",
+    label: "PostgreSQL",
+    url: `${DV}/postgresql/postgresql-original.svg`,
+  },
+  { key: "av16", label: "Android", url: `${DV}/android/android-original.svg` },
+  { key: "av17", label: "Arduino", url: `${DV}/arduino/arduino-original.svg` },
+  { key: "av18", label: "Kali Linux", url: `${SI}/kalilinux/557C94` },
+  { key: "av19", label: "Supabase", url: `${SI}/supabase/3FCF8E` },
+  { key: "av20", label: "MySQL", url: `${DV}/mysql/mysql-original.svg` },
 ];
 
 // ── Gastronomía ──
 const AVATARS_GASTRONOMIA: AvatarItem[] = [
-  { key: "av1",  label: "Sartén",         url: `${TW}/1f373.svg` },
-  { key: "av2",  label: "Ensalada",       url: `${TW}/1f957.svg` },
-  { key: "av3",  label: "Bebida",         url: `${TW}/1f9c3.svg` },
-  { key: "av4",  label: "Recetario",      url: `${TW}/1f4d6.svg` },
-  { key: "av5",  label: "Pastelería",     url: `${TW}/1f382.svg` },
-  { key: "av6",  label: "Internacional",  url: `${TW}/1f30d.svg` },
-  { key: "av7",  label: "Decoración",     url: `${TW}/1f3a8.svg` },
-  { key: "av8",  label: "Conservas",      url: `${TW}/1f96b.svg` },
-  { key: "av9",  label: "Pizza",          url: `${TW}/1f355.svg` },
-  { key: "av10", label: "Marketing",      url: `${TW}/1f4c8.svg` },
-  { key: "av11", label: "Panadería",      url: `${TW}/1f950.svg` },
-  { key: "av12", label: "Alta Cocina",    url: `${TW}/1f372.svg` },
-  { key: "av13", label: "Nutrición",      url: `${TW}/1f951.svg` },
-  { key: "av14", label: "Costeo",         url: `${TW}/1f4b0.svg` },
-  { key: "av15", label: "Eventos",        url: `${TW}/1f3aa.svg` },
-  { key: "av16", label: "Servicio",       url: `${TW}/1f377.svg` },
-  { key: "av17", label: "Estrella",       url: `${TW}/2b50.svg` },
-  { key: "av18", label: "Trofeo",         url: `${TW}/1f3c6.svg` },
-  { key: "av19", label: "Fuego",          url: `${TW}/1f525.svg` },
-  { key: "av20", label: "Corona",         url: `${TW}/1f451.svg` },
+  { key: "av1", label: "Sartén", url: `${TW}/1f373.svg` },
+  { key: "av2", label: "Ensalada", url: `${TW}/1f957.svg` },
+  { key: "av3", label: "Bebida", url: `${TW}/1f9c3.svg` },
+  { key: "av4", label: "Recetario", url: `${TW}/1f4d6.svg` },
+  { key: "av5", label: "Pastelería", url: `${TW}/1f382.svg` },
+  { key: "av6", label: "Internacional", url: `${TW}/1f30d.svg` },
+  { key: "av7", label: "Decoración", url: `${TW}/1f3a8.svg` },
+  { key: "av8", label: "Conservas", url: `${TW}/1f96b.svg` },
+  { key: "av9", label: "Pizza", url: `${TW}/1f355.svg` },
+  { key: "av10", label: "Marketing", url: `${TW}/1f4c8.svg` },
+  { key: "av11", label: "Panadería", url: `${TW}/1f950.svg` },
+  { key: "av12", label: "Alta Cocina", url: `${TW}/1f372.svg` },
+  { key: "av13", label: "Nutrición", url: `${TW}/1f951.svg` },
+  { key: "av14", label: "Costeo", url: `${TW}/1f4b0.svg` },
+  { key: "av15", label: "Eventos", url: `${TW}/1f3aa.svg` },
+  { key: "av16", label: "Servicio", url: `${TW}/1f377.svg` },
+  { key: "av17", label: "Estrella", url: `${TW}/2b50.svg` },
+  { key: "av18", label: "Trofeo", url: `${TW}/1f3c6.svg` },
+  { key: "av19", label: "Fuego", url: `${TW}/1f525.svg` },
+  { key: "av20", label: "Corona", url: `${TW}/1f451.svg` },
 ];
 
 // ── Contaduría General ──
 const AVATARS_CONTADURIA: AvatarItem[] = [
-  { key: "av1",  label: "Ábaco",          url: `${TW}/1f9ee.svg` },
-  { key: "av2",  label: "Documentos",     url: `${TW}/1f4cb.svg` },
-  { key: "av3",  label: "Números",        url: `${TW}/1f522.svg` },
-  { key: "av4",  label: "Maletín",        url: `${TW}/1f4bc.svg` },
-  { key: "av5",  label: "Gráfico",        url: `${TW}/1f4ca.svg` },
-  { key: "av6",  label: "Banco",          url: `${TW}/1f3e6.svg` },
-  { key: "av7",  label: "Equipo",         url: `${TW}/1f465.svg` },
-  { key: "av8",  label: "Laptop",         url: `${TW}/1f4bb.svg` },
-  { key: "av9",  label: "Tendencia",      url: `${TW}/1f4c8.svg` },
-  { key: "av10", label: "Auditoría",      url: `${TW}/1f50d.svg` },
-  { key: "av11", label: "Empresa",        url: `${TW}/1f3e2.svg` },
-  { key: "av12", label: "Idea",           url: `${TW}/1f4a1.svg` },
-  { key: "av13", label: "Informe",        url: `${TW}/1f4d1.svg` },
-  { key: "av14", label: "Gobierno",       url: `${TW}/1f3db.svg` },
-  { key: "av15", label: "Diamante",       url: `${TW}/1f48e.svg` },
-  { key: "av16", label: "Graduación",     url: `${TW}/1f393.svg` },
-  { key: "av17", label: "Medalla",        url: `${TW}/1f3c5.svg` },
-  { key: "av18", label: "Trofeo",         url: `${TW}/1f3c6.svg` },
-  { key: "av19", label: "Estrella",       url: `${TW}/2b50.svg` },
-  { key: "av20", label: "Corona",         url: `${TW}/1f451.svg` },
+  { key: "av1", label: "Ábaco", url: `${TW}/1f9ee.svg` },
+  { key: "av2", label: "Documentos", url: `${TW}/1f4cb.svg` },
+  { key: "av3", label: "Números", url: `${TW}/1f522.svg` },
+  { key: "av4", label: "Maletín", url: `${TW}/1f4bc.svg` },
+  { key: "av5", label: "Gráfico", url: `${TW}/1f4ca.svg` },
+  { key: "av6", label: "Banco", url: `${TW}/1f3e6.svg` },
+  { key: "av7", label: "Equipo", url: `${TW}/1f465.svg` },
+  { key: "av8", label: "Laptop", url: `${TW}/1f4bb.svg` },
+  { key: "av9", label: "Tendencia", url: `${TW}/1f4c8.svg` },
+  { key: "av10", label: "Auditoría", url: `${TW}/1f50d.svg` },
+  { key: "av11", label: "Empresa", url: `${TW}/1f3e2.svg` },
+  { key: "av12", label: "Idea", url: `${TW}/1f4a1.svg` },
+  { key: "av13", label: "Informe", url: `${TW}/1f4d1.svg` },
+  { key: "av14", label: "Gobierno", url: `${TW}/1f3db.svg` },
+  { key: "av15", label: "Diamante", url: `${TW}/1f48e.svg` },
+  { key: "av16", label: "Graduación", url: `${TW}/1f393.svg` },
+  { key: "av17", label: "Medalla", url: `${TW}/1f3c5.svg` },
+  { key: "av18", label: "Trofeo", url: `${TW}/1f3c6.svg` },
+  { key: "av19", label: "Estrella", url: `${TW}/2b50.svg` },
+  { key: "av20", label: "Corona", url: `${TW}/1f451.svg` },
 ];
 
 // ── Textil y Confección ──
 const AVATARS_TEXTIL: AvatarItem[] = [
-  { key: "av1",  label: "Hilo",           url: `${TW}/1f9f5.svg` },
-  { key: "av2",  label: "Aguja",          url: `${TW}/1faa1.svg` },
-  { key: "av3",  label: "Vestido",        url: `${TW}/1f457.svg` },
-  { key: "av4",  label: "Tijeras",        url: `${TW}/2702.svg` },
-  { key: "av5",  label: "Blusa",          url: `${TW}/1f45a.svg` },
-  { key: "av6",  label: "Fábrica",        url: `${TW}/1f3ed.svg` },
-  { key: "av7",  label: "Regla",          url: `${TW}/1f4d0.svg` },
-  { key: "av8",  label: "Tacón",          url: `${TW}/1f460.svg` },
-  { key: "av9",  label: "Corbata",        url: `${TW}/1f454.svg` },
-  { key: "av10", label: "Pantalón",       url: `${TW}/1f456.svg` },
-  { key: "av11", label: "Reciclaje",      url: `${TW}/267b.svg` },
-  { key: "av12", label: "Paleta",         url: `${TW}/1f3a8.svg` },
-  { key: "av13", label: "Kimono",         url: `${TW}/1f458.svg` },
-  { key: "av14", label: "Abrigo",         url: `${TW}/1f9e5.svg` },
-  { key: "av15", label: "Engranaje",      url: `${TW}/2699.svg` },
-  { key: "av16", label: "Graduación",     url: `${TW}/1f393.svg` },
-  { key: "av17", label: "Diamante",       url: `${TW}/1f48e.svg` },
-  { key: "av18", label: "Trofeo",         url: `${TW}/1f3c6.svg` },
-  { key: "av19", label: "Estrella",       url: `${TW}/2b50.svg` },
-  { key: "av20", label: "Corona",         url: `${TW}/1f451.svg` },
+  { key: "av1", label: "Hilo", url: `${TW}/1f9f5.svg` },
+  { key: "av2", label: "Aguja", url: `${TW}/1faa1.svg` },
+  { key: "av3", label: "Vestido", url: `${TW}/1f457.svg` },
+  { key: "av4", label: "Tijeras", url: `${TW}/2702.svg` },
+  { key: "av5", label: "Blusa", url: `${TW}/1f45a.svg` },
+  { key: "av6", label: "Fábrica", url: `${TW}/1f3ed.svg` },
+  { key: "av7", label: "Regla", url: `${TW}/1f4d0.svg` },
+  { key: "av8", label: "Tacón", url: `${TW}/1f460.svg` },
+  { key: "av9", label: "Corbata", url: `${TW}/1f454.svg` },
+  { key: "av10", label: "Pantalón", url: `${TW}/1f456.svg` },
+  { key: "av11", label: "Reciclaje", url: `${TW}/267b.svg` },
+  { key: "av12", label: "Paleta", url: `${TW}/1f3a8.svg` },
+  { key: "av13", label: "Kimono", url: `${TW}/1f458.svg` },
+  { key: "av14", label: "Abrigo", url: `${TW}/1f9e5.svg` },
+  { key: "av15", label: "Engranaje", url: `${TW}/2699.svg` },
+  { key: "av16", label: "Graduación", url: `${TW}/1f393.svg` },
+  { key: "av17", label: "Diamante", url: `${TW}/1f48e.svg` },
+  { key: "av18", label: "Trofeo", url: `${TW}/1f3c6.svg` },
+  { key: "av19", label: "Estrella", url: `${TW}/2b50.svg` },
+  { key: "av20", label: "Corona", url: `${TW}/1f451.svg` },
 ];
 
 function getAvatarsForCareer(name: string): AvatarItem[] {
   const n = name.toLowerCase();
   if (n.includes("gastronom")) return AVATARS_GASTRONOMIA;
-  if (n.includes("contad"))   return AVATARS_CONTADURIA;
-  if (n.includes("textil"))   return AVATARS_TEXTIL;
+  if (n.includes("contad")) return AVATARS_CONTADURIA;
+  if (n.includes("textil")) return AVATARS_TEXTIL;
   return AVATARS_SISTEMAS;
 }
 
 // Nivel mínimo (sort_order) para desbloquear cada grupo de avatares
 function getAvatarRequiredLevel(index: number): number | "special" {
-  if (index < 4) return 1;       // av1-av4: Técnico Básico (todos)
-  if (index < 8) return 2;       // av5-av8: Técnico Auxiliar
-  if (index < 12) return 3;      // av9-av12: Técnico Medio I
-  if (index < 16) return 4;      // av13-av16: Técnico Medio II
-  return "special";              // av17-av20: Desafío (docente desbloquea)
+  if (index < 4) return 1; // av1-av4: Técnico Básico (todos)
+  if (index < 8) return 2; // av5-av8: Técnico Auxiliar
+  if (index < 12) return 3; // av9-av12: Técnico Medio I
+  if (index < 16) return 4; // av13-av16: Técnico Medio II
+  return "special"; // av17-av20: Desafío (docente desbloquea)
 }
 
 const LEVEL_NAMES: Record<number, string> = {
@@ -197,7 +217,9 @@ export default function StudentDashboard() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const [selectedAvatarKey, setSelectedAvatarKey] = useState<string | null>(null);
+  const [selectedAvatarKey, setSelectedAvatarKey] = useState<string | null>(
+    null,
+  );
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [specialUnlocks, setSpecialUnlocks] = useState<Set<string>>(new Set());
 
@@ -219,6 +241,15 @@ export default function StudentDashboard() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyData, setHistoryData] = useState<GradeHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Asistencia del semestre
+  const [attendanceSummary, setAttendanceSummary] = useState<{
+    P: number;
+    A: number;
+    F: number;
+    L: number;
+    total: number;
+  } | null>(null);
 
   function num0(x: number | null | undefined) {
     return typeof x === "number" && Number.isFinite(x) ? x : 0;
@@ -320,7 +351,7 @@ export default function StudentDashboard() {
   }
 
   async function logout() {
-    await supabase.auth.signOut({ scope: 'local' });
+    await supabase.auth.signOut({ scope: "local" });
     nav("/login", { replace: true });
   }
 
@@ -391,7 +422,11 @@ export default function StudentDashboard() {
         .eq("student_id", session!.user.id);
 
       if (!unlocks.error && unlocks.data) {
-        setSpecialUnlocks(new Set(unlocks.data.map((u: { avatar_key: string }) => u.avatar_key)));
+        setSpecialUnlocks(
+          new Set(
+            unlocks.data.map((u: { avatar_key: string }) => u.avatar_key),
+          ),
+        );
       }
 
       const mods = await supabase
@@ -453,6 +488,33 @@ export default function StudentDashboard() {
       }
 
       setProgressByModule(pbm);
+
+      // Cargar asistencia del semestre actual
+      const semester = profile?.current_semester;
+      if (semester) {
+        const [semNum, semYear] = semester.split("/");
+        const yr = parseInt(semYear ?? "2026");
+        const s = parseInt(semNum ?? "1");
+        const startDate = s === 1 ? `${yr}-01-01` : `${yr}-07-01`;
+        const endDate = s === 1 ? `${yr}-06-30` : `${yr}-12-31`;
+        const { data: attData } = await supabase
+          .from("attendance")
+          .select("status")
+          .eq("student_id", session!.user.id)
+          .gte("date", startDate)
+          .lte("date", endDate);
+        if (attData) {
+          const counts = { P: 0, A: 0, F: 0, L: 0, total: 0 };
+          for (const r of attData) {
+            counts.total++;
+            if (r.status === "P") counts.P++;
+            else if (r.status === "A") counts.A++;
+            else if (r.status === "F") counts.F++;
+            else if (r.status === "L") counts.L++;
+          }
+          setAttendanceSummary(counts);
+        }
+      }
     }
 
     loadAll();
@@ -611,8 +673,18 @@ export default function StudentDashboard() {
                   className="absolute -bottom-2 -right-2 w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-center hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-lg shadow-blue-900/50 group-hover:scale-110"
                   onClick={openAvatarModal}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    />
                   </svg>
                 </button>
               </div>
@@ -646,8 +718,18 @@ export default function StudentDashboard() {
               className="self-center sm:self-start px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 text-slate-200 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 text-sm flex-shrink-0"
               onClick={openEditProfile}
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
               </svg>
               <span className="hidden sm:inline">Editar perfil</span>
               <span className="sm:hidden">Editar</span>
@@ -703,6 +785,118 @@ export default function StudentDashboard() {
             </div>
           )}
         </section>
+
+        {/* Widget de Asistencia del Semestre */}
+        {profile?.current_semester && attendanceSummary !== null && (
+          <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                📋 Asistencia · Semestre {profile.current_semester}
+              </h2>
+              {attendanceSummary.total > 0 &&
+                (() => {
+                  const pct = Math.round(
+                    (attendanceSummary.F / attendanceSummary.total) * 100,
+                  );
+                  return (
+                    <span
+                      className={`text-sm font-bold px-3 py-1 rounded-full ${
+                        pct <= 20
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : pct <= 30
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-red-500/20 text-red-400"
+                      }`}
+                    >
+                      {pct}% faltas
+                    </span>
+                  );
+                })()}
+            </div>
+
+            <div className="grid grid-cols-4 gap-3 mb-4">
+              {[
+                {
+                  label: "Presentes",
+                  value: attendanceSummary.P,
+                  color: "text-emerald-400",
+                  bg: "bg-emerald-500/10 border-emerald-500/20",
+                  icon: "✅",
+                },
+                {
+                  label: "Atrasados",
+                  value: attendanceSummary.A,
+                  color: "text-amber-400",
+                  bg: "bg-amber-500/10 border-amber-500/20",
+                  icon: "⏰",
+                },
+                {
+                  label: "Faltas",
+                  value: attendanceSummary.F,
+                  color: "text-red-400",
+                  bg: "bg-red-500/10 border-red-500/20",
+                  icon: "❌",
+                },
+                {
+                  label: "Licencias",
+                  value: attendanceSummary.L,
+                  color: "text-blue-400",
+                  bg: "bg-blue-500/10 border-blue-500/20",
+                  icon: "📋",
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className={`rounded-xl p-3 border ${item.bg} text-center`}
+                >
+                  <div className="text-xl">{item.icon}</div>
+                  <div className={`text-2xl font-bold ${item.color}`}>
+                    {item.value}
+                  </div>
+                  <div className="text-xs text-slate-500">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {attendanceSummary.total > 0 &&
+              (() => {
+                const pct = Math.round(
+                  (attendanceSummary.F / attendanceSummary.total) * 100,
+                );
+                return (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-slate-700/50 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${pct <= 20 ? "bg-emerald-500" : pct <= 30 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-400 w-16 text-right">
+                        {pct}% faltas
+                      </span>
+                    </div>
+                    {pct > 30 && (
+                      <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2">
+                        <span className="text-red-400 text-lg">⚠️</span>
+                        <p className="text-red-300 text-sm">
+                          <strong>Atención:</strong> Tu porcentaje de faltas es
+                          alto. Podrías quedar inhabilitado como participante
+                          efectivo.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+            {attendanceSummary.total === 0 && (
+              <p className="text-slate-500 text-sm text-center py-2">
+                Aún no hay registros de asistencia para este semestre.
+              </p>
+            )}
+          </section>
+        )}
 
         {/* Sección de Módulos mejorada - RESPONSIVE */}
         <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 lg:p-8 shadow-2xl">
@@ -1006,7 +1200,9 @@ export default function StudentDashboard() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base sm:text-lg font-bold text-white">Selecciona tu avatar</h3>
+                <h3 className="text-base sm:text-lg font-bold text-white">
+                  Selecciona tu avatar
+                </h3>
                 <div className="text-xs text-slate-500 mt-1">
                   Desbloquea más avatares subiendo de nivel
                 </div>
@@ -1015,8 +1211,18 @@ export default function StudentDashboard() {
                 className="text-slate-400 hover:text-white transition-colors"
                 onClick={() => setAvatarOpen(false)}
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -1057,23 +1263,44 @@ export default function StudentDashboard() {
                       src={a.url}
                       alt={a.label}
                       className={
-                        "w-full h-auto " +
-                        (!isUnlocked ? "grayscale" : "")
+                        "w-full h-auto " + (!isUnlocked ? "grayscale" : "")
                       }
                     />
                     {!isUnlocked && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/60 rounded-xl sm:rounded-2xl">
                         {req === "special" ? (
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          <svg
+                            className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                            />
                           </svg>
                         ) : (
-                          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          <svg
+                            className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                            />
                           </svg>
                         )}
                         <span className="text-[9px] sm:text-[10px] text-slate-300 mt-0.5 text-center leading-tight px-1">
-                          {req === "special" ? "Desafío" : LEVEL_NAMES[req]?.replace("Técnico ", "T. ")}
+                          {req === "special"
+                            ? "Desafío"
+                            : LEVEL_NAMES[req]?.replace("Técnico ", "T. ")}
                         </span>
                       </div>
                     )}
@@ -1085,14 +1312,34 @@ export default function StudentDashboard() {
             {/* Leyenda */}
             <div className="flex flex-wrap gap-3 text-xs text-slate-500 border-t border-slate-800 pt-3">
               <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
                 </svg>
                 Bloqueado por nivel
               </span>
               <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                <svg
+                  className="w-3.5 h-3.5 text-amber-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                  />
                 </svg>
                 Desbloqueable por desafío
               </span>
@@ -1109,7 +1356,10 @@ export default function StudentDashboard() {
               <button
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all shadow-lg shadow-blue-900/30 disabled:opacity-50"
                 onClick={saveAvatar}
-                disabled={savingAvatar || selectedAvatarKey === (profile?.avatar_key?.trim() || "av1")}
+                disabled={
+                  savingAvatar ||
+                  selectedAvatarKey === (profile?.avatar_key?.trim() || "av1")
+                }
               >
                 {savingAvatar ? "Guardando..." : "Guardar Avatar"}
               </button>
@@ -1129,13 +1379,25 @@ export default function StudentDashboard() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-base sm:text-lg font-bold text-white">Editar perfil</h3>
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                Editar perfil
+              </h3>
               <button
                 className="text-slate-400 hover:text-white transition-colors"
                 onClick={() => setEditProfileOpen(false)}
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>

@@ -19,7 +19,7 @@ export default function PublicFooter() {
           &copy; {new Date().getFullYear()} {institutionalInfo.fullName}
         </p>
         <p className="text-white/60 text-xs mt-2">
-          Desarrollado por: Sergio M. Alcocer Valenzuela - Cochabamba, Bolivia
+          Desarrollado por: Sergio M. Alcocer Valenzuela & Javier Delgadillo - Cochabamba, Bolivia
         </p>
       </div>
     </footer>

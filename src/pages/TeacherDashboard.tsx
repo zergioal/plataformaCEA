@@ -45,6 +45,7 @@ type Student = {
   gender?: string | null;
   birth_date?: string | null;
   is_active?: boolean;
+  current_semester?: string | null;
 };
 
 type AvatarItem = { key: string; label: string; url: string };
@@ -255,6 +256,20 @@ export default function TeacherDashboard() {
   const [showInactiveStudents, setShowInactiveStudents] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
 
+  // Estado para estadísticas de asistencia
+  const [attendanceStats, setAttendanceStats] = useState<Map<string, { total: number; faltas: number }>>(new Map());
+
+  // Estado para sistema de semestres
+  function computeCurrentSemester(): string {
+    const now = new Date();
+    const s = now.getMonth() < 6 ? 1 : 2;
+    return `${s}/${now.getFullYear()}`;
+  }
+  const [viewSemester, setViewSemester] = useState<string>(computeCurrentSemester);
+  const [showSemesterModal, setShowSemesterModal] = useState(false);
+  const [semesterInput, setSemesterInput] = useState("");
+  const [editStudentSemester, setEditStudentSemester] = useState("");
+
   // Estado para modal de avatares especiales
   const [showAvatarUnlockModal, setShowAvatarUnlockModal] = useState(false);
   const [avatarUnlockStudentId, setAvatarUnlockStudentId] = useState<
@@ -351,7 +366,7 @@ export default function TeacherDashboard() {
 
         const loadedLevels = (levelsData as Level[]) ?? [];
         setLevels(loadedLevels);
-        await loadStudents(prof.career_id, prof.shift, loadedLevels);
+        await loadStudents(prof.career_id, prof.shift, loadedLevels, computeCurrentSemester());
       }
 
       setInitialLoadDone(true);
@@ -364,20 +379,26 @@ export default function TeacherDashboard() {
     careerId: number | null,
     shift: string | null,
     levelsList: Level[],
+    semesterFilter?: string,
   ) {
     if (!careerId || !shift) return;
 
     setLoadingStudents(true);
 
-    const { data: studentsData, error: studentsError } = await supabase
+    let query = supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester",
       )
       .eq("role", "student")
       .eq("career_id", careerId)
-      .eq("shift", shift)
-      .order("code");
+      .eq("shift", shift);
+
+    if (semesterFilter) {
+      query = query.eq("current_semester", semesterFilter);
+    }
+
+    const { data: studentsData, error: studentsError } = await query.order("code");
 
     if (studentsError) {
       setMsg("Error cargando estudiantes: " + studentsError.message);
@@ -482,7 +503,43 @@ export default function TeacherDashboard() {
     setStudents(studentsWithLevel);
     setFilteredStudents(studentsWithLevel);
     setLoadingStudents(false);
+
+    // Cargar estadísticas de asistencia del semestre
+    await loadAttendanceStats(studentsWithLevel.map((s) => s.id), semesterFilter ?? computeCurrentSemester());
   }
+
+  async function loadAttendanceStats(studentIds: string[], semester: string) {
+    if (studentIds.length === 0) { setAttendanceStats(new Map()); return; }
+    const [semNum, semYear] = semester.split("/");
+    const year = parseInt(semYear ?? "2026");
+    const s = parseInt(semNum ?? "1");
+    const startDate = s === 1 ? `${year}-01-01` : `${year}-07-01`;
+    const endDate   = s === 1 ? `${year}-06-30` : `${year}-12-31`;
+
+    const { data } = await supabase
+      .from("attendance")
+      .select("student_id,status")
+      .in("student_id", studentIds)
+      .gte("date", startDate)
+      .lte("date", endDate);
+
+    const map = new Map<string, { total: number; faltas: number }>();
+    for (const row of data ?? []) {
+      const prev = map.get(row.student_id) ?? { total: 0, faltas: 0 };
+      map.set(row.student_id, {
+        total: prev.total + 1,
+        faltas: prev.faltas + (row.status === "F" ? 1 : 0),
+      });
+    }
+    setAttendanceStats(map);
+  }
+
+  // Recargar estudiantes cuando cambia el semestre visualizado
+  useEffect(() => {
+    if (!initialLoadDone || !profileData?.career_id || !profileData?.shift) return;
+    loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewSemester, initialLoadDone]);
 
   // Aplicar filtros y ordenamiento
   useEffect(() => {
@@ -715,6 +772,7 @@ export default function TeacherDashboard() {
     setEditStudentCarnetNumber(student.carnet_number ?? "");
     setEditStudentGender((student.gender as "F" | "M") ?? "");
     setEditStudentBirthDate(student.birth_date ?? "");
+    setEditStudentSemester(student.current_semester ?? "");
     setShowEditStudent(true);
   }
 
@@ -799,6 +857,7 @@ export default function TeacherDashboard() {
         carnet_number: editStudentCarnetNumber.trim() || null,
         gender: editStudentGender || null,
         birth_date: editStudentBirthDate || null,
+        current_semester: editStudentSemester.trim() || null,
       };
 
       // Actualizar datos del estudiante
@@ -1496,6 +1555,36 @@ export default function TeacherDashboard() {
           </div>
         </section>
 
+        {/* Widget de Semestre */}
+        <section className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-4 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-slate-400 text-sm font-medium">Semestre activo:</span>
+              <button
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300 font-bold transition-all"
+                onClick={() => { setSemesterInput(viewSemester); setShowSemesterModal(true); }}
+                title="Cambiar semestre visualizado"
+              >
+                📅 {viewSemester}
+                {viewSemester !== computeCurrentSemester() && (
+                  <span className="ml-1 px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-full">
+                    Vista histórica
+                  </span>
+                )}
+              </button>
+              {viewSemester !== computeCurrentSemester() && (
+                <button
+                  className="text-xs text-slate-400 hover:text-white underline transition-colors"
+                  onClick={() => setViewSemester(computeCurrentSemester())}
+                >
+                  Volver al actual
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">Haz clic en el semestre para cambiar la vista</p>
+          </div>
+        </section>
+
         {/* Estadísticas de estudiantes por nivel */}
         <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -1616,6 +1705,13 @@ export default function TeacherDashboard() {
                 📱 <span className="hidden sm:inline">Exportar </span>Contactos
               </button>
               <button
+                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-cyan-900/30 text-sm sm:text-base"
+                onClick={() => nav("/teacher/attendance")}
+                title="Registro de asistencia mensual"
+              >
+                📋 <span className="hidden sm:inline">Asistencia</span>
+              </button>
+              <button
                 className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
                   showInactiveStudents
                     ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-lg shadow-amber-900/30"
@@ -1706,6 +1802,9 @@ export default function TeacherDashboard() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
                         Celular
                       </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                        Asistencia
+                      </th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-slate-300 uppercase tracking-wider">
                         Acciones
                       </th>
@@ -1764,6 +1863,23 @@ export default function TeacherDashboard() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
                           {s.phone || "-"}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          {(() => {
+                            const stat = attendanceStats.get(s.id);
+                            if (!stat || stat.total === 0) return <span className="text-xs text-slate-600">-</span>;
+                            const pct = Math.round((stat.faltas / stat.total) * 100);
+                            const barColor = pct <= 20 ? "bg-emerald-500" : pct <= 30 ? "bg-amber-500" : "bg-red-500";
+                            const textColor = pct <= 20 ? "text-emerald-400" : pct <= 30 ? "text-amber-400" : "text-red-400";
+                            return (
+                              <div className="flex items-center gap-2 justify-center" title={`${stat.faltas} faltas de ${stat.total} clases`}>
+                                <div className="w-14 bg-slate-700 rounded-full h-1.5">
+                                  <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                                </div>
+                                <span className={`text-xs font-medium ${textColor}`}>{pct}%</span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                           <div className="flex justify-end gap-2">
@@ -2303,6 +2419,21 @@ export default function TeacherDashboard() {
                   automáticamente, usa el botón "Ascender".
                 </p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Semestre
+                </label>
+                <input
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                  placeholder="Ej: 1/2026"
+                  value={editStudentSemester}
+                  onChange={(e) => setEditStudentSemester(e.target.value)}
+                />
+                <p className="text-xs text-slate-400 mt-2">
+                  Formato: número/año (ej: 1/2026 o 2/2025). Se usa para filtrar estudiantes por semestre.
+                </p>
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -2588,6 +2719,53 @@ export default function TeacherDashboard() {
             >
               OK
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal cambio de semestre */}
+      {showSemesterModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={() => setShowSemesterModal(false)}
+        >
+          <div
+            className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-sm w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white mb-4">Cambiar vista de semestre</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Semestre actual: <span className="text-blue-400 font-bold">{computeCurrentSemester()}</span>
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Ver semestre:
+              </label>
+              <input
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                placeholder="Ej: 1/2026"
+                value={semesterInput}
+                onChange={(e) => setSemesterInput(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all"
+                onClick={() => setShowSemesterModal(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all"
+                onClick={() => {
+                  const trimmed = semesterInput.trim();
+                  if (trimmed) setViewSemester(trimmed);
+                  setShowSemesterModal(false);
+                }}
+              >
+                Aplicar
+              </button>
+            </div>
           </div>
         </div>
       )}
