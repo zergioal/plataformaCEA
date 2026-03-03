@@ -46,6 +46,7 @@ type Student = {
   birth_date?: string | null;
   is_active?: boolean;
   current_semester?: string | null;
+  last_seen_at?: string | null;
 };
 
 type AvatarItem = { key: string; label: string; url: string };
@@ -300,6 +301,23 @@ export default function TeacherDashboard() {
     return age;
   }
 
+  // Helper: tiempo relativo para última conexión
+  function formatLastSeen(ts: string | null | undefined): string {
+    if (!ts) return "Nunca";
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1)  return "Ahora mismo";
+    if (mins < 60) return `hace ${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return `hace ${hrs} h`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7)  return `hace ${days} día${days !== 1 ? "s" : ""}`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `hace ${weeks} sem`;
+    const months = Math.floor(days / 30);
+    return `hace ${months} mes${months !== 1 ? "es" : ""}`;
+  }
+
   // Helper: mostrar mensaje en modal
   function showMessage(
     title: string,
@@ -389,7 +407,7 @@ export default function TeacherDashboard() {
     const { data: studentsData, error: studentsError } = await supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester,last_seen_at",
       )
       .eq("role", "student")
       .eq("career_id", careerId)
@@ -568,6 +586,7 @@ export default function TeacherDashboard() {
         case "birth_date":    aVal = a.birth_date ?? ""; bVal = b.birth_date ?? ""; break;
         case "level":         aVal = a.level_sort_order ?? 999; bVal = b.level_sort_order ?? 999; break;
         case "phone":         aVal = a.phone ?? ""; bVal = b.phone ?? ""; break;
+        case "last_seen_at":  aVal = a.last_seen_at ?? ""; bVal = b.last_seen_at ?? ""; break;
         default:              aVal = (a.last_name_pat ?? "").toLowerCase(); bVal = (b.last_name_pat ?? "").toLowerCase();
       }
       if (typeof aVal === "number" && typeof bVal === "number") {
@@ -1802,6 +1821,7 @@ export default function TeacherDashboard() {
                             <Col col="level"         label="Nivel" center />
                             <Col col="phone"         label="Celular" />
                             <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">Asistencia</th>
+                            <Col col="last_seen_at" label="Últ. conexión" center />
                             <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">Acciones</th>
                           </>
                         );
@@ -1882,6 +1902,32 @@ export default function TeacherDashboard() {
                                   <span className="text-red-400 text-xs font-semibold leading-none">⚠ Riesgo</span>
                                 )}
                               </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          {(() => {
+                            const ts = s.last_seen_at;
+                            const label = formatLastSeen(ts);
+                            const isNever = !ts;
+                            const isRecent = ts
+                              ? Date.now() - new Date(ts).getTime() < 15 * 60_000
+                              : false;
+                            return (
+                              <span
+                                className={`text-xs font-medium ${
+                                  isNever
+                                    ? "text-slate-600"
+                                    : isRecent
+                                      ? "text-emerald-400"
+                                      : "text-slate-400"
+                                }`}
+                                title={ts
+                                  ? new Date(ts).toLocaleString("es-BO")
+                                  : "Sin registro"}
+                              >
+                                {label}
+                              </span>
                             );
                           })()}
                         </td>

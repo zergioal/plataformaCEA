@@ -250,6 +250,7 @@ export default function StudentDashboard() {
     L: number;
     total: number;
   } | null>(null);
+  const [displaySemester, setDisplaySemester] = useState<string | null>(null);
 
   function num0(x: number | null | undefined) {
     return typeof x === "number" && Number.isFinite(x) ? x : 0;
@@ -379,6 +380,13 @@ export default function StudentDashboard() {
     async function loadAll() {
       setMsg(null);
 
+      // Registrar última conexión (fire-and-forget)
+      supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", session!.user.id)
+        .then(() => {});
+
       if (profile?.career_id) {
         const c = await supabase
           .from("careers")
@@ -489,32 +497,31 @@ export default function StudentDashboard() {
 
       setProgressByModule(pbm);
 
-      // Cargar asistencia del semestre actual
-      const semester = profile?.current_semester;
-      if (semester) {
-        const [semNum, semYear] = semester.split("/");
-        const yr = parseInt(semYear ?? "2026");
-        const s = parseInt(semNum ?? "1");
-        const startDate = s === 1 ? `${yr}-01-01` : `${yr}-07-01`;
-        const endDate = s === 1 ? `${yr}-06-30` : `${yr}-12-31`;
-        const { data: attData } = await supabase
-          .from("attendance")
-          .select("status")
-          .eq("student_id", session!.user.id)
-          .gte("date", startDate)
-          .lte("date", endDate);
-        if (attData) {
-          const counts = { P: 0, A: 0, F: 0, L: 0, total: 0 };
-          for (const r of attData) {
-            counts.total++;
-            if (r.status === "P") counts.P++;
-            else if (r.status === "A") counts.A++;
-            else if (r.status === "F") counts.F++;
-            else if (r.status === "L") counts.L++;
-          }
-          setAttendanceSummary(counts);
-        }
+      // Cargar asistencia del semestre actual (si no tiene asignado, usar el calculado automáticamente)
+      const now = new Date();
+      const autoSemester = `${now.getMonth() < 6 ? 1 : 2}/${now.getFullYear()}`;
+      const semester = profile?.current_semester ?? autoSemester;
+      const [semNum, semYear] = semester.split("/");
+      const yr = parseInt(semYear ?? String(now.getFullYear()));
+      const s = parseInt(semNum ?? "1");
+      const startDate = s === 1 ? `${yr}-01-01` : `${yr}-07-01`;
+      const endDate = s === 1 ? `${yr}-06-30` : `${yr}-12-31`;
+      setDisplaySemester(semester);
+      const { data: attData } = await supabase
+        .from("attendance")
+        .select("status")
+        .eq("student_id", session!.user.id)
+        .gte("date", startDate)
+        .lte("date", endDate);
+      const counts = { P: 0, A: 0, F: 0, L: 0, total: 0 };
+      for (const r of attData ?? []) {
+        counts.total++;
+        if (r.status === "P") counts.P++;
+        else if (r.status === "A") counts.A++;
+        else if (r.status === "F") counts.F++;
+        else if (r.status === "L") counts.L++;
       }
+      setAttendanceSummary(counts);
     }
 
     loadAll();
@@ -787,11 +794,11 @@ export default function StudentDashboard() {
         </section>
 
         {/* Widget de Asistencia del Semestre */}
-        {profile?.current_semester && attendanceSummary !== null && (
+        {attendanceSummary !== null && displaySemester && (
           <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                📋 Asistencia · Semestre {profile.current_semester}
+                📋 Asistencia · Semestre {displaySemester}
               </h2>
               {attendanceSummary.total > 0 &&
                 (() => {
