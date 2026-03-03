@@ -187,6 +187,7 @@ export default function TeacherDashboard() {
     null,
   );
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortColumn, setSortColumn] = useState<string>("last_name_pat");
 
   const [msg, setMsg] = useState<string | null>(null);
   const [loadingStudents, setLoadingStudents] = useState(false);
@@ -385,20 +386,15 @@ export default function TeacherDashboard() {
 
     setLoadingStudents(true);
 
-    let query = supabase
+    const { data: studentsData, error: studentsError } = await supabase
       .from("profiles")
       .select(
         "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester",
       )
       .eq("role", "student")
       .eq("career_id", careerId)
-      .eq("shift", shift);
-
-    if (semesterFilter) {
-      query = query.eq("current_semester", semesterFilter);
-    }
-
-    const { data: studentsData, error: studentsError } = await query.order("code");
+      .eq("shift", shift)
+      .order("code");
 
     if (studentsError) {
       setMsg("Error cargando estudiantes: " + studentsError.message);
@@ -534,12 +530,12 @@ export default function TeacherDashboard() {
     setAttendanceStats(map);
   }
 
-  // Recargar estudiantes cuando cambia el semestre visualizado
+  // Recargar estadísticas de asistencia cuando cambia el semestre visualizado
   useEffect(() => {
-    if (!initialLoadDone || !profileData?.career_id || !profileData?.shift) return;
-    loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
+    if (!initialLoadDone || students.length === 0) return;
+    loadAttendanceStats(students.map((s) => s.id), viewSemester);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewSemester, initialLoadDone]);
+  }, [viewSemester]);
 
   // Aplicar filtros y ordenamiento
   useEffect(() => {
@@ -557,20 +553,33 @@ export default function TeacherDashboard() {
       filtered = filtered.filter((s) => s.level_id === selectedLevelFilter);
     }
 
-    // Ordenamiento alfabético por apellido paterno
+    // Ordenamiento por columna seleccionada
     const sorted = [...filtered].sort((a, b) => {
-      const aLastName = (a.last_name_pat || "").toLowerCase();
-      const bLastName = (b.last_name_pat || "").toLowerCase();
-
-      if (sortOrder === "asc") {
-        return aLastName.localeCompare(bLastName);
-      } else {
-        return bLastName.localeCompare(aLastName);
+      let aVal: string | number = "";
+      let bVal: string | number = "";
+      switch (sortColumn) {
+        case "code":          aVal = a.code ?? ""; bVal = b.code ?? ""; break;
+        case "rudeal_number": aVal = a.rudeal_number ?? ""; bVal = b.rudeal_number ?? ""; break;
+        case "last_name_pat": aVal = (a.last_name_pat ?? "").toLowerCase(); bVal = (b.last_name_pat ?? "").toLowerCase(); break;
+        case "last_name_mat": aVal = (a.last_name_mat ?? "").toLowerCase(); bVal = (b.last_name_mat ?? "").toLowerCase(); break;
+        case "first_names":   aVal = (a.first_names ?? "").toLowerCase(); bVal = (b.first_names ?? "").toLowerCase(); break;
+        case "carnet_number": aVal = a.carnet_number ?? ""; bVal = b.carnet_number ?? ""; break;
+        case "gender":        aVal = a.gender ?? ""; bVal = b.gender ?? ""; break;
+        case "birth_date":    aVal = a.birth_date ?? ""; bVal = b.birth_date ?? ""; break;
+        case "level":         aVal = a.level_sort_order ?? 999; bVal = b.level_sort_order ?? 999; break;
+        case "phone":         aVal = a.phone ?? ""; bVal = b.phone ?? ""; break;
+        default:              aVal = (a.last_name_pat ?? "").toLowerCase(); bVal = (b.last_name_pat ?? "").toLowerCase();
       }
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      }
+      return sortOrder === "asc"
+        ? String(aVal).localeCompare(String(bVal))
+        : String(bVal).localeCompare(String(aVal));
     });
 
     setFilteredStudents(sorted);
-  }, [selectedLevelFilter, sortOrder, students, showInactiveStudents]);
+  }, [selectedLevelFilter, sortOrder, sortColumn, students, showInactiveStudents]);
 
   async function saveProfile() {
     if (!session) return;
@@ -1683,14 +1692,6 @@ export default function TeacherDashboard() {
                   </option>
                 ))}
               </select>
-              <select
-                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-              >
-                <option value="asc">A → Z</option>
-                <option value="desc">Z → A</option>
-              </select>
               <button
                 className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 text-sm sm:text-base"
                 onClick={() => setShowAddStudent(true)}
@@ -1769,45 +1770,42 @@ export default function TeacherDashboard() {
                 <table className="min-w-full">
                   <thead className="bg-slate-800/50">
                     <tr>
-                      <th className="px-2 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider w-12">
-                        N°
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Código
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        RUDEAL
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Ap. Paterno
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Ap. Materno
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Nombres
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Carnet
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Género
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Edad
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Nivel
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Celular
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Asistencia
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Acciones
-                      </th>
+                      {(() => {
+                        function Col({ col, label, center }: { col: string; label: string; center?: boolean }) {
+                          const active = sortColumn === col;
+                          return (
+                            <th
+                              className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors hover:bg-slate-700/40 ${center ? "text-center" : "text-left"} ${active ? "text-blue-400" : "text-slate-300"}`}
+                              onClick={() => {
+                                if (sortColumn === col) setSortOrder((p) => p === "asc" ? "desc" : "asc");
+                                else { setSortColumn(col); setSortOrder("asc"); }
+                              }}
+                            >
+                              {label}{" "}
+                              <span className={active ? "text-blue-400" : "text-slate-600"}>
+                                {active ? (sortOrder === "asc" ? "↑" : "↓") : "↕"}
+                              </span>
+                            </th>
+                          );
+                        }
+                        return (
+                          <>
+                            <th className="px-2 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider w-12">N°</th>
+                            <Col col="code"          label="Código" />
+                            <Col col="rudeal_number" label="RUDEAL" />
+                            <Col col="last_name_pat" label="Ap. Paterno" />
+                            <Col col="last_name_mat" label="Ap. Materno" />
+                            <Col col="first_names"   label="Nombres" />
+                            <Col col="carnet_number" label="Carnet" />
+                            <Col col="gender"        label="Gén." center />
+                            <Col col="birth_date"    label="Edad" center />
+                            <Col col="level"         label="Nivel" center />
+                            <Col col="phone"         label="Celular" />
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">Asistencia</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">Acciones</th>
+                          </>
+                        );
+                      })()}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
@@ -1868,15 +1866,21 @@ export default function TeacherDashboard() {
                           {(() => {
                             const stat = attendanceStats.get(s.id);
                             if (!stat || stat.total === 0) return <span className="text-xs text-slate-600">-</span>;
-                            const pct = Math.round((stat.faltas / stat.total) * 100);
-                            const barColor = pct <= 20 ? "bg-emerald-500" : pct <= 30 ? "bg-amber-500" : "bg-red-500";
-                            const textColor = pct <= 20 ? "text-emerald-400" : pct <= 30 ? "text-amber-400" : "text-red-400";
+                            const presentes = stat.total - stat.faltas;
+                            const pct = Math.round((presentes / stat.total) * 100);
+                            const barColor = pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500";
+                            const textColor = pct >= 80 ? "text-emerald-400" : pct >= 60 ? "text-amber-400" : "text-red-400";
                             return (
-                              <div className="flex items-center gap-2 justify-center" title={`${stat.faltas} faltas de ${stat.total} clases`}>
-                                <div className="w-14 bg-slate-700 rounded-full h-1.5">
-                                  <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                              <div className="flex flex-col items-center gap-0.5" title={`${presentes} presencias de ${stat.total} clases`}>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-14 bg-slate-700 rounded-full h-1.5">
+                                    <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className={`text-xs font-medium ${textColor}`}>{pct}%</span>
                                 </div>
-                                <span className={`text-xs font-medium ${textColor}`}>{pct}%</span>
+                                {pct < 60 && (
+                                  <span className="text-red-400 text-xs font-semibold leading-none">⚠ Riesgo</span>
+                                )}
                               </div>
                             );
                           })()}

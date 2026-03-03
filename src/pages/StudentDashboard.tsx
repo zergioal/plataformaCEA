@@ -795,20 +795,22 @@ export default function StudentDashboard() {
               </h2>
               {attendanceSummary.total > 0 &&
                 (() => {
+                  const presentes =
+                    attendanceSummary.total - attendanceSummary.F;
                   const pct = Math.round(
-                    (attendanceSummary.F / attendanceSummary.total) * 100,
+                    (presentes / attendanceSummary.total) * 100,
                   );
                   return (
                     <span
                       className={`text-sm font-bold px-3 py-1 rounded-full ${
-                        pct <= 20
+                        pct >= 80
                           ? "bg-emerald-500/20 text-emerald-400"
-                          : pct <= 30
+                          : pct >= 60
                             ? "bg-amber-500/20 text-amber-400"
                             : "bg-red-500/20 text-red-400"
                       }`}
                     >
-                      {pct}% faltas
+                      {pct}% asistencia
                     </span>
                   );
                 })()}
@@ -824,7 +826,7 @@ export default function StudentDashboard() {
                   icon: "✅",
                 },
                 {
-                  label: "Atrasados",
+                  label: "Atrasos",
                   value: attendanceSummary.A,
                   color: "text-amber-400",
                   bg: "bg-amber-500/10 border-amber-500/20",
@@ -860,29 +862,39 @@ export default function StudentDashboard() {
 
             {attendanceSummary.total > 0 &&
               (() => {
+                const presentes = attendanceSummary.total - attendanceSummary.F;
                 const pct = Math.round(
-                  (attendanceSummary.F / attendanceSummary.total) * 100,
+                  (presentes / attendanceSummary.total) * 100,
                 );
                 return (
                   <>
                     <div className="flex items-center gap-3">
                       <div className="flex-1 bg-slate-700/50 rounded-full h-2">
                         <div
-                          className={`h-2 rounded-full transition-all ${pct <= 20 ? "bg-emerald-500" : pct <= 30 ? "bg-amber-500" : "bg-red-500"}`}
-                          style={{ width: `${Math.min(pct, 100)}%` }}
+                          className={`h-2 rounded-full transition-all ${pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-xs text-slate-400 w-16 text-right">
-                        {pct}% faltas
+                      <span className="text-xs text-slate-400 w-20 text-right">
+                        {pct}% asistencia
                       </span>
                     </div>
-                    {pct > 30 && (
+                    {pct < 60 && (
                       <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2">
                         <span className="text-red-400 text-lg">⚠️</span>
                         <p className="text-red-300 text-sm">
-                          <strong>Atención:</strong> Tu porcentaje de faltas es
-                          alto. Podrías quedar inhabilitado como participante
-                          efectivo.
+                          <strong>Atención:</strong> Tu asistencia está por
+                          debajo del 60% mínimo requerido por el reglamento EPJA
+                          para aprobar el semestre.
+                        </p>
+                      </div>
+                    )}
+                    {pct >= 60 && pct < 80 && (
+                      <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2">
+                        <span className="text-amber-400 text-lg">⚠️</span>
+                        <p className="text-amber-300 text-sm">
+                          Tu asistencia está cerca del límite mínimo (60%).
+                          Procura no faltar más.
                         </p>
                       </div>
                     )}
