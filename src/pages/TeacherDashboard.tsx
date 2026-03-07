@@ -47,6 +47,7 @@ type Student = {
   is_active?: boolean;
   current_semester?: string | null;
   last_seen_at?: string | null;
+  is_board_member?: boolean;
 };
 
 type AvatarItem = { key: string; label: string; url: string };
@@ -271,6 +272,8 @@ export default function TeacherDashboard() {
   const [showSemesterModal, setShowSemesterModal] = useState(false);
   const [semesterInput, setSemesterInput] = useState("");
   const [editStudentSemester, setEditStudentSemester] = useState("");
+  const [editStudentBoardMember, setEditStudentBoardMember] = useState(false);
+  const [studentsExpanded, setStudentsExpanded] = useState(false);
 
   // Estado para modal de avatares especiales
   const [showAvatarUnlockModal, setShowAvatarUnlockModal] = useState(false);
@@ -407,7 +410,7 @@ export default function TeacherDashboard() {
     const { data: studentsData, error: studentsError } = await supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester,last_seen_at",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester,last_seen_at,is_board_member",
       )
       .eq("role", "student")
       .eq("career_id", careerId)
@@ -801,6 +804,7 @@ export default function TeacherDashboard() {
     setEditStudentGender((student.gender as "F" | "M") ?? "");
     setEditStudentBirthDate(student.birth_date ?? "");
     setEditStudentSemester(student.current_semester ?? "");
+    setEditStudentBoardMember(student.is_board_member ?? false);
     setShowEditStudent(true);
   }
 
@@ -886,6 +890,7 @@ export default function TeacherDashboard() {
         gender: editStudentGender || null,
         birth_date: editStudentBirthDate || null,
         current_semester: editStudentSemester.trim() || null,
+        is_board_member: editStudentBoardMember,
       };
 
       // Actualizar datos del estudiante
@@ -1691,9 +1696,26 @@ export default function TeacherDashboard() {
         {/* Lista de estudiantes - RESPONSIVE */}
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            <h2 className="text-xl sm:text-2xl font-bold text-white">
-              Mis Estudiantes
-            </h2>
+            <button
+              className="flex items-center gap-3 text-left group"
+              onClick={() => setStudentsExpanded((v) => !v)}
+              title={studentsExpanded ? "Colapsar lista" : "Expandir lista de participantes"}
+            >
+              <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-blue-300 transition-colors">
+                Participantes
+                {!loadingStudents && (
+                  <span className="ml-2 text-base font-normal text-slate-400">
+                    ({filteredStudents.length})
+                  </span>
+                )}
+                {loadingStudents && (
+                  <span className="ml-2 text-base font-normal text-slate-500">cargando...</span>
+                )}
+              </h2>
+              <span className="text-slate-400 group-hover:text-blue-300 transition-colors text-lg">
+                {studentsExpanded ? "▲" : "▼"}
+              </span>
+            </button>
             <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
               <select
                 className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
@@ -1749,7 +1771,14 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* Indicador de modo inactivos */}
+          {!studentsExpanded && !loadingStudents && filteredStudents.length > 0 && (
+            <div className="text-xs text-slate-500 px-1">
+              Click en "Participantes" para ver la lista completa
+            </div>
+          )}
+
+          {studentsExpanded && (
+          <>{/* Indicador de modo inactivos */}
           {showInactiveStudents && (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
               <span className="text-amber-400 text-lg">⚠️</span>
@@ -2029,6 +2058,8 @@ export default function TeacherDashboard() {
                 </table>
               </div>
             </div>
+          )}
+          </>
           )}
         </section>
       </main>
@@ -2483,6 +2514,31 @@ export default function TeacherDashboard() {
                 <p className="text-xs text-slate-400 mt-2">
                   Formato: número/año (ej: 1/2026 o 2/2025). Se usa para filtrar estudiantes por semestre.
                 </p>
+              </div>
+
+              {/* Mesa Directiva */}
+              <div className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/40">
+                <label className="flex items-center justify-between cursor-pointer gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-white">Mesa Directiva</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      El participante podrá ver la asistencia de todos los estudiantes desde su cuenta.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditStudentBoardMember((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                      editStudentBoardMember ? "bg-blue-600" : "bg-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
+                        editStudentBoardMember ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </label>
               </div>
             </div>
 

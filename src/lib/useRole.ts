@@ -23,6 +23,7 @@ type ProfileRow = {
   gender: "F" | "M" | null;
   birth_date: string | null;
   current_semester: string | null;
+  is_board_member: boolean;
 };
 
 // Cache key
@@ -92,7 +93,7 @@ export function useRole() {
       const { data: p, error } = await supabase
         .from("profiles")
         .select(
-          "id,role,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,shift,career_id,rudeal_number,carnet_number,gender,birth_date,current_semester"
+          "id,role,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,shift,career_id,rudeal_number,carnet_number,gender,birth_date,current_semester,is_board_member"
         )
         .eq("id", s.user.id)
         .single();

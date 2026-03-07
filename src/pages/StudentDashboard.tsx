@@ -795,123 +795,73 @@ export default function StudentDashboard() {
 
         {/* Widget de Asistencia del Semestre */}
         {attendanceSummary !== null && displaySemester && (
-          <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                📋 Asistencia · Semestre {displaySemester}
-              </h2>
-              {attendanceSummary.total > 0 &&
-                (() => {
-                  const presentes =
-                    attendanceSummary.total - attendanceSummary.F;
-                  const pct = Math.round(
-                    (presentes / attendanceSummary.total) * 100,
-                  );
+          <section className="bg-slate-900/80 rounded-xl border border-slate-700/50 px-4 py-3 shadow-lg max-w-sm mx-auto">
+            {/* Cabecera compacta */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-semibold text-white">
+                📋 Asistencia · Sem. {displaySemester}
+              </span>
+              <div className="flex items-center gap-2">
+                {attendanceSummary.total > 0 && (() => {
+                  const pct = Math.round(((attendanceSummary.total - attendanceSummary.F) / attendanceSummary.total) * 100);
                   return (
-                    <span
-                      className={`text-sm font-bold px-3 py-1 rounded-full ${
-                        pct >= 80
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : pct >= 60
-                            ? "bg-amber-500/20 text-amber-400"
-                            : "bg-red-500/20 text-red-400"
-                      }`}
-                    >
-                      {pct}% asistencia
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 80 ? "bg-emerald-500/20 text-emerald-400" : pct >= 60 ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"}`}>
+                      {pct}%
                     </span>
                   );
                 })()}
+                <button
+                  onClick={() => nav("/student/attendance")}
+                  className="text-xs text-slate-400 hover:text-blue-400 transition-colors"
+                >
+                  Ver detalle →
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            {/* Contadores en línea */}
+            <div className="flex gap-2 mb-2">
               {[
-                {
-                  label: "Presentes",
-                  value: attendanceSummary.P,
-                  color: "text-emerald-400",
-                  bg: "bg-emerald-500/10 border-emerald-500/20",
-                  icon: "✅",
-                },
-                {
-                  label: "Atrasos",
-                  value: attendanceSummary.A,
-                  color: "text-amber-400",
-                  bg: "bg-amber-500/10 border-amber-500/20",
-                  icon: "⏰",
-                },
-                {
-                  label: "Faltas",
-                  value: attendanceSummary.F,
-                  color: "text-red-400",
-                  bg: "bg-red-500/10 border-red-500/20",
-                  icon: "❌",
-                },
-                {
-                  label: "Licencias",
-                  value: attendanceSummary.L,
-                  color: "text-blue-400",
-                  bg: "bg-blue-500/10 border-blue-500/20",
-                  icon: "📋",
-                },
+                { label: "P", value: attendanceSummary.P, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+                { label: "A", value: attendanceSummary.A, color: "text-amber-400",   bg: "bg-amber-500/10" },
+                { label: "F", value: attendanceSummary.F, color: "text-red-400",     bg: "bg-red-500/10" },
+                { label: "L", value: attendanceSummary.L, color: "text-blue-400",    bg: "bg-blue-500/10" },
               ].map((item) => (
-                <div
-                  key={item.label}
-                  className={`rounded-xl p-3 border ${item.bg} text-center`}
-                >
-                  <div className="text-xl">{item.icon}</div>
-                  <div className={`text-2xl font-bold ${item.color}`}>
-                    {item.value}
-                  </div>
-                  <div className="text-xs text-slate-500">{item.label}</div>
+                <div key={item.label} className={`flex-1 rounded-lg py-1.5 text-center ${item.bg}`}>
+                  <div className={`text-base font-bold leading-none ${item.color}`}>{item.value}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{item.label}</div>
                 </div>
               ))}
             </div>
 
-            {attendanceSummary.total > 0 &&
-              (() => {
-                const presentes = attendanceSummary.total - attendanceSummary.F;
-                const pct = Math.round(
-                  (presentes / attendanceSummary.total) * 100,
-                );
-                return (
-                  <>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 bg-slate-700/50 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all ${pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-slate-400 w-20 text-right">
-                        {pct}% asistencia
-                      </span>
+            {/* Barra de progreso */}
+            {attendanceSummary.total > 0 && (() => {
+              const pct = Math.round(((attendanceSummary.total - attendanceSummary.F) / attendanceSummary.total) * 100);
+              return (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-slate-700/50 rounded-full h-1.5">
+                      <div className={`h-1.5 rounded-full ${pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${pct}%` }} />
                     </div>
-                    {pct < 60 && (
-                      <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2">
-                        <span className="text-red-400 text-lg">⚠️</span>
-                        <p className="text-red-300 text-sm">
-                          <strong>Atención:</strong> Tu asistencia está por
-                          debajo del 60% mínimo requerido por el reglamento EPJA
-                          para aprobar el semestre.
-                        </p>
-                      </div>
-                    )}
-                    {pct >= 60 && pct < 80 && (
-                      <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2">
-                        <span className="text-amber-400 text-lg">⚠️</span>
-                        <p className="text-amber-300 text-sm">
-                          Tu asistencia está cerca del límite mínimo (60%).
-                          Procura no faltar más.
-                        </p>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                    <span className="text-[10px] text-slate-500">{attendanceSummary.total} clases</span>
+                  </div>
+                  {pct < 60 && (
+                    <p className="mt-2 text-xs text-red-400">
+                      ⚠ Asistencia por debajo del 60% mínimo EPJA.
+                    </p>
+                  )}
+                  {pct >= 60 && pct < 80 && (
+                    <p className="mt-2 text-xs text-amber-400">
+                      ⚠ Cerca del límite mínimo (60%). Procura no faltar más.
+                    </p>
+                  )}
+                </>
+              );
+            })()}
 
             {attendanceSummary.total === 0 && (
-              <p className="text-slate-500 text-sm text-center py-2">
-                Aún no hay registros de asistencia para este semestre.
+              <p className="text-xs text-slate-500 text-center py-1">
+                Sin registros este semestre.
               </p>
             )}
           </section>
