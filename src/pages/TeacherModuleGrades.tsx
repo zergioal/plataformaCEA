@@ -25,9 +25,18 @@ type LevelRow = {
 
 type StudentProfile = {
   id: string;
-  code: string | null;
-  full_name: string | null;
+  last_name_pat: string | null;
+  last_name_mat: string | null;
+  first_names: string | null;
 };
+
+function formatName(s: StudentProfile): string {
+  const pat = s.last_name_pat ?? "";
+  const mat = s.last_name_mat ?? "";
+  const names = s.first_names ?? "";
+  const surnames = [pat, mat].filter(Boolean).join(" ");
+  return surnames ? `${surnames}, ${names}` : names;
+}
 
 type ModuleGrade = {
   student_id: string;
@@ -166,7 +175,7 @@ export default function TeacherModuleGrades() {
         return;
       }
 
-      const studentIds = (enrollments ?? []).map((e: any) => e.student_id);
+      const studentIds = (enrollments ?? []).map((e: { student_id: string }) => e.student_id);
 
       if (studentIds.length === 0) {
         setRows([]);
@@ -177,11 +186,13 @@ export default function TeacherModuleGrades() {
 
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("id,code,full_name")
+        .select("id,last_name_pat,last_name_mat,first_names")
         .in("id", studentIds)
         .eq("career_id", teacherProfile.career_id)
         .eq("shift", teacherProfile.shift)
-        .order("code");
+        .order("last_name_pat")
+        .order("last_name_mat")
+        .order("first_names");
 
       if (profilesError) {
         setMsg("Error cargando estudiantes");
@@ -189,7 +200,7 @@ export default function TeacherModuleGrades() {
         return;
       }
 
-      const students = (profiles ?? []) as StudentProfile[];
+      const students = (profiles ?? []) as unknown as StudentProfile[];
 
       if (students.length === 0) {
         setRows([]);
@@ -232,12 +243,52 @@ export default function TeacherModuleGrades() {
         }
       }
 
+      // Leer auto_eval_responses directamente (los estudiantes escriben aquí con éxito)
+      // Esto garantiza que auto_ser y auto_decidir aparezcan aunque module_grades.auto_ser sea null
+      const { data: autoActs } = await supabase
+        .from("auto_eval_activities")
+        .select("id, dimension")
+        .eq("module_id", mid);
+
+      const autoActIds = (autoActs ?? []).map((a: { id: number }) => a.id);
+      const autoSerActId  = (autoActs ?? []).find((a: { dimension: string }) => a.dimension === "auto_ser")?.id ?? null;
+      const autoDecActId  = (autoActs ?? []).find((a: { dimension: string }) => a.dimension === "auto_decidir")?.id ?? null;
+
+      // Mapa studentId -> { auto_ser: number|null, auto_decidir: number|null }
+      const autoEvalMap = new Map<string, { auto_ser: number | null; auto_decidir: number | null }>();
+      if (autoActIds.length > 0) {
+        const { data: autoResps } = await supabase
+          .from("auto_eval_responses")
+          .select("activity_id, student_id, final_score")
+          .in("activity_id", autoActIds)
+          .in("student_id", students.map((s) => s.id));
+
+        for (const resp of autoResps ?? []) {
+          const cur = autoEvalMap.get(resp.student_id) ?? { auto_ser: null, auto_decidir: null };
+          if (resp.activity_id === autoSerActId) cur.auto_ser = resp.final_score !== null ? Math.round(resp.final_score) : null;
+          if (resp.activity_id === autoDecActId) cur.auto_decidir = resp.final_score !== null ? Math.round(resp.final_score) : null;
+          autoEvalMap.set(resp.student_id, cur);
+        }
+      }
+
       const studentRows: StudentRow[] = students.map((student) => {
         const existingGrade = gradesMap.get(student.id);
+        const autoEval = autoEvalMap.get(student.id);
         const progress = progressMap.get(student.id) || 0;
         const suggestedHP = Math.round((progress / 100) * 20);
 
-        const grade: ModuleGrade = existingGrade || {
+        const r = (v: number | null) => v !== null ? Math.round(v) : null;
+        const grade: ModuleGrade = existingGrade ? {
+          ...existingGrade,
+          ser: r(existingGrade.ser),
+          saber: r(existingGrade.saber),
+          hacer_proceso: r(existingGrade.hacer_proceso),
+          hacer_producto: r(existingGrade.hacer_producto),
+          decidir: r(existingGrade.decidir),
+          // auto_eval_responses tiene prioridad sobre module_grades para auto_ser/auto_decidir
+          auto_ser: autoEval?.auto_ser ?? r(existingGrade.auto_ser),
+          auto_decidir: autoEval?.auto_decidir ?? r(existingGrade.auto_decidir),
+        } : {
           student_id: student.id,
           module_id: mid,
           ser: null,
@@ -245,8 +296,8 @@ export default function TeacherModuleGrades() {
           hacer_proceso: null,
           hacer_producto: null,
           decidir: null,
-          auto_ser: null,
-          auto_decidir: null,
+          auto_ser: autoEval?.auto_ser ?? null,
+          auto_decidir: autoEval?.auto_decidir ?? null,
         };
 
         return {
@@ -261,6 +312,31 @@ export default function TeacherModuleGrades() {
 
       setRows(studentRows);
       setLoadingData(false);
+
+      // Sincronizar auto_ser / auto_decidir a module_grades en segundo plano
+      // para que el docente no tenga que guardar manualmente cada fila
+      const syncRows = studentRows.filter((sr) => {
+        const ae = autoEvalMap.get(sr.student.id);
+        if (!ae) return false;
+        const existing = gradesMap.get(sr.student.id);
+        return (
+          (ae.auto_ser !== null && ae.auto_ser !== (existing?.auto_ser ?? null)) ||
+          (ae.auto_decidir !== null && ae.auto_decidir !== (existing?.auto_decidir ?? null))
+        );
+      });
+
+      for (const sr of syncRows) {
+        const ae = autoEvalMap.get(sr.student.id)!;
+        await supabase.from("module_grades").upsert(
+          {
+            student_id: sr.student.id,
+            module_id: mid,
+            auto_ser: ae.auto_ser,
+            auto_decidir: ae.auto_decidir,
+          },
+          { onConflict: "student_id,module_id" },
+        );
+      }
     } catch (error) {
       console.error("Error:", error);
       setMsg("Error cargando datos");
@@ -268,24 +344,24 @@ export default function TeacherModuleGrades() {
     }
   }
 
-  function calculateTotal(grade: ModuleGrade, suggestedHP: number): number {
-    const ser = grade.ser ?? 0;
-    const saber = grade.saber ?? 0;
-    const hacerProceso = grade.hacer_proceso ?? suggestedHP;
-    const hacerProducto = grade.hacer_producto ?? 0;
-    const decidir = grade.decidir ?? 0;
-    const autoSer = grade.auto_ser ?? 0;
-    const autoDecidir = grade.auto_decidir ?? 0;
+  // Mínimos proporcionales por dimensión (escala 20-100)
+  const DIM_MIN = { ser: 2, saber: 6, hacer_proceso: 4, hacer_producto: 4, decidir: 2, auto_ser: 1, auto_decidir: 1 };
 
-    return (
-      ser +
-      saber +
-      hacerProceso +
-      hacerProducto +
-      decidir +
-      autoSer +
-      autoDecidir
-    );
+  function applyDimMin(val: number | null, min: number): number {
+    if (val === null) return min;
+    return Math.max(val, min);
+  }
+
+  function calculateTotal(grade: ModuleGrade, suggestedHP: number): number {
+    const ser        = applyDimMin(grade.ser,           DIM_MIN.ser);
+    const saber      = applyDimMin(grade.saber,         DIM_MIN.saber);
+    const hacerProc  = applyDimMin(grade.hacer_proceso ?? suggestedHP, DIM_MIN.hacer_proceso);
+    const hacerProd  = applyDimMin(grade.hacer_producto, DIM_MIN.hacer_producto);
+    const decidir    = applyDimMin(grade.decidir,        DIM_MIN.decidir);
+    const autoSer    = applyDimMin(grade.auto_ser,       DIM_MIN.auto_ser);
+    const autoDecid  = applyDimMin(grade.auto_decidir,   DIM_MIN.auto_decidir);
+
+    return Math.round(ser + saber + hacerProc + hacerProd + decidir + autoSer + autoDecid);
   }
 
   function updateGradeField(
@@ -322,11 +398,8 @@ export default function TeacherModuleGrades() {
   }
 
   function getObservation(total: number): { text: string; color: string } {
-    if (total === 0) return { text: "Retirado", color: "text-white" };
-    if (total >= 1 && total <= 50)
-      return { text: "Postergado", color: "text-red-400" };
-    if (total >= 51 && total <= 75)
-      return { text: "Promovido", color: "text-emerald-400" };
+    if (total <= 50) return { text: "Postergado", color: "text-red-400" };
+    if (total <= 75) return { text: "Promovido", color: "text-emerald-400" };
     return { text: "Promovido Excelente", color: "text-blue-400" };
   }
 
@@ -421,99 +494,56 @@ export default function TeacherModuleGrades() {
   }
 
   async function generatePDF() {
-    // Orientación horizontal (landscape)
     const doc = new jsPDF({ orientation: "landscape" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();   // 297mm (A4 landscape)
+    const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
 
-    // Cargar logo como base64
+    // ── Logo ──────────────────────────────────────────────────────────────────
     const logoImg = new Image();
     logoImg.src = logoCea;
-
-    await new Promise((resolve) => {
-      logoImg.onload = resolve;
-    });
-
-    // Convertir imagen a base64
+    await new Promise((resolve) => { logoImg.onload = resolve; });
     const canvas = document.createElement("canvas");
-    canvas.width = logoImg.width;
-    canvas.height = logoImg.height;
-    const ctx = canvas.getContext("2d");
-    ctx?.drawImage(logoImg, 0, 0);
+    canvas.width = logoImg.width; canvas.height = logoImg.height;
+    canvas.getContext("2d")?.drawImage(logoImg, 0, 0);
     const logoBase64 = canvas.toDataURL("image/png");
+    doc.addImage(logoBase64, "PNG", 10, 5, 18, 18);
 
-    // Logo arriba izquierda, pequeño
-    const logoWidth = 18;
-    const logoHeight = 18;
-    doc.addImage(logoBase64, "PNG", 10, 8, logoWidth, logoHeight);
+    // ── Título centrado ───────────────────────────────────────────────────────
+    doc.setFontSize(12); doc.setFont("helvetica", "bold");
+    doc.text("Reporte de Calificaciones Modular", pageWidth / 2, 17, { align: "center" });
 
-    // Título más pequeño, al lado del logo
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("REPORTE DE CALIFICACIONES", 32, 18);
+    // ── Datos generales (espaciado reducido a 4.5 mm entre filas) ─────────────
+    const turnoCapitalized = teacherShift.charAt(0).toUpperCase() + teacherShift.slice(1).toLowerCase();
+    doc.setFontSize(8.5);
+    const startY = 27;          // sube 3 mm respecto al anterior (era 30)
+    const sp     = 4.5;         // separación entre filas (era 6 mm)
+    const leftX  = 10, midX = pageWidth / 3, rightX = (pageWidth / 3) * 2;
 
-    // Capitalizar turno
-    const turnoCapitalized =
-      teacherShift.charAt(0).toUpperCase() +
-      teacherShift.slice(1).toLowerCase();
+    doc.setFont("helvetica", "bold");   doc.text("CEA:", leftX, startY);
+    doc.setFont("helvetica", "normal"); doc.text("Madre María Oliva", leftX + 11, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Facilitador(a):", leftX, startY + sp);
+    doc.setFont("helvetica", "normal"); doc.text(facilitator, leftX + 27, startY + sp);
+    doc.setFont("helvetica", "bold");   doc.text("Director(a):", leftX, startY + sp * 2);
+    doc.setFont("helvetica", "normal"); doc.text(director, leftX + 23, startY + sp * 2);
 
-    // Datos generales con subtítulos en negrita
-    doc.setFontSize(9);
-    const startY = 30;
-    const leftX = 10;
-    const midX = pageWidth / 3;
-    const rightX = (pageWidth / 3) * 2;
+    doc.setFont("helvetica", "bold");   doc.text("Carrera:", midX, startY);
+    doc.setFont("helvetica", "normal"); doc.text(careerName, midX + 17, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Módulo:", midX, startY + sp);
+    doc.setFont("helvetica", "normal"); doc.text(moduleRow?.title || "", midX + 16, startY + sp);
+    doc.setFont("helvetica", "bold");   doc.text("Nivel:", midX, startY + sp * 2);
+    doc.setFont("helvetica", "normal"); doc.text(levelRow?.name || "", midX + 12, startY + sp * 2);
 
-    // Columna izquierda
-    doc.setFont("helvetica", "bold");
-    doc.text("CEA:", leftX, startY);
-    doc.setFont("helvetica", "normal");
-    doc.text("Madre María Oliva", leftX + 12, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Semestre:", rightX, startY);
+    doc.setFont("helvetica", "normal"); doc.text(semester, rightX + 19, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Turno:", rightX, startY + sp);
+    doc.setFont("helvetica", "normal"); doc.text(turnoCapitalized, rightX + 13, startY + sp);
 
-    doc.setFont("helvetica", "bold");
-    doc.text("Facilitador(a):", leftX, startY + 6);
-    doc.setFont("helvetica", "normal");
-    doc.text(facilitator, leftX + 28, startY + 6);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Director(a):", leftX, startY + 12);
-    doc.setFont("helvetica", "normal");
-    doc.text(director, leftX + 24, startY + 12);
-
-    // Columna medio
-    doc.setFont("helvetica", "bold");
-    doc.text("Carrera:", midX, startY);
-    doc.setFont("helvetica", "normal");
-    doc.text(careerName, midX + 18, startY);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Módulo:", midX, startY + 6);
-    doc.setFont("helvetica", "normal");
-    doc.text(moduleRow?.title || "", midX + 17, startY + 6);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Nivel:", midX, startY + 12);
-    doc.setFont("helvetica", "normal");
-    doc.text(levelRow?.name || "", midX + 13, startY + 12);
-
-    // Columna derecha
-    doc.setFont("helvetica", "bold");
-    doc.text("Semestre:", rightX, startY);
-    doc.setFont("helvetica", "normal");
-    doc.text(semester, rightX + 20, startY);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Turno:", rightX, startY + 6);
-    doc.setFont("helvetica", "normal");
-    doc.text(turnoCapitalized, rightX + 14, startY + 6);
-
-    // Tabla de calificaciones con todas las columnas
+    // ── Datos de la tabla ─────────────────────────────────────────────────────
     const tableData = rows.map((row, index) => {
       const obs = getObservation(row.total);
       return [
         index + 1,
-        row.student.code || "",
-        row.student.full_name || "",
+        formatName(row.student),
         row.grade.ser ?? "",
         row.grade.saber ?? "",
         row.grade.hacer_proceso ?? row.suggestedHP,
@@ -526,101 +556,138 @@ export default function TeacherModuleGrades() {
       ];
     });
 
+    // Etiquetas rotadas para columnas de notas (índices 2-9)
+    // Cada entrada es un array de líneas; las de 2 líneas se dibujan en paralelo
+    const GRADE_LABELS: string[][] = [
+      ["SER (10)"],
+      ["SABER (30)"],
+      ["HACER",    "PROCESO(20)"],
+      ["HACER",    "PRODUCTO(20)"],
+      ["DECIDIR (10)"],
+      ["AUTOEVA",  "SER (5)"],
+      ["AUTOEVA",  "DEC (5)"],
+      ["TOTAL (100)"],
+    ];
+
+    // ── Layout: tabla al 80% del ancho, centrada ─────────────────────────────
+    const TABLE_WIDTH   = pageWidth * 0.80;          // ≈ 238 mm
+    const SIDE_MARGIN   = (pageWidth - TABLE_WIDTH) / 2;
+    const TABLE_START_Y = startY + sp * 2 + 8;       // ≈ 44 mm
+    // Con etiquetas en 2 líneas la más larga es "PRODUCTO(20)" ≈ 12 chars × 1mm = 12mm
+    const HEADER_ROW_H  = 16;                        // reducido de 22 a 16 mm
+    const SIG_BLOCK_H   = 16;                        // espacio para línea + texto de firma
+    const sigGap        = 6;                         // separación tabla → firma
+    const BOTTOM_PAD    = 4;
+    const n = rows.length;
+
+    // Columnas: anchos que suman ≈ TABLE_WIDTH (238 mm)
+    const COL_W = { num: 9, name: 86, grade: 14, total: 16, obs: 29 };
+
+    // bodyAvailH incluye sigGap para garantizar que las firmas quepan en la misma hoja
+    const bodyAvailH = pageHeight - TABLE_START_Y - HEADER_ROW_H - sigGap - SIG_BLOCK_H - BOTTOM_PAD;
+    // Filas más compactas; mínimo 4.5 mm para que el texto de 7-8 pt sea legible
+    const bodyRowH   = n <= 20 ? Math.max(4.5, bodyAvailH / n) : 6;
+    const bodyFontSize = bodyRowH < 5.2 ? 7 : 8;
+
     autoTable(doc, {
-      startY: startY + 18,
-      head: [
-        [
-          "#",
-          "Código",
-          "Participante",
-          "SER\n(10)",
-          "SABER\n(30)",
-          "H.Proc\n(20)",
-          "H.Prod\n(20)",
-          "DEC\n(10)",
-          "A.SER\n(5)",
-          "A.DEC\n(5)",
-          "TOTAL\n(100)",
-          "OBS",
-        ],
-      ],
+      startY: TABLE_START_Y,
+      margin: { left: SIDE_MARGIN, right: SIDE_MARGIN },
+      // Columnas 2-9: texto vacío — se dibuja rotado en didDrawCell
+      head: [["N°", "Participante", "", "", "", "", "", "", "", "", "OBS"]],
       body: tableData,
       theme: "grid",
       headStyles: {
-        fillColor: [41, 65, 122],
-        textColor: 255,
+        fillColor: [235, 235, 235],
+        textColor: [0, 0, 0],
         fontStyle: "bold",
         halign: "center",
+        valign: "bottom",
         fontSize: 7,
-        cellPadding: 2,
+        cellPadding: { top: 1, right: 1, bottom: 2, left: 1 },
+        minCellHeight: HEADER_ROW_H,
       },
-      columnStyles: {
-        0: { halign: "center", cellWidth: 8 },
-        1: { halign: "center", cellWidth: 18 },
-        2: { halign: "left", cellWidth: 55 },
-        3: { halign: "center", cellWidth: 14 },
-        4: { halign: "center", cellWidth: 14 },
-        5: { halign: "center", cellWidth: 14 },
-        6: { halign: "center", cellWidth: 14 },
-        7: { halign: "center", cellWidth: 14 },
-        8: { halign: "center", cellWidth: 14 },
-        9: { halign: "center", cellWidth: 14 },
-        10: { halign: "center", cellWidth: 16, fontStyle: "bold" },
-        11: { halign: "center", cellWidth: 32 },
+      bodyStyles: {
+        fontSize: bodyFontSize,
+        cellPadding: { top: 1, right: 1, bottom: 1, left: 1 },
+        minCellHeight: bodyRowH,
       },
       styles: {
-        fontSize: 8,
-        cellPadding: 2,
+        lineColor: [180, 180, 180],
+        lineWidth: 0.2,
       },
-      didParseCell: function (data) {
-        // Colores para columna OBS
-        if (data.section === "body" && data.column.index === 11) {
-          const obs = data.cell.raw as string;
-          if (obs === "Retirado") {
-            data.cell.styles.textColor = [100, 100, 100];
-          } else if (obs === "Postergado") {
-            data.cell.styles.textColor = [220, 53, 69];
-          } else if (obs === "Promovido") {
-            data.cell.styles.textColor = [40, 167, 69];
-          } else if (obs === "Promovido Excelente") {
-            data.cell.styles.textColor = [0, 123, 255];
+      columnStyles: {
+        0:  { halign: "center", cellWidth: COL_W.num },
+        1:  { halign: "left",   cellWidth: COL_W.name },
+        2:  { halign: "center", cellWidth: COL_W.grade },
+        3:  { halign: "center", cellWidth: COL_W.grade },
+        4:  { halign: "center", cellWidth: COL_W.grade },
+        5:  { halign: "center", cellWidth: COL_W.grade },
+        6:  { halign: "center", cellWidth: COL_W.grade },
+        7:  { halign: "center", cellWidth: COL_W.grade },
+        8:  { halign: "center", cellWidth: COL_W.grade },
+        9:  { halign: "center", cellWidth: COL_W.total, fontStyle: "bold" },
+        10: { halign: "center", cellWidth: COL_W.obs },
+      },
+      // Suprimir texto por defecto en celdas de encabezado rotadas
+      willDrawCell: (data) => {
+        if (data.section === "head" && data.column.index >= 2 && data.column.index <= 9) {
+          (data.cell as unknown as { text: string[] }).text = [];
+        }
+      },
+      // Dibujar texto rotado 90° en cada celda de encabezado de nota
+      didDrawCell: (data) => {
+        if (data.section === "head" && data.column.index >= 2 && data.column.index <= 9) {
+          const lines = GRADE_LABELS[data.column.index - 2];
+          const cx = data.cell.x + data.cell.width / 2;
+          const y  = data.cell.y + data.cell.height - 2;
+          doc.setFontSize(5);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(0, 0, 0);
+          if (lines.length === 1) {
+            doc.text(lines[0], cx, y, { angle: 90, align: "left" });
+          } else {
+            // Dos líneas: separadas ~2 mm horizontalmente (que al rotar = "profundidad")
+            doc.text(lines[0], cx - 1.5, y, { angle: 90, align: "left" });
+            doc.text(lines[1], cx + 1.5, y, { angle: 90, align: "left" });
           }
         }
-        // Colores para columna TOTAL
+      },
+      didParseCell: (data) => {
         if (data.section === "body" && data.column.index === 10) {
+          const obs = data.cell.raw as string;
+          if (obs === "Postergado")               data.cell.styles.textColor = [220, 53, 69];
+          else if (obs === "Promovido")            data.cell.styles.textColor = [40, 167, 69];
+          else if (obs === "Promovido Excelente")  data.cell.styles.textColor = [0, 123, 255];
+        }
+        if (data.section === "body" && data.column.index === 9) {
           const total = data.cell.raw as number;
-          if (total === 0) {
-            data.cell.styles.textColor = [100, 100, 100];
-          } else if (total >= 1 && total <= 50) {
-            data.cell.styles.textColor = [220, 53, 69];
-          } else if (total >= 51 && total <= 75) {
-            data.cell.styles.textColor = [40, 167, 69];
-          } else if (total >= 76) {
-            data.cell.styles.textColor = [0, 123, 255];
-          }
+          if      (total === 0)               data.cell.styles.textColor = [100, 100, 100];
+          else if (total >= 1 && total <= 50)  data.cell.styles.textColor = [220, 53, 69];
+          else if (total >= 51 && total <= 75) data.cell.styles.textColor = [40, 167, 69];
+          else if (total >= 76)               data.cell.styles.textColor = [0, 123, 255];
         }
       },
     });
 
-    // Espacio para firmas
-    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } })
-      .lastAutoTable.finalY;
-    const firmasY = Math.min(finalY + 30, pageHeight - 25);
+    // ── Firmas: siempre debajo, sin superponerse; misma hoja si ≤20 alumnos ──
+    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
+    let sigY: number;
+    if (finalY + sigGap + SIG_BLOCK_H > pageHeight - BOTTOM_PAD) {
+      doc.addPage();
+      sigY = 35;
+    } else {
+      sigY = finalY + sigGap;
+    }
 
-    // Línea de firma Facilitador (izquierda, más centrada)
-    const firmaLeftX = pageWidth / 4;
-    doc.line(firmaLeftX - 35, firmasY, firmaLeftX + 35, firmasY);
-    doc.text("Facilitador(a)", firmaLeftX - 12, firmasY + 5);
-
-    // Línea de firma Dirección (derecha, más centrada)
+    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0);
+    const firmaLeftX  = pageWidth / 4;
     const firmaRightX = (pageWidth / 4) * 3;
-    doc.line(firmaRightX - 35, firmasY, firmaRightX + 35, firmasY);
-    doc.text("Dirección", firmaRightX - 15, firmasY + 5);
+    doc.line(firmaLeftX - 35,  sigY, firmaLeftX + 35,  sigY);
+    doc.text("Facilitador(a)", firmaLeftX,  sigY + 5, { align: "center" });
+    doc.line(firmaRightX - 35, sigY, firmaRightX + 35, sigY);
+    doc.text("Dirección",      firmaRightX, sigY + 5, { align: "center" });
 
-    // Descargar PDF
     const fileName = `Calificaciones_${moduleRow?.title?.replace(/\s+/g, "_") || "Modulo"}_${semester.replace("/", "-")}.pdf`;
     doc.save(fileName);
   }
@@ -720,8 +787,8 @@ export default function TeacherModuleGrades() {
               <table className="min-w-full">
                 <thead className="bg-slate-800/50">
                   <tr>
-                    <th className="px-3 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      Código
+                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                      N°
                     </th>
                     <th className="px-3 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
                       Estudiante
@@ -729,62 +796,37 @@ export default function TeacherModuleGrades() {
                     <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
                       Progreso
                     </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      SER
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (10)
-                      </span>
+                    {[
+                      { label: "SER", pts: 10, dim: "ser" },
+                      { label: "SABER", pts: 30, dim: "saber" },
+                      { label: "HACER Proceso", pts: 20, dim: "hacer_proceso" },
+                      { label: "HACER Producto", pts: 20, dim: "hacer_producto" },
+                      { label: "DECIDIR", pts: 10, dim: "decidir" },
+                    ].map(({ label, pts, dim }) => (
+                      <th key={dim} style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold uppercase tracking-wider">
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          <button
+                            className="text-sky-400 hover:text-sky-200 hover:underline transition-colors"
+                            onClick={() => nav(`/teacher/module/${mid}/grades/${dim}`)}
+                            title={`Abrir registro ${label}`}
+                          >
+                            <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2, display: "block" }}>{label}</span>
+                          </button>
+                          <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>({pts})</span>
+                        </div>
+                      </th>
+                    ))}
+                    <th style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2 }}>AUTO SER</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>(5)</span>
+                      </div>
                     </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      SABER
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (30)
-                      </span>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      HACER
-                      <br />
-                      Proceso
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (20)
-                      </span>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      HACER
-                      <br />
-                      Producto
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (20)
-                      </span>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      DECIDIR
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (10)
-                      </span>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      AUTO
-                      <br />
-                      SER
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (5)
-                      </span>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      AUTO
-                      <br />
-                      DECIDIR
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (5)
-                      </span>
+                    <th style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2 }}>AUTO DECIDIR</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>(5)</span>
+                      </div>
                     </th>
                     <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
                       TOTAL
@@ -802,16 +844,16 @@ export default function TeacherModuleGrades() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
-                  {rows.map((row) => (
+                  {rows.map((row, idx) => (
                     <tr
                       key={row.student.id}
                       className="hover:bg-slate-800/30 transition-colors"
                     >
-                      <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {row.student.code}
+                      <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-white text-center">
+                        {idx + 1}
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-sm text-slate-200">
-                        {row.student.full_name}
+                        {formatName(row.student)}
                       </td>
                       <td className="px-3 py-4 text-center">
                         <div className="flex flex-col items-center gap-1">
@@ -933,42 +975,18 @@ export default function TeacherModuleGrades() {
                         />
                       </td>
 
-                      {/* AUTO SER (5) */}
-                      <td className="px-3 py-4">
-                        <input
-                          type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          min="0"
-                          max="5"
-                          value={row.grade.auto_ser ?? ""}
-                          onChange={(e) =>
-                            updateGradeField(
-                              row.student.id,
-                              "auto_ser",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="0"
-                        />
+                      {/* AUTO SER (5) — autocalificado por el estudiante */}
+                      <td className="px-3 py-4 text-center">
+                        <span className="text-sm font-semibold text-violet-400">
+                          {row.grade.auto_ser !== null ? row.grade.auto_ser : <span className="text-slate-600">—</span>}
+                        </span>
                       </td>
 
-                      {/* AUTO DECIDIR (5) */}
-                      <td className="px-3 py-4">
-                        <input
-                          type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          min="0"
-                          max="5"
-                          value={row.grade.auto_decidir ?? ""}
-                          onChange={(e) =>
-                            updateGradeField(
-                              row.student.id,
-                              "auto_decidir",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="0"
-                        />
+                      {/* AUTO DECIDIR (5) — autocalificado por el estudiante */}
+                      <td className="px-3 py-4 text-center">
+                        <span className="text-sm font-semibold text-violet-400">
+                          {row.grade.auto_decidir !== null ? row.grade.auto_decidir : <span className="text-slate-600">—</span>}
+                        </span>
                       </td>
 
                       {/* TOTAL */}

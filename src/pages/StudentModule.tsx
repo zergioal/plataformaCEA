@@ -31,7 +31,21 @@ type SectionRow = {
   content_json: unknown;
   sort_order: number;
   is_active: boolean | null;
+  dimension?: string;
 };
+
+type RealQuizOption = { id: number; option_text: string; is_correct: boolean };
+type RealQuizQuestion = { id: number; question: string; sort_order: number; options: RealQuizOption[] };
+type RealQuizData = {
+  quizId: number;
+  questions: RealQuizQuestion[];
+  attemptsDone: number;
+  maxAttempts: number;
+  bestScore: number | null;
+};
+
+type AutoEvalActivity = { id: number; dimension: string; indicators: string[] };
+type AutoEvalResponse = { scores: number[]; average_score: number | null; final_score: number | null };
 
 type ProgressRow = { section_id: number };
 
@@ -78,10 +92,6 @@ function getText(obj: Record<string, unknown>, key: string) {
   return typeof v === "string" ? v : "";
 }
 
-function getNum(obj: Record<string, unknown>, key: string) {
-  const v = obj[key];
-  return typeof v === "number" ? v : NaN;
-}
 
 // Componente para renderizar HTML con scripts ejecutables
 function HTMLRenderer({ html }: { html: string }) {
@@ -227,9 +237,19 @@ export default function StudentModule() {
     }
   }, [storageKey, updateUrl]);
 
-  // estado local para quiz (MVP)
-  const [quizSelected, setQuizSelected] = useState<number | null>(null);
-  const [quizFeedback, setQuizFeedback] = useState<string | null>(null);
+  // Quiz real
+  const [realQuizData, setRealQuizData] = useState<RealQuizData | null>(null);
+  const [realQuizAnswers, setRealQuizAnswers] = useState<Record<number, number>>({}); // questionId -> optionId
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [quizSubmitResult, setQuizSubmitResult] = useState<{ score: number; attemptNumber: number } | null>(null);
+  const [quizLoadedSectionId, setQuizLoadedSectionId] = useState<number | null>(null);
+
+  // Autoevaluación
+  const [autoEvalActivities, setAutoEvalActivities] = useState<AutoEvalActivity[]>([]);
+  const [autoEvalScores, setAutoEvalScores] = useState<Record<number, number[]>>({}); // activityId -> scores[]
+  const [autoEvalSubmitted, setAutoEvalSubmitted] = useState<Record<number, boolean>>({});
+  const [autoEvalSubmitting, setAutoEvalSubmitting] = useState(false);
+  const [showAutoEval, setShowAutoEval] = useState(false);
 
   const [marking, setMarking] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -315,7 +335,7 @@ export default function StudentModule() {
       // 4) sections de esas lessons
       const secRes = await supabase
         .from("lesson_sections")
-        .select("id,lesson_id,title,kind,content_json,sort_order,is_active")
+        .select("id,lesson_id,title,kind,content_json,sort_order,is_active,dimension")
         .in("lesson_id", lessonIds)
         .order("lesson_id", { ascending: true })
         .order("sort_order", { ascending: true });
@@ -350,9 +370,10 @@ export default function StudentModule() {
       const targetSectionId = validSavedSection ? initialSectionId : (secList[0]?.id ?? null);
       setCurrentSectionId(targetSectionId);
 
-      // reset quiz ui
-      setQuizSelected(null);
-      setQuizFeedback(null);
+      setRealQuizData(null);
+      setRealQuizAnswers({});
+      setQuizSubmitResult(null);
+      setQuizLoadedSectionId(null);
 
       setDataLoaded(true);
     }
@@ -461,18 +482,246 @@ export default function StudentModule() {
 
   function goPrev() {
     if (currentIndex <= 0) return;
+    setShowAutoEval(false);
     const prev = linearSections[currentIndex - 1];
     setCurrentSectionId(prev.id);
-    setQuizSelected(null);
-    setQuizFeedback(null);
+    setRealQuizData(null);
+    setRealQuizAnswers({});
+    setQuizSubmitResult(null);
   }
 
   function goNext() {
     if (currentIndex < 0 || currentIndex >= linearSections.length - 1) return;
+    setShowAutoEval(false);
     const next = linearSections[currentIndex + 1];
     setCurrentSectionId(next.id);
-    setQuizSelected(null);
-    setQuizFeedback(null);
+    setRealQuizData(null);
+    setRealQuizAnswers({});
+    setQuizSubmitResult(null);
+  }
+
+  // -------- Carga de quiz al cambiar sección --------
+  useEffect(() => {
+    if (!session || !currentSection || currentSection.kind !== "quiz") {
+      if (currentSection?.kind !== "quiz") {
+        setRealQuizData(null);
+        setRealQuizAnswers({});
+        setQuizSubmitResult(null);
+      }
+      return;
+    }
+    if (quizLoadedSectionId === currentSection.id) return;
+    setQuizLoadedSectionId(currentSection.id);
+
+    async function loadQuiz() {
+      const { data: qz } = await supabase
+        .from("eval_quizzes")
+        .select("id, max_attempts")
+        .eq("section_id", currentSection!.id)
+        .single();
+      if (!qz) return;
+
+      const { data: questions } = await supabase
+        .from("eval_quiz_questions")
+        .select("id, question, sort_order, eval_quiz_options(id, option_text, is_correct)")
+        .eq("quiz_id", qz.id)
+        .order("sort_order");
+
+      const { data: attempts } = await supabase
+        .from("eval_quiz_attempts")
+        .select("attempt_number, score, completed_at")
+        .eq("quiz_id", qz.id)
+        .eq("student_id", session!.user.id)
+        .not("completed_at", "is", null)
+        .order("attempt_number");
+
+      const attemptsDone = attempts?.length ?? 0;
+      const bestScore = attempts && attempts.length > 0
+        ? Math.max(...attempts.map((a) => Number(a.score ?? 0)))
+        : null;
+
+      setRealQuizData({
+        quizId: qz.id,
+        questions: (questions ?? []).map((q) => ({
+          id: q.id,
+          question: q.question,
+          sort_order: q.sort_order,
+          options: ((q.eval_quiz_options ?? []) as RealQuizOption[]),
+        })),
+        attemptsDone,
+        maxAttempts: qz.max_attempts ?? 2,
+        bestScore,
+      });
+      setRealQuizAnswers({});
+      setQuizSubmitResult(null);
+    }
+
+    loadQuiz();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, currentSection?.id, currentSection?.kind]);
+
+  // -------- Carga de autoevaluación --------
+  useEffect(() => {
+    if (!session || !dataLoaded || !mid) return;
+
+    async function loadAutoEval() {
+      const { data: acts } = await supabase
+        .from("auto_eval_activities")
+        .select("id, dimension, indicators")
+        .eq("module_id", mid);
+
+      if (!acts || acts.length === 0) return;
+
+      const activities: AutoEvalActivity[] = acts.map((a) => ({
+        id: a.id,
+        dimension: a.dimension,
+        indicators: Array.isArray(a.indicators) ? (a.indicators as string[]) : [],
+      }));
+      setAutoEvalActivities(activities);
+
+      // Inicializar scores vacíos y verificar cuáles ya fueron enviados
+      const initScores: Record<number, number[]> = {};
+      const initSubmitted: Record<number, boolean> = {};
+      for (const act of activities) {
+        initScores[act.id] = act.indicators.map(() => 0);
+        const { data: resp } = await supabase
+          .from("auto_eval_responses")
+          .select("scores")
+          .eq("activity_id", act.id)
+          .eq("student_id", session!.user.id)
+          .maybeSingle();
+        if (resp) {
+          const savedScores = Array.isArray(resp.scores) ? (resp.scores as number[]) : [];
+          initScores[act.id] = savedScores.length === act.indicators.length
+            ? savedScores
+            : act.indicators.map((_, i) => savedScores[i] ?? 0);
+          initSubmitted[act.id] = true;
+        } else {
+          initSubmitted[act.id] = false;
+        }
+      }
+      setAutoEvalScores(initScores);
+      setAutoEvalSubmitted(initSubmitted);
+    }
+
+    loadAutoEval();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, dataLoaded, mid]);
+
+  async function submitQuiz() {
+    if (!session || !realQuizData) return;
+    const unanswered = realQuizData.questions.filter((q) => !realQuizAnswers[q.id]);
+    if (unanswered.length > 0) {
+      setMsg("Responde todas las preguntas antes de enviar.");
+      return;
+    }
+
+    setQuizSubmitting(true);
+    const attemptNumber = realQuizData.attemptsDone + 1;
+
+    // Crear intento
+    const { data: attempt, error: aErr } = await supabase
+      .from("eval_quiz_attempts")
+      .insert({ quiz_id: realQuizData.quizId, student_id: session.user.id, attempt_number: attemptNumber })
+      .select("id")
+      .single();
+    if (aErr || !attempt) { setQuizSubmitting(false); setMsg("Error al iniciar intento."); return; }
+
+    // Guardar respuestas
+    const ansRows = realQuizData.questions.map((q) => ({
+      attempt_id: attempt.id,
+      question_id: q.id,
+      option_id: realQuizAnswers[q.id],
+    }));
+    await supabase.from("eval_quiz_answers").insert(ansRows);
+
+    // Calcular score (0-100 para mostrar al estudiante)
+    let correct = 0;
+    for (const q of realQuizData.questions) {
+      const selectedOptId = realQuizAnswers[q.id];
+      const selectedOpt = q.options.find((o) => o.id === selectedOptId);
+      if (selectedOpt?.is_correct) correct++;
+    }
+    const score = realQuizData.questions.length > 0
+      ? Math.round((correct / realQuizData.questions.length) * 100)
+      : 0;
+
+    // Guardar score y marcar completado
+    await supabase
+      .from("eval_quiz_attempts")
+      .update({ score, completed_at: new Date().toISOString() })
+      .eq("id", attempt.id);
+
+    // Copiar nota a dimension_grades en escala SABER (0-30)
+    if (currentSection) {
+      const saberScore = Math.round((score / 100) * 30);
+      const { error: dgErr } = await supabase.from("dimension_grades").upsert({
+        student_id: session.user.id,
+        section_id: currentSection.id,
+        module_id: mid,
+        dimension: "saber",
+        score: saberScore,
+        updated_at: new Date().toISOString(),
+        updated_by: session.user.id,
+      }, { onConflict: "student_id,section_id" });
+      if (dgErr) console.error("Error guardando nota SABER:", dgErr.message);
+    }
+
+    // Actualizar estado local
+    const newAttemptsDone = attemptNumber;
+    const newBestScore = Math.max(realQuizData.bestScore ?? 0, score);
+    setRealQuizData((prev) => prev ? { ...prev, attemptsDone: newAttemptsDone, bestScore: newBestScore } : prev);
+    setQuizSubmitResult({ score, attemptNumber });
+    setQuizSubmitting(false);
+
+    // Marcar sección como completada automáticamente
+    await supabase.from("student_section_progress").upsert(
+      { student_id: session.user.id, section_id: currentSection!.id },
+      { onConflict: "student_id,section_id" }
+    );
+    setCompletedSet((prev) => new Set(prev).add(currentSection!.id));
+    setMsg(null);
+  }
+
+  async function submitAutoEval(activityId: number) {
+    if (!session) return;
+    const act = autoEvalActivities.find((a) => a.id === activityId);
+    if (!act) return;
+    const scores = autoEvalScores[activityId] ?? [];
+    if (scores.some((s) => s === 0)) {
+      setMsg("Califica todos los indicadores antes de enviar.");
+      return;
+    }
+
+    setAutoEvalSubmitting(true);
+    const validScores = scores.map((s) => Math.max(1, Math.min(5, s)));
+    const avg = validScores.reduce((a, b) => a + b, 0) / validScores.length;
+    const finalScore = parseFloat(((avg / 5) * 5).toFixed(2)); // sobre 5 pts
+
+    const { error } = await supabase.from("auto_eval_responses").upsert({
+      activity_id: activityId,
+      student_id: session.user.id,
+      scores: validScores,
+      average_score: parseFloat(avg.toFixed(2)),
+      final_score: finalScore,
+      submitted_at: new Date().toISOString(),
+    }, { onConflict: "activity_id,student_id" });
+
+    if (error) { setAutoEvalSubmitting(false); setMsg("Error guardando autoevaluación: " + error.message); return; }
+
+    // Intentar copiar al module_grades (puede fallar silenciosamente por RLS — el registro
+    // principal usa auto_eval_responses como fuente de verdad si esto falla)
+    const field = act.dimension === "auto_ser" ? "auto_ser" : "auto_decidir";
+    const { error: mgErr } = await supabase.from("module_grades").upsert({
+      student_id: session.user.id,
+      module_id: mid,
+      [field]: finalScore,
+    }, { onConflict: "student_id,module_id" });
+    if (mgErr) console.warn("module_grades no actualizado (sin permisos RLS):", mgErr.message);
+
+    setAutoEvalSubmitted((prev) => ({ ...prev, [activityId]: true }));
+    setAutoEvalSubmitting(false);
+    setMsg(null);
   }
 
   function toggleLesson(id: number) {
@@ -554,69 +803,101 @@ export default function StudentModule() {
     }
 
     if (s.kind === "quiz") {
-      const question = getText(obj, "question");
-      const options = Array.isArray(obj.options)
-        ? (obj.options as unknown[])
-        : [];
-      const ans = getNum(obj, "answer");
-      const answer = Number.isFinite(ans) ? ans : null;
+      if (!realQuizData) {
+        return <div className="text-slate-400 animate-pulse">Cargando quiz...</div>;
+      }
+
+      const blocked = realQuizData.attemptsDone >= realQuizData.maxAttempts;
 
       return (
-        <div className="space-y-3">
-          <div className="text-sm text-slate-400">Quiz (demo)</div>
-          <div className="font-semibold text-slate-100">
-            {question || "Pregunta"}
+        <div className="space-y-4">
+          {/* Encabezado del quiz */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="text-sm font-semibold text-teal-400 bg-teal-500/10 border border-teal-500/30 px-3 py-1 rounded-full">
+              📋 Quiz — Dimensión Saber
+            </span>
+            <span className="text-xs text-slate-400">
+              Intentos: {realQuizData.attemptsDone}/{realQuizData.maxAttempts}
+              {realQuizData.bestScore !== null && ` · Mejor nota: ${realQuizData.bestScore}%`}
+            </span>
           </div>
 
-          <div className="space-y-2">
-            {options.map((opt, i) => {
-              const text = typeof opt === "string" ? opt : JSON.stringify(opt);
-              const checked = quizSelected === i;
-              return (
+          {/* Resultado del último intento */}
+          {quizSubmitResult && (
+            <div className={`rounded-xl p-4 border text-center ${
+              quizSubmitResult.score >= 51
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                : "bg-red-500/10 border-red-500/30 text-red-300"
+            }`}>
+              <div className="text-2xl font-bold">{quizSubmitResult.score}%</div>
+              <div className="text-sm mt-1">
+                {quizSubmitResult.score >= 51 ? "¡Aprobado!" : "No aprobado"}
+                {" · Intento "}{quizSubmitResult.attemptNumber} de {realQuizData.maxAttempts}
+              </div>
+              {realQuizData.attemptsDone < realQuizData.maxAttempts && (
                 <button
-                  key={i}
-                  type="button"
-                  className={
-                    "w-full text-left rounded-xl border border-slate-800 px-3 py-2 hover:bg-slate-900 " +
-                    (checked ? "ring-2 ring-white" : "")
-                  }
-                  onClick={() => {
-                    setQuizSelected(i);
-                    setQuizFeedback(null);
-                  }}
+                  className="mt-3 text-xs underline text-slate-400 hover:text-white"
+                  onClick={() => { setQuizSubmitResult(null); setRealQuizAnswers({}); }}
                 >
-                  <span className="text-slate-200">
-                    {String.fromCharCode(65 + i)}. {text}
-                  </span>
+                  Intentar de nuevo
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="rounded-xl px-3 py-2 bg-white text-black disabled:opacity-50"
-              disabled={quizSelected === null}
-              onClick={() => {
-                if (answer === null) {
-                  setQuizFeedback(
-                    "Este quiz no tiene respuesta configurada (demo).",
-                  );
-                } else if (quizSelected === answer) {
-                  setQuizFeedback("✅ Correcto");
-                } else {
-                  setQuizFeedback("❌ Incorrecto");
-                }
-              }}
-            >
-              Revisar
-            </button>
-
-            <div className="text-sm text-slate-300 flex items-center">
-              {quizFeedback ?? ""}
+              )}
             </div>
-          </div>
+          )}
+
+          {/* Preguntas — ocultas si ya hay resultado o bloqueado */}
+          {!quizSubmitResult && !blocked && (
+            <div className="space-y-5">
+              {realQuizData.questions.map((q, qi) => (
+                <div key={q.id} className="space-y-2">
+                  <div className="font-medium text-slate-100">
+                    {qi + 1}. {q.question}
+                  </div>
+                  <div className="space-y-1.5">
+                    {q.options.map((opt) => {
+                      const selected = realQuizAnswers[q.id] === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`w-full text-left rounded-xl border px-4 py-2.5 text-sm transition-all ${
+                            selected
+                              ? "bg-teal-500/20 border-teal-500/50 text-teal-200"
+                              : "border-slate-700 hover:bg-slate-800/60 text-slate-300"
+                          }`}
+                          onClick={() =>
+                            setRealQuizAnswers((prev) => ({ ...prev, [q.id]: opt.id }))
+                          }
+                        >
+                          {opt.option_text}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                disabled={quizSubmitting || Object.keys(realQuizAnswers).length < realQuizData.questions.length}
+                className="w-full rounded-xl py-3 font-semibold text-sm bg-teal-600 hover:bg-teal-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                onClick={submitQuiz}
+              >
+                {quizSubmitting ? "Enviando..." : "Enviar respuestas"}
+              </button>
+            </div>
+          )}
+
+          {/* Bloqueado */}
+          {blocked && !quizSubmitResult && (
+            <div className="rounded-xl bg-slate-800/50 border border-slate-700 p-4 text-center text-slate-400 text-sm">
+              Has agotado los {realQuizData.maxAttempts} intentos permitidos.
+              {realQuizData.bestScore !== null && (
+                <div className="mt-1 font-semibold text-slate-300">
+                  Mejor nota registrada: {realQuizData.bestScore}%
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -761,8 +1042,10 @@ export default function StudentModule() {
                                 }`}
                                 onClick={() => {
                                   setCurrentSectionId(s.id);
-                                  setQuizSelected(null);
-                                  setQuizFeedback(null);
+                                  setShowAutoEval(false);
+                                  setRealQuizData(null);
+                                  setRealQuizAnswers({});
+                                  setQuizSubmitResult(null);
                                 }}
                               >
                                 <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs shrink-0 ${
@@ -783,17 +1066,121 @@ export default function StudentModule() {
                 })}
             </div>
           </div>
+
+          {/* Botón autoevaluación en sidebar */}
+          {canFinal && autoEvalActivities.length > 0 && (
+            <div className="pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  showAutoEval
+                    ? "bg-violet-600/20 text-violet-300 border border-violet-500/30"
+                    : "hover:bg-slate-800/50 text-slate-300 border border-transparent"
+                }`}
+                onClick={() => setShowAutoEval(true)}
+              >
+                <span>📋</span>
+                <span>Autoevaluación</span>
+                {Object.values(autoEvalSubmitted).every(Boolean) && (
+                  <span className="ml-auto text-emerald-400 text-xs">✓</span>
+                )}
+              </button>
+            </div>
+          )}
         </aside>
 
         {/* Contenido principal */}
         <section className="flex-1 min-w-0 bg-slate-950 rounded-2xl border border-slate-800 p-4 sm:p-6 space-y-4">
           {msg && (
-            <pre className="text-sm bg-slate-900 border border-slate-800 rounded-xl p-3 whitespace-pre-wrap">
+            <div className="text-sm bg-slate-900 border border-slate-800 rounded-xl p-3 text-slate-300">
               {msg}
-            </pre>
+            </div>
           )}
 
-          {!currentSection ? (
+          {/* Panel de autoevaluación */}
+          {showAutoEval ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xl font-bold">Autoevaluación del Módulo</h2>
+                <button
+                  className="text-sm text-slate-400 hover:text-white"
+                  onClick={() => setShowAutoEval(false)}
+                >
+                  ← Volver al contenido
+                </button>
+              </div>
+              <p className="text-sm text-slate-400">
+                Valora cada indicador según la escala: 1 = Nunca · 2 = Rara vez · 3 = A veces · 4 = Casi siempre · 5 = Siempre
+              </p>
+
+              {autoEvalActivities.map((act) => {
+                const submitted = autoEvalSubmitted[act.id];
+                const scores = autoEvalScores[act.id] ?? [];
+                const dimLabel = act.dimension === "auto_ser" ? "Dimensión SER" : "Dimensión DECIDIR";
+                const dimColor = act.dimension === "auto_ser" ? "text-sky-400" : "text-violet-400";
+
+                return (
+                  <div key={act.id} className="rounded-xl border border-slate-700 bg-slate-900/50 p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className={`font-semibold ${dimColor}`}>{dimLabel}</h3>
+                      {submitted && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">✓ Enviado</span>
+                          <button
+                            type="button"
+                            className="text-xs text-slate-400 hover:text-white underline"
+                            onClick={() => setAutoEvalSubmitted((prev) => ({ ...prev, [act.id]: false }))}
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {act.indicators.map((indicator, idx) => (
+                      <div key={idx} className="space-y-2">
+                        <p className="text-sm text-slate-300">{idx + 1}. {indicator}</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {[1, 2, 3, 4, 5].map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              disabled={submitted}
+                              className={`w-10 h-10 rounded-lg text-sm font-bold border transition-all ${
+                                scores[idx] === val
+                                  ? "bg-violet-600 border-violet-500 text-white"
+                                  : "border-slate-700 text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed"
+                              }`}
+                              onClick={() =>
+                                setAutoEvalScores((prev) => {
+                                  const arr = [...(prev[act.id] ?? act.indicators.map(() => 0))];
+                                  arr[idx] = val;
+                                  return { ...prev, [act.id]: arr };
+                                })
+                              }
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    {!submitted && (
+                      <button
+                        type="button"
+                        disabled={autoEvalSubmitting || scores.some((s) => s === 0)}
+                        className="w-full rounded-xl py-2.5 text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        onClick={() => submitAutoEval(act.id)}
+                      >
+                        {autoEvalSubmitting ? "Guardando..." : "Enviar autoevaluación"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : !currentSection ? (
             <div className="text-slate-400">
               Este módulo aún no tiene secciones.
             </div>
@@ -877,6 +1264,7 @@ export default function StudentModule() {
             </>
           )}
         </section>
+
       </div>
     </div>
   );

@@ -42,17 +42,33 @@ type ContentJson = {
   originalUrl?: string;
 };
 
+type SectionDimension = "hacer_proceso" | "hacer_producto" | "saber" | "auto_ser" | "auto_decidir";
+
 type Section = {
   id: number;
   lesson_id: number;
   title: string;
-  kind: "text" | "video" | "image" | "link" | "html" | "drive";
+  kind: "text" | "video" | "image" | "link" | "html" | "drive" | "quiz" | "autoevaluacion";
   content_json: ContentJson;
   sort_order: number;
   is_active: boolean;
+  dimension: SectionDimension;
 };
 
-type SectionKind = "text" | "video" | "image" | "link" | "html" | "drive";
+type SectionKind = "text" | "video" | "image" | "link" | "html" | "drive" | "quiz" | "autoevaluacion";
+
+type QuizOption = {
+  id?: number;
+  option_text: string;
+  is_correct: boolean;
+};
+
+type QuizQuestion = {
+  id?: number;
+  question: string;
+  sort_order: number;
+  options: QuizOption[];
+};
 
 // ========== ESTILOS MODO OSCURO ==========
 const styles = {
@@ -225,6 +241,7 @@ const KIND_COLORS: Record<string, { bg: string; color: string }> = {
   link: { bg: "rgba(168, 85, 247, 0.2)", color: "#d8b4fe" },
   html: { bg: "rgba(251, 146, 60, 0.2)", color: "#fed7aa" },
   drive: { bg: "rgba(234, 179, 8, 0.2)", color: "#fde047" },
+  quiz: { bg: "rgba(20, 184, 166, 0.2)", color: "#5eead4" },
 };
 
 const KIND_LABELS: Record<string, string> = {
@@ -234,6 +251,23 @@ const KIND_LABELS: Record<string, string> = {
   link: "🔗 Enlace",
   html: "💻 HTML",
   drive: "📁 Google Drive",
+  quiz: "📋 Quiz",
+};
+
+const DIMENSION_LABELS: Record<SectionDimension, string> = {
+  hacer_proceso: "Hacer (Proceso)",
+  hacer_producto: "Hacer (Producto)",
+  saber: "Saber",
+  auto_ser: "Autoevaluación SER",
+  auto_decidir: "Autoevaluación DECIDIR",
+};
+
+const DIMENSION_COLORS: Record<SectionDimension, { bg: string; color: string }> = {
+  hacer_proceso: { bg: "rgba(59, 130, 246, 0.15)", color: "#7dd3fc" },
+  hacer_producto: { bg: "rgba(168, 85, 247, 0.15)", color: "#c4b5fd" },
+  saber: { bg: "rgba(16, 185, 129, 0.15)", color: "#6ee7b7" },
+  auto_ser: { bg: "rgba(236, 72, 153, 0.15)", color: "#f9a8d4" },
+  auto_decidir: { bg: "rgba(245, 158, 11, 0.15)", color: "#fcd34d" },
 };
 
 // Cache key para este componente
@@ -307,7 +341,24 @@ export default function TeacherContentManager() {
   const [sectionTitle, setSectionTitle] = useState("");
   const [sectionKind, setSectionKind] = useState<SectionKind>("text");
   const [sectionContent, setSectionContent] = useState("");
+  const [sectionDimension, setSectionDimension] = useState<SectionDimension>("hacer_proceso");
   const [savingSection, setSavingSection] = useState(false);
+
+  // Estado quiz builder
+  const [quizMaxAttempts, setQuizMaxAttempts] = useState(2);
+  const [autoIndicators, setAutoIndicators] = useState<string[]>([
+    "Cumple con responsabilidad y puntualidad",
+    "Respeta las normas del aula/taller",
+    "Trabaja en equipo con respeto",
+    "Demuestra honestidad en su trabajo",
+    "Muestra actitud positiva hacia el aprendizaje",
+  ]);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([
+    { question: "", sort_order: 0, options: [
+      { option_text: "", is_correct: true },
+      { option_text: "", is_correct: false },
+    ]},
+  ]);
 
   // Flag para evitar recargas innecesarias
   const [profileLoaded, setProfileLoaded] = useState(
@@ -482,7 +533,7 @@ export default function TeacherContentManager() {
       const { data, error } = await supabase
         .from("lesson_sections")
         .select(
-          "id, lesson_id, title, kind, content_json, sort_order, is_active",
+          "id, lesson_id, title, kind, content_json, sort_order, is_active, dimension",
         )
         .eq("lesson_id", lessonId)
         .order("sort_order");
@@ -653,32 +704,100 @@ export default function TeacherContentManager() {
   }
 
   // ========== FUNCIONES SECCIONES ==========
+  function defaultQuizQuestions(): QuizQuestion[] {
+    return [
+      {
+        question: "",
+        sort_order: 0,
+        options: [
+          { option_text: "", is_correct: true },
+          { option_text: "", is_correct: false },
+        ],
+      },
+    ];
+  }
+
   function openCreateSection() {
     setEditingSection(null);
     setSectionTitle("");
     setSectionKind("text");
     setSectionContent("");
+    setSectionDimension("hacer_proceso");
+    setQuizQuestions(defaultQuizQuestions());
     setShowSectionModal(true);
   }
 
-  function openEditSection(section: Section) {
+  async function openEditSection(section: Section) {
     setEditingSection(section);
     setSectionTitle(section.title);
     setSectionKind(section.kind);
+    setSectionDimension((section.dimension as SectionDimension) ?? "hacer_proceso");
 
-    const content = section.content_json;
-    if (section.kind === "text") {
-      setSectionContent(content?.text ?? "");
-    } else if (
-      section.kind === "video" ||
-      section.kind === "image" ||
-      section.kind === "link"
-    ) {
-      setSectionContent(content?.url ?? "");
-    } else if (section.kind === "html") {
-      setSectionContent(content?.html ?? "");
-    } else if (section.kind === "drive") {
-      setSectionContent(content?.originalUrl ?? "");
+    if (section.kind === "autoevaluacion") {
+      const indicators = (section.content_json as { indicators?: string[] }).indicators ?? [];
+      setAutoIndicators(indicators.length > 0 ? indicators : [
+        "Cumple con responsabilidad y puntualidad",
+        "Respeta las normas del aula/taller",
+        "Trabaja en equipo con respeto",
+        "Demuestra honestidad en su trabajo",
+        "Muestra actitud positiva hacia el aprendizaje",
+      ]);
+      setSectionContent("");
+      setQuizQuestions(defaultQuizQuestions());
+      setShowSectionModal(true);
+      return;
+    }
+
+    if (section.kind === "quiz") {
+      // Cargar preguntas y opciones del quiz desde BD
+      const { data: quizData } = await supabase
+        .from("eval_quizzes")
+        .select("id, max_attempts")
+        .eq("section_id", section.id)
+        .single();
+      if (quizData) {
+        setQuizMaxAttempts(quizData.max_attempts ?? 2);
+        const { data: qData } = await supabase
+          .from("eval_quiz_questions")
+          .select("id, question, sort_order, eval_quiz_options(id, option_text, is_correct)")
+          .eq("quiz_id", quizData.id)
+          .order("sort_order");
+        if (qData && qData.length > 0) {
+          setQuizQuestions(
+            qData.map((q) => ({
+              id: q.id,
+              question: q.question,
+              sort_order: q.sort_order,
+              options: ((q.eval_quiz_options ?? []) as { id: number; option_text: string; is_correct: boolean }[]).map((o) => ({
+                id: o.id,
+                option_text: o.option_text,
+                is_correct: o.is_correct,
+              })),
+            }))
+          );
+        } else {
+          setQuizQuestions(defaultQuizQuestions());
+        }
+      } else {
+        setQuizQuestions(defaultQuizQuestions());
+      }
+      setSectionContent("");
+    } else {
+      setQuizQuestions(defaultQuizQuestions());
+      const content = section.content_json;
+      if (section.kind === "text") {
+        setSectionContent(content?.text ?? "");
+      } else if (
+        section.kind === "video" ||
+        section.kind === "image" ||
+        section.kind === "link"
+      ) {
+        setSectionContent(content?.url ?? "");
+      } else if (section.kind === "html") {
+        setSectionContent(content?.html ?? "");
+      } else if (section.kind === "drive") {
+        setSectionContent(content?.originalUrl ?? "");
+      }
     }
 
     setShowSectionModal(true);
@@ -690,6 +809,82 @@ export default function TeacherContentManager() {
     setSectionTitle("");
     setSectionKind("text");
     setSectionContent("");
+    setSectionDimension("hacer_proceso");
+    setQuizMaxAttempts(2);
+    setAutoIndicators([
+      "Cumple con responsabilidad y puntualidad",
+      "Respeta las normas del aula/taller",
+      "Trabaja en equipo con respeto",
+      "Demuestra honestidad en su trabajo",
+      "Muestra actitud positiva hacia el aprendizaje",
+    ]);
+    setQuizQuestions(defaultQuizQuestions());
+  }
+
+  async function saveQuizData(sectionId: number) {
+    // Validar que haya al menos una pregunta con texto y exactamente una opción correcta
+    for (let qi = 0; qi < quizQuestions.length; qi++) {
+      const q = quizQuestions[qi];
+      if (!q.question.trim()) {
+        setMsg(`La pregunta ${qi + 1} no tiene texto`);
+        return false;
+      }
+      if (q.options.length < 2) {
+        setMsg(`La pregunta ${qi + 1} necesita al menos 2 opciones`);
+        return false;
+      }
+      const correctCount = q.options.filter((o) => o.is_correct).length;
+      if (correctCount !== 1) {
+        setMsg(`La pregunta ${qi + 1} debe tener exactamente 1 respuesta correcta`);
+        return false;
+      }
+      for (const o of q.options) {
+        if (!o.option_text.trim()) {
+          setMsg(`Hay opciones vacías en la pregunta ${qi + 1}`);
+          return false;
+        }
+      }
+    }
+
+    // Upsert quiz
+    const { data: quizData, error: quizErr } = await supabase
+      .from("eval_quizzes")
+      .upsert({ section_id: sectionId, max_attempts: quizMaxAttempts }, { onConflict: "section_id" })
+      .select("id")
+      .single();
+    if (quizErr || !quizData) {
+      setMsg("Error guardando quiz: " + (quizErr?.message ?? ""));
+      return false;
+    }
+    const quizId = quizData.id;
+
+    // Borrar preguntas anteriores (cascade borrará opciones)
+    await supabase.from("eval_quiz_questions").delete().eq("quiz_id", quizId);
+
+    // Insertar preguntas + opciones
+    for (let qi = 0; qi < quizQuestions.length; qi++) {
+      const q = quizQuestions[qi];
+      const { data: qRow, error: qErr } = await supabase
+        .from("eval_quiz_questions")
+        .insert({ quiz_id: quizId, question: q.question.trim(), sort_order: qi })
+        .select("id")
+        .single();
+      if (qErr || !qRow) {
+        setMsg("Error guardando pregunta: " + (qErr?.message ?? ""));
+        return false;
+      }
+      const optRows = q.options.map((o) => ({
+        question_id: qRow.id,
+        option_text: o.option_text.trim(),
+        is_correct: o.is_correct,
+      }));
+      const { error: optErr } = await supabase.from("eval_quiz_options").insert(optRows);
+      if (optErr) {
+        setMsg("Error guardando opciones: " + optErr.message);
+        return false;
+      }
+    }
+    return true;
   }
 
   async function saveSection() {
@@ -701,45 +896,36 @@ export default function TeacherContentManager() {
       return;
     }
 
+    // La dimensión Saber fuerza quiz; auto_ser/auto_decidir fuerzan autoevaluacion
+    const effectiveKind: SectionKind =
+      sectionDimension === "saber" ? "quiz" :
+      (sectionDimension === "auto_ser" || sectionDimension === "auto_decidir") ? "autoevaluacion" :
+      sectionKind;
+
     let content_json: ContentJson = {};
     const content = sectionContent.trim();
 
-    if (sectionKind === "text") {
-      if (!content) {
-        setMsg("El contenido de texto es obligatorio");
-        return;
-      }
+    if (effectiveKind === "autoevaluacion") {
+      content_json = { indicators: autoIndicators.filter((i) => i.trim() !== "") } as unknown as ContentJson;
+    } else if (effectiveKind === "quiz") {
+      content_json = {};
+    } else if (effectiveKind === "text") {
+      if (!content) { setMsg("El contenido de texto es obligatorio"); return; }
       content_json = { text: content };
-    } else if (sectionKind === "video") {
-      if (!content) {
-        setMsg("La URL del video es obligatoria");
-        return;
-      }
+    } else if (effectiveKind === "video") {
+      if (!content) { setMsg("La URL del video es obligatoria"); return; }
       content_json = { url: content, title };
-    } else if (sectionKind === "image") {
-      if (!content) {
-        setMsg("La URL de la imagen es obligatoria");
-        return;
-      }
+    } else if (effectiveKind === "image") {
+      if (!content) { setMsg("La URL de la imagen es obligatoria"); return; }
       content_json = { url: content, alt: title };
-    } else if (sectionKind === "link") {
-      if (!content) {
-        setMsg("La URL del enlace es obligatoria");
-        return;
-      }
+    } else if (effectiveKind === "link") {
+      if (!content) { setMsg("La URL del enlace es obligatoria"); return; }
       content_json = { url: content, label: title };
-    } else if (sectionKind === "html") {
-      if (!content) {
-        setMsg("El código HTML es obligatorio");
-        return;
-      }
+    } else if (effectiveKind === "html") {
+      if (!content) { setMsg("El código HTML es obligatorio"); return; }
       content_json = { html: content };
-    } else if (sectionKind === "drive") {
-      if (!content) {
-        setMsg("El link de Google Drive es obligatorio");
-        return;
-      }
-      // Extraer el ID del archivo de Drive
+    } else if (effectiveKind === "drive") {
+      if (!content) { setMsg("El link de Google Drive es obligatorio"); return; }
       const drivePatterns = [
         /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
         /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
@@ -748,58 +934,82 @@ export default function TeacherContentManager() {
       let fileId: string | null = null;
       for (const pattern of drivePatterns) {
         const match = content.match(pattern);
-        if (match) {
-          fileId = match[1];
-          break;
-        }
+        if (match) { fileId = match[1]; break; }
       }
-      if (!fileId) {
-        setMsg("El link no parece ser de Google Drive válido");
-        return;
-      }
+      if (!fileId) { setMsg("El link no parece ser de Google Drive válido"); return; }
       content_json = { driveId: fileId, originalUrl: content };
     }
 
     setSavingSection(true);
 
     if (editingSection) {
-      // Al editar, solo actualizamos título, tipo y contenido, NO el orden
       const { error } = await supabase
         .from("lesson_sections")
-        .update({
-          title,
-          kind: sectionKind,
-          content_json,
-        })
+        .update({ title, kind: effectiveKind, content_json, dimension: sectionDimension })
         .eq("id", editingSection.id);
 
-      setSavingSection(false);
-      if (error) {
-        setMsg("Error actualizando: " + error.message);
-        return;
+      if (error) { setSavingSection(false); setMsg("Error actualizando: " + error.message); return; }
+
+      if (effectiveKind === "quiz") {
+        const ok = await saveQuizData(editingSection.id);
+        if (!ok) { setSavingSection(false); return; }
+      } else if (effectiveKind === "autoevaluacion" && selectedLesson) {
+        // Sync to auto_eval_activities for student access
+        const moduleId = lessons.find((l) => l.id === selectedLesson.id)?.module_id;
+        if (moduleId) {
+          await supabase.from("auto_eval_activities").upsert({
+            module_id: moduleId,
+            dimension: sectionDimension,
+            indicators: autoIndicators.filter((i) => i.trim() !== ""),
+          }, { onConflict: "module_id,dimension" });
+        }
       }
+
+      setSavingSection(false);
       setMsg("✅ Sección actualizada");
     } else {
-      // Al crear, usamos el siguiente sort_order disponible
-      const maxOrder =
-        sections.length > 0
-          ? Math.max(...sections.map((s) => s.sort_order))
-          : 0;
+      const { data: maxData } = await supabase
+        .from("lesson_sections")
+        .select("sort_order")
+        .eq("lesson_id", selectedLesson.id)
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const maxOrder = maxData?.sort_order ?? 0;
 
-      const { error } = await supabase.from("lesson_sections").insert({
-        lesson_id: selectedLesson.id,
-        title,
-        kind: sectionKind,
-        content_json,
-        sort_order: maxOrder + 1,
-        is_active: true,
-      });
+      const { data: newSection, error } = await supabase
+        .from("lesson_sections")
+        .insert({
+          lesson_id: selectedLesson.id,
+          title,
+          kind: effectiveKind,
+          content_json,
+          dimension: sectionDimension,
+          sort_order: maxOrder + 1,
+          is_active: true,
+        })
+        .select("id")
+        .single();
+
+      if (error) { setSavingSection(false); setMsg("Error creando: " + error.message); return; }
+
+      if (effectiveKind === "quiz" && newSection) {
+        const ok = await saveQuizData(newSection.id);
+        if (!ok) { setSavingSection(false); return; }
+      }
+
+      if (effectiveKind === "autoevaluacion" && newSection && selectedLesson) {
+        const moduleId = lessons.find((l) => l.id === selectedLesson.id)?.module_id;
+        if (moduleId) {
+          await supabase.from("auto_eval_activities").upsert({
+            module_id: moduleId,
+            dimension: sectionDimension,
+            indicators: autoIndicators.filter((i) => i.trim() !== ""),
+          }, { onConflict: "module_id,dimension" });
+        }
+      }
 
       setSavingSection(false);
-      if (error) {
-        setMsg("Error creando: " + error.message);
-        return;
-      }
       setMsg("✅ Sección creada");
     }
 
@@ -808,7 +1018,7 @@ export default function TeacherContentManager() {
     // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active")
+      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
       .eq("lesson_id", selectedLesson.id)
       .order("sort_order");
     setSections((data as Section[]) ?? []);
@@ -831,7 +1041,7 @@ export default function TeacherContentManager() {
     // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active")
+      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
       .eq("lesson_id", selectedLesson.id)
       .order("sort_order");
     setSections((data as Section[]) ?? []);
@@ -931,7 +1141,7 @@ export default function TeacherContentManager() {
     // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active")
+      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
       .eq("lesson_id", selectedLesson.id)
       .order("sort_order");
     setSections((data as Section[]) ?? []);
@@ -963,7 +1173,7 @@ export default function TeacherContentManager() {
     // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active")
+      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
       .eq("lesson_id", selectedLesson.id)
       .order("sort_order");
     setSections((data as Section[]) ?? []);
@@ -1611,6 +1821,17 @@ export default function TeacherContentManager() {
                             >
                               {KIND_LABELS[section.kind] ?? section.kind}
                             </span>
+                            {section.dimension && (
+                              <span
+                                style={{
+                                  ...styles.kindBadge,
+                                  background: DIMENSION_COLORS[section.dimension as SectionDimension]?.bg ?? "rgba(100,100,100,0.2)",
+                                  color: DIMENSION_COLORS[section.dimension as SectionDimension]?.color ?? "#aaa",
+                                }}
+                              >
+                                {DIMENSION_LABELS[section.dimension as SectionDimension] ?? section.dimension}
+                              </span>
+                            )}
                             <span
                               style={{
                                 fontSize: "14px",
@@ -2073,14 +2294,45 @@ export default function TeacherContentManager() {
                     marginBottom: "6px",
                   }}
                 >
+                  Dimensión evaluativa *
+                </label>
+                <select
+                  style={styles.select}
+                  value={sectionDimension}
+                  onChange={(e) => {
+                    const dim = e.target.value as SectionDimension;
+                    setSectionDimension(dim);
+                    if (dim === "saber") setSectionKind("quiz");
+                    else if (dim === "auto_ser" || dim === "auto_decidir") setSectionKind("autoevaluacion");
+                    else if (sectionKind === "quiz" || sectionKind === "autoevaluacion") setSectionKind("text");
+                  }}
+                >
+                  <option value="hacer_proceso">📘 Hacer (Proceso)</option>
+                  <option value="hacer_producto">📗 Hacer (Producto)</option>
+                  <option value="saber">📋 Saber (Quiz automático)</option>
+                  <option value="auto_ser">⭐ Autoevaluación SER (5 pts)</option>
+                  <option value="auto_decidir">⭐ Autoevaluación DECIDIR (5 pts)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tipo de contenido — solo visible cuando NO es Saber ni auto-eval */}
+            {sectionDimension !== "saber" && sectionDimension !== "auto_ser" && sectionDimension !== "auto_decidir" && (
+              <div style={{ marginBottom: "16px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                    color: "#a1a1aa",
+                    marginBottom: "6px",
+                  }}
+                >
                   Tipo de contenido *
                 </label>
                 <select
                   style={styles.select}
                   value={sectionKind}
-                  onChange={(e) =>
-                    setSectionKind(e.target.value as SectionKind)
-                  }
+                  onChange={(e) => setSectionKind(e.target.value as SectionKind)}
                 >
                   <option value="text">📝 Texto</option>
                   <option value="video">🎬 Video (URL)</option>
@@ -2090,65 +2342,238 @@ export default function TeacherContentManager() {
                   <option value="html">💻 HTML</option>
                 </select>
               </div>
-            </div>
+            )}
 
-            <div style={{ marginBottom: "16px" }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  color: "#a1a1aa",
-                  marginBottom: "6px",
-                }}
-              >
-                {sectionKind === "text" && "Contenido de texto *"}
-                {sectionKind === "video" &&
-                  "URL del video * (YouTube, Vimeo, etc.)"}
-                {sectionKind === "image" &&
-                  "URL de la imagen * (Imgur, Google Drive, etc.)"}
-                {sectionKind === "link" && "URL del enlace *"}
-                {sectionKind === "drive" &&
-                  "Link de Google Drive * (Pegar link compartido)"}
-                {sectionKind === "html" && "Código HTML *"}
-              </label>
-              <textarea
-                style={{
-                  ...styles.textarea,
-                  minHeight:
-                    sectionKind === "text" || sectionKind === "html"
-                      ? "200px"
-                      : "80px",
-                  fontFamily: sectionKind === "html" ? "monospace" : "inherit",
-                }}
-                value={sectionContent}
-                onChange={(e) => setSectionContent(e.target.value)}
-                placeholder={
-                  sectionKind === "text"
-                    ? "Escribe el contenido aquí..."
-                    : sectionKind === "video"
-                      ? "https://www.youtube.com/watch?v=..."
-                      : sectionKind === "image"
-                        ? "https://i.imgur.com/..."
-                        : sectionKind === "link"
-                          ? "https://ejemplo.com/recurso"
-                          : sectionKind === "drive"
-                            ? "https://drive.google.com/file/d/.../view?usp=sharing"
-                            : "<div>Tu código HTML aquí</div>"
-                }
-              />
-              {sectionKind === "image" && (
-                <p
+            {/* Contenido de texto / URL — cuando NO es quiz ni auto-eval */}
+            {sectionDimension !== "saber" && sectionDimension !== "auto_ser" && sectionDimension !== "auto_decidir" && (
+              <div style={{ marginBottom: "16px" }}>
+                <label
                   style={{
-                    fontSize: "12px",
-                    color: "#71717a",
-                    marginTop: "8px",
+                    display: "block",
+                    fontSize: "13px",
+                    color: "#a1a1aa",
+                    marginBottom: "6px",
                   }}
                 >
-                  💡 Puedes subir imágenes gratis a imgur.com o imgbb.com y
-                  pegar la URL aquí.
+                  {sectionKind === "text" && "Contenido de texto *"}
+                  {sectionKind === "video" && "URL del video * (YouTube, Vimeo, etc.)"}
+                  {sectionKind === "image" && "URL de la imagen * (Imgur, Google Drive, etc.)"}
+                  {sectionKind === "link" && "URL del enlace *"}
+                  {sectionKind === "drive" && "Link de Google Drive * (Pegar link compartido)"}
+                  {sectionKind === "html" && "Código HTML *"}
+                </label>
+                <textarea
+                  style={{
+                    ...styles.textarea,
+                    minHeight: sectionKind === "text" || sectionKind === "html" ? "200px" : "80px",
+                    fontFamily: sectionKind === "html" ? "monospace" : "inherit",
+                  }}
+                  value={sectionContent}
+                  onChange={(e) => setSectionContent(e.target.value)}
+                  placeholder={
+                    sectionKind === "text"
+                      ? "Escribe el contenido aquí..."
+                      : sectionKind === "video"
+                        ? "https://www.youtube.com/watch?v=..."
+                        : sectionKind === "image"
+                          ? "https://i.imgur.com/..."
+                          : sectionKind === "link"
+                            ? "https://ejemplo.com/recurso"
+                            : sectionKind === "drive"
+                              ? "https://drive.google.com/file/d/.../view?usp=sharing"
+                              : "<div>Tu código HTML aquí</div>"
+                  }
+                />
+                {sectionKind === "image" && (
+                  <p style={{ fontSize: "12px", color: "#71717a", marginTop: "8px" }}>
+                    💡 Puedes subir imágenes gratis a imgur.com o imgbb.com y pegar la URL aquí.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Indicadores de Autoevaluación */}
+            {(sectionDimension === "auto_ser" || sectionDimension === "auto_decidir") && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 13, color: "#a1a1aa", marginBottom: 8 }}>
+                  Indicadores de autoevaluación ({sectionDimension === "auto_ser" ? "SER" : "DECIDIR"}) — 1 punto cada uno
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {autoIndicators.map((ind, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        style={{ ...styles.input, flex: 1 }}
+                        value={ind}
+                        onChange={(e) => {
+                          const next = [...autoIndicators];
+                          next[i] = e.target.value;
+                          setAutoIndicators(next);
+                        }}
+                        placeholder={`Indicador ${i + 1}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setAutoIndicators(autoIndicators.filter((_, j) => j !== i))}
+                        style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setAutoIndicators([...autoIndicators, ""])}
+                    style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, alignSelf: "flex-start" }}
+                  >
+                    + Agregar indicador
+                  </button>
+                </div>
+                <p style={{ color: "#71717a", fontSize: 11, marginTop: 6 }}>
+                  El estudiante calificará cada indicador del 1 al 5. El promedio se convierte a nota sobre 5 puntos.
                 </p>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Quiz builder — solo cuando dimensión es Saber */}
+            {sectionDimension === "saber" && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ marginBottom: "12px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <label style={{ fontSize: "13px", color: "#a1a1aa", whiteSpace: "nowrap" }}>Intentos permitidos:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={quizMaxAttempts}
+                    onChange={(e) => setQuizMaxAttempts(Math.max(1, parseInt(e.target.value) || 1))}
+                    style={{ width: 70, background: "rgba(30,30,30,0.8)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#e4e4e7", padding: "4px 8px", fontSize: 13, textAlign: "center" }}
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <label style={{ fontSize: "13px", color: "#a1a1aa" }}>
+                    Preguntas del Quiz *
+                  </label>
+                  <button
+                    type="button"
+                    style={{ ...styles.btnSecondary, padding: "6px 14px", fontSize: "13px" }}
+                    onClick={() =>
+                      setQuizQuestions((prev) => [
+                        ...prev,
+                        { question: "", sort_order: prev.length, options: [
+                          { option_text: "", is_correct: true },
+                          { option_text: "", is_correct: false },
+                        ]},
+                      ])
+                    }
+                  >
+                    + Pregunta
+                  </button>
+                </div>
+
+                {quizQuestions.map((q, qi) => (
+                  <div
+                    key={qi}
+                    style={{
+                      background: "rgba(20,20,20,0.6)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "8px",
+                      padding: "14px",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "13px", color: "#71717a" }}>Pregunta {qi + 1}</span>
+                      {quizQuestions.length > 1 && (
+                        <button
+                          type="button"
+                          style={{ ...styles.btnDanger, padding: "3px 10px", fontSize: "12px" }}
+                          onClick={() => setQuizQuestions((prev) => prev.filter((_, i) => i !== qi))}
+                        >
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      style={{ ...styles.input, marginBottom: "10px" }}
+                      placeholder="Texto de la pregunta..."
+                      value={q.question}
+                      onChange={(e) =>
+                        setQuizQuestions((prev) =>
+                          prev.map((pq, i) => i === qi ? { ...pq, question: e.target.value } : pq)
+                        )
+                      }
+                    />
+                    <div style={{ fontSize: "12px", color: "#71717a", marginBottom: "6px" }}>
+                      Opciones (marca la correcta):
+                    </div>
+                    {q.options.map((opt, oi) => (
+                      <div key={oi} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                        <input
+                          type="radio"
+                          name={`correct-q${qi}`}
+                          checked={opt.is_correct}
+                          onChange={() =>
+                            setQuizQuestions((prev) =>
+                              prev.map((pq, i) =>
+                                i !== qi ? pq : {
+                                  ...pq,
+                                  options: pq.options.map((o, j) => ({ ...o, is_correct: j === oi })),
+                                }
+                              )
+                            )
+                          }
+                          style={{ accentColor: "#5eead4", flexShrink: 0 }}
+                        />
+                        <input
+                          style={{ ...styles.input, flex: 1 }}
+                          placeholder={`Opción ${oi + 1}...`}
+                          value={opt.option_text}
+                          onChange={(e) =>
+                            setQuizQuestions((prev) =>
+                              prev.map((pq, i) =>
+                                i !== qi ? pq : {
+                                  ...pq,
+                                  options: pq.options.map((o, j) =>
+                                    j === oi ? { ...o, option_text: e.target.value } : o
+                                  ),
+                                }
+                              )
+                            )
+                          }
+                        />
+                        {q.options.length > 2 && (
+                          <button
+                            type="button"
+                            style={{ ...styles.btnDanger, padding: "4px 8px", fontSize: "12px" }}
+                            onClick={() =>
+                              setQuizQuestions((prev) =>
+                                prev.map((pq, i) =>
+                                  i !== qi ? pq : { ...pq, options: pq.options.filter((_, j) => j !== oi) }
+                                )
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      style={{ ...styles.btnSecondary, padding: "4px 12px", fontSize: "12px", marginTop: "4px" }}
+                      onClick={() =>
+                        setQuizQuestions((prev) =>
+                          prev.map((pq, i) =>
+                            i !== qi ? pq : { ...pq, options: [...pq.options, { option_text: "", is_correct: false }] }
+                          )
+                        )
+                      }
+                    >
+                      + Opción
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div
               style={{
