@@ -45,7 +45,6 @@ type RealQuizData = {
 };
 
 type AutoEvalActivity = { id: number; dimension: string; indicators: string[] };
-type AutoEvalResponse = { scores: number[]; average_score: number | null; final_score: number | null };
 
 type ProgressRow = { section_id: number };
 
