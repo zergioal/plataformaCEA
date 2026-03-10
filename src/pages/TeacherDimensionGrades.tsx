@@ -64,6 +64,23 @@ function cellKey(studentId: string, sectionId: number) {
   return `${studentId}_${sectionId}`;
 }
 
+// Ciclo de valores rápidos para HACER PROCESO
+const HP_PRESETS: (number | null)[] = [20, 15, 10, 5, null];
+
+function nextHpValue(current: number | null | undefined): number | null {
+  if (current === null || current === undefined) return 20;
+  const idx = HP_PRESETS.indexOf(current);
+  return idx === -1 ? 20 : HP_PRESETS[(idx + 1) % HP_PRESETS.length];
+}
+
+function hpColor(val: number | null | undefined): string {
+  if (val === 20) return "#4ade80";  // verde
+  if (val === 15) return "#38bdf8";  // azul
+  if (val === 10) return "#fbbf24";  // amarillo
+  if (val === 5)  return "#fb923c";  // naranja
+  return "#475569";                  // gris (vacío)
+}
+
 function calcAvg(scores: (number | null)[], max: number, min: number): number {
   const valid = scores.filter((s) => s !== null) as number[];
   if (valid.length === 0) return min;
@@ -471,6 +488,38 @@ export default function TeacherDimensionGrades() {
                           return (
                             <td key={c.section_id} style={{ ...tdStyle, color: "#6ee7b7" }}>
                               {displayVal}
+                            </td>
+                          );
+                        }
+
+                        // HACER PROCESO: entrada rápida con clic cíclico
+                        if (dim === "hacer_proceso") {
+                          const color = hpColor(val);
+                          return (
+                            <td key={c.section_id} style={tdStyle}>
+                              <button
+                                disabled={isSaving}
+                                title="Clic para cambiar nota"
+                                onClick={() => saveCell(s.id, c.section_id, nextHpValue(val))}
+                                style={{
+                                  width: 44,
+                                  height: 32,
+                                  borderRadius: 6,
+                                  border: `1.5px solid ${color}`,
+                                  background: `${color}22`,
+                                  color,
+                                  fontWeight: 700,
+                                  fontSize: 14,
+                                  cursor: isSaving ? "not-allowed" : "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  transition: "all 0.15s",
+                                  opacity: isSaving ? 0.5 : 1,
+                                } as React.CSSProperties}
+                              >
+                                {val !== null && val !== undefined ? val : "—"}
+                              </button>
                             </td>
                           );
                         }
