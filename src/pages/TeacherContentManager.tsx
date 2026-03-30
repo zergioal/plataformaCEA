@@ -42,20 +42,41 @@ type ContentJson = {
   originalUrl?: string;
 };
 
-type SectionDimension = "hacer_proceso" | "hacer_producto" | "saber" | "auto_ser" | "auto_decidir";
+type SectionDimension =
+  | "hacer_proceso"
+  | "hacer_producto"
+  | "saber"
+  | "auto_ser"
+  | "auto_decidir";
 
 type Section = {
   id: number;
   lesson_id: number;
   title: string;
-  kind: "text" | "video" | "image" | "link" | "html" | "drive" | "quiz" | "autoevaluacion";
+  kind:
+    | "text"
+    | "video"
+    | "image"
+    | "link"
+    | "html"
+    | "drive"
+    | "quiz"
+    | "autoevaluacion";
   content_json: ContentJson;
   sort_order: number;
   is_active: boolean;
   dimension: SectionDimension;
 };
 
-type SectionKind = "text" | "video" | "image" | "link" | "html" | "drive" | "quiz" | "autoevaluacion";
+type SectionKind =
+  | "text"
+  | "video"
+  | "image"
+  | "link"
+  | "html"
+  | "drive"
+  | "quiz"
+  | "autoevaluacion";
 
 type QuizOption = {
   id?: number;
@@ -262,7 +283,10 @@ const DIMENSION_LABELS: Record<SectionDimension, string> = {
   auto_decidir: "Autoevaluación DECIDIR",
 };
 
-const DIMENSION_COLORS: Record<SectionDimension, { bg: string; color: string }> = {
+const DIMENSION_COLORS: Record<
+  SectionDimension,
+  { bg: string; color: string }
+> = {
   hacer_proceso: { bg: "rgba(59, 130, 246, 0.15)", color: "#7dd3fc" },
   hacer_producto: { bg: "rgba(168, 85, 247, 0.15)", color: "#c4b5fd" },
   saber: { bg: "rgba(16, 185, 129, 0.15)", color: "#6ee7b7" },
@@ -341,12 +365,19 @@ export default function TeacherContentManager() {
   const [sectionTitle, setSectionTitle] = useState("");
   const [sectionKind, setSectionKind] = useState<SectionKind>("text");
   const [sectionContent, setSectionContent] = useState("");
-  const [sectionDimension, setSectionDimension] = useState<SectionDimension>("hacer_proceso");
+  const [sectionDimension, setSectionDimension] =
+    useState<SectionDimension>("hacer_proceso");
   const [savingSection, setSavingSection] = useState(false);
   const [saveBtnShake, setSaveBtnShake] = useState(false);
-  const [expandedLessons, setExpandedLessons] = useState<Set<number>>(new Set());
-  const [lessonSectionsMap, setLessonSectionsMap] = useState<Map<number, Section[]>>(new Map());
-  const [loadingAccordion, setLoadingAccordion] = useState<Set<number>>(new Set());
+  const [expandedLessons, setExpandedLessons] = useState<Set<number>>(
+    new Set(),
+  );
+  const [lessonSectionsMap, setLessonSectionsMap] = useState<
+    Map<number, Section[]>
+  >(new Map());
+  const [loadingAccordion, setLoadingAccordion] = useState<Set<number>>(
+    new Set(),
+  );
   function triggerShake() {
     setSaveBtnShake(true);
     setTimeout(() => setSaveBtnShake(false), 600);
@@ -362,10 +393,14 @@ export default function TeacherContentManager() {
     "Muestra actitud positiva hacia el aprendizaje",
   ]);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([
-    { question: "", sort_order: 0, options: [
-      { option_text: "", is_correct: true },
-      { option_text: "", is_correct: false },
-    ]},
+    {
+      question: "",
+      sort_order: 0,
+      options: [
+        { option_text: "", is_correct: true },
+        { option_text: "", is_correct: false },
+      ],
+    },
   ]);
   const [quizErrors, setQuizErrors] = useState<Record<number, string>>({});
 
@@ -729,31 +764,38 @@ export default function TeacherContentManager() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  function openCreateSection() {
-    setEditingSection(null);
-    setSectionTitle("");
-    setSectionKind("text");
-    setSectionContent("");
-    setSectionDimension("hacer_proceso");
-    setQuizQuestions(defaultQuizQuestions());
-    setShowSectionModal(true);
-  }
+  // function openCreateSection() {
+  //   setEditingSection(null);
+  //   setSectionTitle("");
+  //   setSectionKind("text");
+  //   setSectionContent("");
+  //   setSectionDimension("hacer_proceso");
+  //   setQuizQuestions(defaultQuizQuestions());
+  //   setShowSectionModal(true);
+  // }
 
   async function openEditSection(section: Section) {
     setEditingSection(section);
     setSectionTitle(section.title);
     setSectionKind(section.kind);
-    setSectionDimension((section.dimension as SectionDimension) ?? "hacer_proceso");
+    setSectionDimension(
+      (section.dimension as SectionDimension) ?? "hacer_proceso",
+    );
 
     if (section.kind === "autoevaluacion") {
-      const indicators = (section.content_json as { indicators?: string[] }).indicators ?? [];
-      setAutoIndicators(indicators.length > 0 ? indicators : [
-        "Cumple con responsabilidad y puntualidad",
-        "Respeta las normas del aula/taller",
-        "Trabaja en equipo con respeto",
-        "Demuestra honestidad en su trabajo",
-        "Muestra actitud positiva hacia el aprendizaje",
-      ]);
+      const indicators =
+        (section.content_json as { indicators?: string[] }).indicators ?? [];
+      setAutoIndicators(
+        indicators.length > 0
+          ? indicators
+          : [
+              "Cumple con responsabilidad y puntualidad",
+              "Respeta las normas del aula/taller",
+              "Trabaja en equipo con respeto",
+              "Demuestra honestidad en su trabajo",
+              "Muestra actitud positiva hacia el aprendizaje",
+            ],
+      );
       setSectionContent("");
       setQuizQuestions(defaultQuizQuestions());
       setShowSectionModal(true);
@@ -771,7 +813,9 @@ export default function TeacherContentManager() {
         setQuizMaxAttempts(quizData.max_attempts ?? 2);
         const { data: qData } = await supabase
           .from("eval_quiz_questions")
-          .select("id, question, sort_order, eval_quiz_options(id, option_text, is_correct)")
+          .select(
+            "id, question, sort_order, eval_quiz_options(id, option_text, is_correct)",
+          )
           .eq("quiz_id", quizData.id)
           .order("sort_order");
         if (qData && qData.length > 0) {
@@ -780,12 +824,18 @@ export default function TeacherContentManager() {
               id: q.id,
               question: q.question,
               sort_order: q.sort_order,
-              options: ((q.eval_quiz_options ?? []) as { id: number; option_text: string; is_correct: boolean }[]).map((o) => ({
+              options: (
+                (q.eval_quiz_options ?? []) as {
+                  id: number;
+                  option_text: string;
+                  is_correct: boolean;
+                }[]
+              ).map((o) => ({
                 id: o.id,
                 option_text: o.option_text,
                 is_correct: o.is_correct,
               })),
-            }))
+            })),
           );
         } else {
           setQuizQuestions(defaultQuizQuestions());
@@ -868,7 +918,10 @@ export default function TeacherContentManager() {
     // Upsert quiz
     const { data: quizData, error: quizErr } = await supabase
       .from("eval_quizzes")
-      .upsert({ section_id: sectionId, max_attempts: quizMaxAttempts }, { onConflict: "section_id" })
+      .upsert(
+        { section_id: sectionId, max_attempts: quizMaxAttempts },
+        { onConflict: "section_id" },
+      )
       .select("id")
       .single();
     if (quizErr || !quizData) {
@@ -885,7 +938,11 @@ export default function TeacherContentManager() {
       const q = quizQuestions[qi];
       const { data: qRow, error: qErr } = await supabase
         .from("eval_quiz_questions")
-        .insert({ quiz_id: quizId, question: q.question.trim(), sort_order: qi })
+        .insert({
+          quiz_id: quizId,
+          question: q.question.trim(),
+          sort_order: qi,
+        })
         .select("id")
         .single();
       if (qErr || !qRow) {
@@ -897,7 +954,9 @@ export default function TeacherContentManager() {
         option_text: o.option_text.trim(),
         is_correct: o.is_correct,
       }));
-      const { error: optErr } = await supabase.from("eval_quiz_options").insert(optRows);
+      const { error: optErr } = await supabase
+        .from("eval_quiz_options")
+        .insert(optRows);
       if (optErr) {
         setMsg("Error guardando opciones: " + optErr.message);
         return false;
@@ -918,34 +977,62 @@ export default function TeacherContentManager() {
 
     // La dimensión Saber fuerza quiz; auto_ser/auto_decidir fuerzan autoevaluacion
     const effectiveKind: SectionKind =
-      sectionDimension === "saber" ? "quiz" :
-      (sectionDimension === "auto_ser" || sectionDimension === "auto_decidir") ? "autoevaluacion" :
-      sectionKind;
+      sectionDimension === "saber"
+        ? "quiz"
+        : sectionDimension === "auto_ser" || sectionDimension === "auto_decidir"
+          ? "autoevaluacion"
+          : sectionKind;
 
     let content_json: ContentJson = {};
     const content = sectionContent.trim();
 
     if (effectiveKind === "autoevaluacion") {
-      content_json = { indicators: autoIndicators.filter((i) => i.trim() !== "") } as unknown as ContentJson;
+      content_json = {
+        indicators: autoIndicators.filter((i) => i.trim() !== ""),
+      } as unknown as ContentJson;
     } else if (effectiveKind === "quiz") {
       content_json = {};
     } else if (effectiveKind === "text") {
-      if (!content) { setMsg("El contenido de texto es obligatorio"); triggerShake(); return; }
+      if (!content) {
+        setMsg("El contenido de texto es obligatorio");
+        triggerShake();
+        return;
+      }
       content_json = { text: content };
     } else if (effectiveKind === "video") {
-      if (!content) { setMsg("La URL del video es obligatoria"); triggerShake(); return; }
+      if (!content) {
+        setMsg("La URL del video es obligatoria");
+        triggerShake();
+        return;
+      }
       content_json = { url: content, title };
     } else if (effectiveKind === "image") {
-      if (!content) { setMsg("La URL de la imagen es obligatoria"); triggerShake(); return; }
+      if (!content) {
+        setMsg("La URL de la imagen es obligatoria");
+        triggerShake();
+        return;
+      }
       content_json = { url: content, alt: title };
     } else if (effectiveKind === "link") {
-      if (!content) { setMsg("La URL del enlace es obligatoria"); triggerShake(); return; }
+      if (!content) {
+        setMsg("La URL del enlace es obligatoria");
+        triggerShake();
+        return;
+      }
       content_json = { url: content, label: title };
     } else if (effectiveKind === "html") {
-      if (!content) { setMsg("El código HTML es obligatorio"); triggerShake(); return; }
+      if (!content) {
+        setMsg("El código HTML es obligatorio");
+        triggerShake();
+        return;
+      }
       content_json = { html: content };
     } else if (effectiveKind === "drive") {
-      if (!content) { setMsg("El link de Google Drive es obligatorio"); triggerShake(); return; }
+      if (!content) {
+        setMsg("El link de Google Drive es obligatorio");
+        triggerShake();
+        return;
+      }
       const drivePatterns = [
         /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
         /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
@@ -954,9 +1041,16 @@ export default function TeacherContentManager() {
       let fileId: string | null = null;
       for (const pattern of drivePatterns) {
         const match = content.match(pattern);
-        if (match) { fileId = match[1]; break; }
+        if (match) {
+          fileId = match[1];
+          break;
+        }
       }
-      if (!fileId) { setMsg("El link no parece ser de Google Drive válido"); triggerShake(); return; }
+      if (!fileId) {
+        setMsg("El link no parece ser de Google Drive válido");
+        triggerShake();
+        return;
+      }
       content_json = { driveId: fileId, originalUrl: content };
     }
 
@@ -965,23 +1059,40 @@ export default function TeacherContentManager() {
     if (editingSection) {
       const { error } = await supabase
         .from("lesson_sections")
-        .update({ title, kind: effectiveKind, content_json, dimension: sectionDimension })
+        .update({
+          title,
+          kind: effectiveKind,
+          content_json,
+          dimension: sectionDimension,
+        })
         .eq("id", editingSection.id);
 
-      if (error) { setSavingSection(false); setMsg("Error actualizando: " + error.message); return; }
+      if (error) {
+        setSavingSection(false);
+        setMsg("Error actualizando: " + error.message);
+        return;
+      }
 
       if (effectiveKind === "quiz") {
         const ok = await saveQuizData(editingSection.id);
-        if (!ok) { setSavingSection(false); return; }
+        if (!ok) {
+          setSavingSection(false);
+          return;
+        }
       } else if (effectiveKind === "autoevaluacion" && selectedLesson) {
         // Sync to auto_eval_activities for student access
-        const moduleId = lessons.find((l) => l.id === selectedLesson.id)?.module_id;
+        const moduleId = lessons.find(
+          (l) => l.id === selectedLesson.id,
+        )?.module_id;
         if (moduleId) {
-          await supabase.from("auto_eval_activities").upsert({
-            module_id: moduleId,
-            dimension: sectionDimension,
-            indicators: autoIndicators.filter((i) => i.trim() !== ""),
-          }, { onConflict: "module_id,dimension" });
+          await supabase.from("auto_eval_activities").upsert(
+            {
+              module_id: moduleId,
+              dimension: sectionDimension,
+              indicators: autoIndicators.filter((i) => i.trim() !== ""),
+            },
+            { onConflict: "module_id,dimension" },
+          );
         }
       }
 
@@ -1011,21 +1122,33 @@ export default function TeacherContentManager() {
         .select("id")
         .single();
 
-      if (error) { setSavingSection(false); setMsg("Error creando: " + error.message); return; }
+      if (error) {
+        setSavingSection(false);
+        setMsg("Error creando: " + error.message);
+        return;
+      }
 
       if (effectiveKind === "quiz" && newSection) {
         const ok = await saveQuizData(newSection.id);
-        if (!ok) { setSavingSection(false); return; }
+        if (!ok) {
+          setSavingSection(false);
+          return;
+        }
       }
 
       if (effectiveKind === "autoevaluacion" && newSection && selectedLesson) {
-        const moduleId = lessons.find((l) => l.id === selectedLesson.id)?.module_id;
+        const moduleId = lessons.find(
+          (l) => l.id === selectedLesson.id,
+        )?.module_id;
         if (moduleId) {
-          await supabase.from("auto_eval_activities").upsert({
-            module_id: moduleId,
-            dimension: sectionDimension,
-            indicators: autoIndicators.filter((i) => i.trim() !== ""),
-          }, { onConflict: "module_id,dimension" });
+          await supabase.from("auto_eval_activities").upsert(
+            {
+              module_id: moduleId,
+              dimension: sectionDimension,
+              indicators: autoIndicators.filter((i) => i.trim() !== ""),
+            },
+            { onConflict: "module_id,dimension" },
+          );
         }
       }
 
@@ -1038,7 +1161,9 @@ export default function TeacherContentManager() {
     // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+      .select(
+        "id, lesson_id, title, kind, content_json, sort_order, is_active, dimension",
+      )
       .eq("lesson_id", selectedLesson.id)
       .order("sort_order");
     refreshAccordionLesson(selectedLesson.id, (data as Section[]) ?? []);
@@ -1061,7 +1186,9 @@ export default function TeacherContentManager() {
 
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+      .select(
+        "id, lesson_id, title, kind, content_json, sort_order, is_active, dimension",
+      )
       .eq("lesson_id", lesson.id)
       .order("sort_order");
     refreshAccordionLesson(lesson.id, (data as Section[]) ?? []);
@@ -1135,7 +1262,12 @@ export default function TeacherContentManager() {
     setLessons((data as Lesson[]) ?? []);
   }
 
-  async function moveSectionUp(section: Section, currentIndex: number, sectionsArr?: Section[], lessonOverride?: Lesson) {
+  async function moveSectionUp(
+    section: Section,
+    currentIndex: number,
+    sectionsArr?: Section[],
+    lessonOverride?: Lesson,
+  ) {
     const lesson = lessonOverride ?? selectedLesson;
     if (currentIndex === 0 || !lesson) return;
 
@@ -1144,19 +1276,35 @@ export default function TeacherContentManager() {
     const currentOrder = section.sort_order;
     const prevOrder = prevSection.sort_order;
 
-    await supabase.from("lesson_sections").update({ sort_order: -999999 }).eq("id", section.id);
-    await supabase.from("lesson_sections").update({ sort_order: currentOrder }).eq("id", prevSection.id);
-    await supabase.from("lesson_sections").update({ sort_order: prevOrder }).eq("id", section.id);
+    await supabase
+      .from("lesson_sections")
+      .update({ sort_order: -999999 })
+      .eq("id", section.id);
+    await supabase
+      .from("lesson_sections")
+      .update({ sort_order: currentOrder })
+      .eq("id", prevSection.id);
+    await supabase
+      .from("lesson_sections")
+      .update({ sort_order: prevOrder })
+      .eq("id", section.id);
 
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+      .select(
+        "id, lesson_id, title, kind, content_json, sort_order, is_active, dimension",
+      )
       .eq("lesson_id", lesson.id)
       .order("sort_order");
     refreshAccordionLesson(lesson.id, (data as Section[]) ?? []);
   }
 
-  async function moveSectionDown(section: Section, currentIndex: number, sectionsArr?: Section[], lessonOverride?: Lesson) {
+  async function moveSectionDown(
+    section: Section,
+    currentIndex: number,
+    sectionsArr?: Section[],
+    lessonOverride?: Lesson,
+  ) {
     const lesson = lessonOverride ?? selectedLesson;
     const src = sectionsArr ?? sections;
     if (currentIndex === src.length - 1 || !lesson) return;
@@ -1165,13 +1313,24 @@ export default function TeacherContentManager() {
     const currentOrder = section.sort_order;
     const nextOrder = nextSection.sort_order;
 
-    await supabase.from("lesson_sections").update({ sort_order: -999999 }).eq("id", section.id);
-    await supabase.from("lesson_sections").update({ sort_order: currentOrder }).eq("id", nextSection.id);
-    await supabase.from("lesson_sections").update({ sort_order: nextOrder }).eq("id", section.id);
+    await supabase
+      .from("lesson_sections")
+      .update({ sort_order: -999999 })
+      .eq("id", section.id);
+    await supabase
+      .from("lesson_sections")
+      .update({ sort_order: currentOrder })
+      .eq("id", nextSection.id);
+    await supabase
+      .from("lesson_sections")
+      .update({ sort_order: nextOrder })
+      .eq("id", section.id);
 
     const { data } = await supabase
       .from("lesson_sections")
-      .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+      .select(
+        "id, lesson_id, title, kind, content_json, sort_order, is_active, dimension",
+      )
       .eq("lesson_id", lesson.id)
       .order("sort_order");
     refreshAccordionLesson(lesson.id, (data as Section[]) ?? []);
@@ -1199,10 +1358,10 @@ export default function TeacherContentManager() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  function goToSections(lesson: Lesson) {
-    setSelectedLesson(lesson);
-    setView("sections");
-  }
+  // function goToSections(lesson: Lesson) {
+  //   setSelectedLesson(lesson);
+  //   setView("sections");
+  // }
 
   async function toggleLesson(lesson: Lesson) {
     const newExpanded = new Set(expandedLessons);
@@ -1216,12 +1375,20 @@ export default function TeacherContentManager() {
         setLoadingAccordion((prev) => new Set([...prev, lesson.id]));
         const { data } = await supabase
           .from("lesson_sections")
-          .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+          .select(
+            "id, lesson_id, title, kind, content_json, sort_order, is_active, dimension",
+          )
           .eq("lesson_id", lesson.id)
           .eq("is_active", true)
           .order("sort_order");
-        setLessonSectionsMap((prev) => new Map(prev).set(lesson.id, (data as Section[]) ?? []));
-        setLoadingAccordion((prev) => { const s = new Set(prev); s.delete(lesson.id); return s; });
+        setLessonSectionsMap((prev) =>
+          new Map(prev).set(lesson.id, (data as Section[]) ?? []),
+        );
+        setLoadingAccordion((prev) => {
+          const s = new Set(prev);
+          s.delete(lesson.id);
+          return s;
+        });
       }
     }
   }
@@ -1538,26 +1705,73 @@ export default function TeacherContentManager() {
               <div>
                 {modules.map((module, idx) => (
                   <div key={module.id} style={styles.moduleCard}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                      <div style={{ flex: 1 }} onClick={() => goToLessons(module)}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px", cursor: "pointer" }}>
-                          <span style={{ background: "rgba(255,255,255,0.1)", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", color: "#a1a1aa" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "start",
+                      }}
+                    >
+                      <div
+                        style={{ flex: 1 }}
+                        onClick={() => goToLessons(module)}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            marginBottom: "6px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <span
+                            style={{
+                              background: "rgba(255,255,255,0.1)",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              color: "#a1a1aa",
+                            }}
+                          >
                             M{idx + 1}
                           </span>
-                          <span style={{ fontSize: "16px", fontWeight: "600", color: "#93c5fd", textDecoration: "underline", textDecorationColor: "rgba(147,197,253,0.3)" }}>
+                          <span
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: "600",
+                              color: "#93c5fd",
+                              textDecoration: "underline",
+                              textDecorationColor: "rgba(147,197,253,0.3)",
+                            }}
+                          >
                             {module.title}
                           </span>
                         </div>
                         {module.description && (
-                          <p style={{ fontSize: "13px", color: "#71717a", margin: "0 0 0 52px" }}>
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              color: "#71717a",
+                              margin: "0 0 0 52px",
+                            }}
+                          >
                             {module.description}
                           </p>
                         )}
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button
-                          style={{ ...styles.btnSecondary, padding: "8px 14px", fontSize: "13px" }}
-                          onClick={(e) => { e.stopPropagation(); openEditModule(module); }}
+                          style={{
+                            ...styles.btnSecondary,
+                            padding: "8px 14px",
+                            fontSize: "13px",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModule(module);
+                          }}
                         >
                           ✏️ Editar nombre
                         </button>
@@ -1588,8 +1802,14 @@ export default function TeacherContentManager() {
               </h2>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
-                  style={{ ...styles.btnSecondary, padding: "8px 14px", fontSize: "13px" }}
-                  onClick={() => nav(`/teacher/module/${selectedModule.id}/grades`)}
+                  style={{
+                    ...styles.btnSecondary,
+                    padding: "8px 14px",
+                    fontSize: "13px",
+                  }}
+                  onClick={() =>
+                    nav(`/teacher/module/${selectedModule.id}/grades`)
+                  }
                 >
                   📊 Registro
                 </button>
@@ -1628,43 +1848,130 @@ export default function TeacherContentManager() {
                   return (
                     <div key={lesson.id} style={{ marginBottom: "8px" }}>
                       {/* Lesson header card */}
-                      <div style={{ ...styles.lessonCard, marginBottom: 0, borderRadius: isExpanded ? "8px 8px 0 0" : "8px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div
+                        style={{
+                          ...styles.lessonCard,
+                          marginBottom: 0,
+                          borderRadius: isExpanded ? "8px 8px 0 0" : "8px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
                           <div
-                            style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, cursor: "pointer" }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              flex: 1,
+                              cursor: "pointer",
+                            }}
                             onClick={() => toggleLesson(lesson)}
                           >
-                            <span style={{ background: "rgba(255,255,255,0.08)", padding: "6px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "600", color: "#a1a1aa" }}>
+                            <span
+                              style={{
+                                background: "rgba(255,255,255,0.08)",
+                                padding: "6px 12px",
+                                borderRadius: "6px",
+                                fontSize: "13px",
+                                fontWeight: "600",
+                                color: "#a1a1aa",
+                              }}
+                            >
                               {idx + 1}
                             </span>
-                            <span style={{ fontSize: "15px", fontWeight: "500", color: "#e4e4e7" }}>
+                            <span
+                              style={{
+                                fontSize: "15px",
+                                fontWeight: "500",
+                                color: "#e4e4e7",
+                              }}
+                            >
                               {lesson.title}
                             </span>
-                            <span style={{ fontSize: "12px", color: "#52525b" }}>
+                            <span
+                              style={{ fontSize: "12px", color: "#52525b" }}
+                            >
                               {isExpanded ? "▼" : "▶"}
                             </span>
                           </div>
                           <div style={{ display: "flex", gap: "8px" }}>
                             <button
-                              style={{ padding: "8px 12px", fontSize: "16px", fontWeight: "bold", background: idx === 0 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #10b981 0%, #059669 100%)", color: idx === 0 ? "#52525b" : "#fff", border: "none", borderRadius: "8px", cursor: idx === 0 ? "not-allowed" : "pointer", transition: "all 0.2s ease", boxShadow: idx === 0 ? "none" : "0 2px 8px rgba(16,185,129,0.3)" }}
+                              style={{
+                                padding: "8px 12px",
+                                fontSize: "16px",
+                                fontWeight: "bold",
+                                background:
+                                  idx === 0
+                                    ? "rgba(255,255,255,0.05)"
+                                    : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                                color: idx === 0 ? "#52525b" : "#fff",
+                                border: "none",
+                                borderRadius: "8px",
+                                cursor: idx === 0 ? "not-allowed" : "pointer",
+                                transition: "all 0.2s ease",
+                                boxShadow:
+                                  idx === 0
+                                    ? "none"
+                                    : "0 2px 8px rgba(16,185,129,0.3)",
+                              }}
                               onClick={() => moveLessonUp(lesson, idx)}
                               disabled={idx === 0}
                               title="Subir"
-                            >⬆</button>
+                            >
+                              ⬆
+                            </button>
                             <button
-                              style={{ padding: "8px 12px", fontSize: "16px", fontWeight: "bold", background: idx === lessons.length - 1 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)", color: idx === lessons.length - 1 ? "#52525b" : "#fff", border: "none", borderRadius: "8px", cursor: idx === lessons.length - 1 ? "not-allowed" : "pointer", transition: "all 0.2s ease", boxShadow: idx === lessons.length - 1 ? "none" : "0 2px 8px rgba(59,130,246,0.3)" }}
+                              style={{
+                                padding: "8px 12px",
+                                fontSize: "16px",
+                                fontWeight: "bold",
+                                background:
+                                  idx === lessons.length - 1
+                                    ? "rgba(255,255,255,0.05)"
+                                    : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+                                color:
+                                  idx === lessons.length - 1
+                                    ? "#52525b"
+                                    : "#fff",
+                                border: "none",
+                                borderRadius: "8px",
+                                cursor:
+                                  idx === lessons.length - 1
+                                    ? "not-allowed"
+                                    : "pointer",
+                                transition: "all 0.2s ease",
+                                boxShadow:
+                                  idx === lessons.length - 1
+                                    ? "none"
+                                    : "0 2px 8px rgba(59,130,246,0.3)",
+                              }}
                               onClick={() => moveLessonDown(lesson, idx)}
                               disabled={idx === lessons.length - 1}
                               title="Bajar"
-                            >⬇</button>
+                            >
+                              ⬇
+                            </button>
                             <button
-                              style={{ ...styles.btnSecondary, padding: "6px 12px", fontSize: "12px" }}
+                              style={{
+                                ...styles.btnSecondary,
+                                padding: "6px 12px",
+                                fontSize: "12px",
+                              }}
                               onClick={() => openEditLesson(lesson)}
                             >
                               Editar título
                             </button>
                             <button
-                              style={{ ...styles.btnDanger, padding: "6px 12px", fontSize: "12px" }}
+                              style={{
+                                ...styles.btnDanger,
+                                padding: "6px 12px",
+                                fontSize: "12px",
+                              }}
                               onClick={() => deleteLesson(lesson)}
                             >
                               Eliminar
@@ -1675,49 +1982,208 @@ export default function TeacherContentManager() {
 
                       {/* Accordion: sections */}
                       {isExpanded && (
-                        <div style={{ background: "rgba(15,15,20,0.8)", border: "1px solid rgba(255,255,255,0.06)", borderTop: "none", borderRadius: "0 0 8px 8px", padding: "12px 16px" }}>
+                        <div
+                          style={{
+                            background: "rgba(15,15,20,0.8)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                            borderTop: "none",
+                            borderRadius: "0 0 8px 8px",
+                            padding: "12px 16px",
+                          }}
+                        >
                           {isLoadingAccordion ? (
-                            <div style={{ color: "#71717a", padding: "12px", textAlign: "center", fontSize: "13px" }}>Cargando contenidos...</div>
+                            <div
+                              style={{
+                                color: "#71717a",
+                                padding: "12px",
+                                textAlign: "center",
+                                fontSize: "13px",
+                              }}
+                            >
+                              Cargando contenidos...
+                            </div>
                           ) : lessonSects.length === 0 ? (
-                            <div style={{ color: "#52525b", fontSize: "13px", padding: "8px 0", textAlign: "center" }}>Sin contenidos aún</div>
+                            <div
+                              style={{
+                                color: "#52525b",
+                                fontSize: "13px",
+                                padding: "8px 0",
+                                textAlign: "center",
+                              }}
+                            >
+                              Sin contenidos aún
+                            </div>
                           ) : (
                             lessonSects.map((section, sidx) => {
-                              const kindStyle = KIND_COLORS[section.kind] ?? { bg: "rgba(100,100,100,0.2)", color: "#aaa" };
+                              const kindStyle = KIND_COLORS[section.kind] ?? {
+                                bg: "rgba(100,100,100,0.2)",
+                                color: "#aaa",
+                              };
                               return (
-                                <div key={section.id} style={{ ...styles.sectionCard, marginBottom: "8px" }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                                <div
+                                  key={section.id}
+                                  style={{
+                                    ...styles.sectionCard,
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "start",
+                                    }}
+                                  >
                                     <div style={{ flex: 1 }}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                                        <span style={{ ...styles.kindBadge, background: kindStyle.bg, color: kindStyle.color }}>{KIND_LABELS[section.kind] ?? section.kind}</span>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "8px",
+                                          marginBottom: "4px",
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            ...styles.kindBadge,
+                                            background: kindStyle.bg,
+                                            color: kindStyle.color,
+                                          }}
+                                        >
+                                          {KIND_LABELS[section.kind] ??
+                                            section.kind}
+                                        </span>
                                         {section.dimension && (
-                                          <span style={{ ...styles.kindBadge, background: DIMENSION_COLORS[section.dimension as SectionDimension]?.bg ?? "rgba(100,100,100,0.2)", color: DIMENSION_COLORS[section.dimension as SectionDimension]?.color ?? "#aaa" }}>
-                                            {DIMENSION_LABELS[section.dimension as SectionDimension] ?? section.dimension}
+                                          <span
+                                            style={{
+                                              ...styles.kindBadge,
+                                              background:
+                                                DIMENSION_COLORS[
+                                                  section.dimension as SectionDimension
+                                                ]?.bg ??
+                                                "rgba(100,100,100,0.2)",
+                                              color:
+                                                DIMENSION_COLORS[
+                                                  section.dimension as SectionDimension
+                                                ]?.color ?? "#aaa",
+                                            }}
+                                          >
+                                            {DIMENSION_LABELS[
+                                              section.dimension as SectionDimension
+                                            ] ?? section.dimension}
                                           </span>
                                         )}
-                                        <span style={{ fontSize: "13px", fontWeight: "500", color: "#e4e4e7" }}>{section.title}</span>
+                                        <span
+                                          style={{
+                                            fontSize: "13px",
+                                            fontWeight: "500",
+                                            color: "#e4e4e7",
+                                          }}
+                                        >
+                                          {section.title}
+                                        </span>
                                       </div>
                                     </div>
-                                    <div style={{ display: "flex", gap: "6px", marginLeft: "12px" }}>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: "6px",
+                                        marginLeft: "12px",
+                                      }}
+                                    >
                                       <button
-                                        style={{ padding: "5px 10px", fontSize: "14px", fontWeight: "bold", background: sidx === 0 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #10b981 0%, #059669 100%)", color: sidx === 0 ? "#52525b" : "#fff", border: "none", borderRadius: "6px", cursor: sidx === 0 ? "not-allowed" : "pointer" }}
-                                        onClick={() => moveSectionUp(section, sidx, lessonSects, lesson)}
+                                        style={{
+                                          padding: "5px 10px",
+                                          fontSize: "14px",
+                                          fontWeight: "bold",
+                                          background:
+                                            sidx === 0
+                                              ? "rgba(255,255,255,0.05)"
+                                              : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                                          color:
+                                            sidx === 0 ? "#52525b" : "#fff",
+                                          border: "none",
+                                          borderRadius: "6px",
+                                          cursor:
+                                            sidx === 0
+                                              ? "not-allowed"
+                                              : "pointer",
+                                        }}
+                                        onClick={() =>
+                                          moveSectionUp(
+                                            section,
+                                            sidx,
+                                            lessonSects,
+                                            lesson,
+                                          )
+                                        }
                                         disabled={sidx === 0}
                                         title="Subir"
-                                      >⬆</button>
+                                      >
+                                        ⬆
+                                      </button>
                                       <button
-                                        style={{ padding: "5px 10px", fontSize: "14px", fontWeight: "bold", background: sidx === lessonSects.length - 1 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)", color: sidx === lessonSects.length - 1 ? "#52525b" : "#fff", border: "none", borderRadius: "6px", cursor: sidx === lessonSects.length - 1 ? "not-allowed" : "pointer" }}
-                                        onClick={() => moveSectionDown(section, sidx, lessonSects, lesson)}
-                                        disabled={sidx === lessonSects.length - 1}
+                                        style={{
+                                          padding: "5px 10px",
+                                          fontSize: "14px",
+                                          fontWeight: "bold",
+                                          background:
+                                            sidx === lessonSects.length - 1
+                                              ? "rgba(255,255,255,0.05)"
+                                              : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+                                          color:
+                                            sidx === lessonSects.length - 1
+                                              ? "#52525b"
+                                              : "#fff",
+                                          border: "none",
+                                          borderRadius: "6px",
+                                          cursor:
+                                            sidx === lessonSects.length - 1
+                                              ? "not-allowed"
+                                              : "pointer",
+                                        }}
+                                        onClick={() =>
+                                          moveSectionDown(
+                                            section,
+                                            sidx,
+                                            lessonSects,
+                                            lesson,
+                                          )
+                                        }
+                                        disabled={
+                                          sidx === lessonSects.length - 1
+                                        }
                                         title="Bajar"
-                                      >⬇</button>
+                                      >
+                                        ⬇
+                                      </button>
                                       <button
-                                        style={{ ...styles.btnSecondary, padding: "5px 10px", fontSize: "12px" }}
-                                        onClick={() => openEditSectionForLesson(lesson, section)}
-                                      >Editar</button>
+                                        style={{
+                                          ...styles.btnSecondary,
+                                          padding: "5px 10px",
+                                          fontSize: "12px",
+                                        }}
+                                        onClick={() =>
+                                          openEditSectionForLesson(
+                                            lesson,
+                                            section,
+                                          )
+                                        }
+                                      >
+                                        Editar
+                                      </button>
                                       <button
-                                        style={{ ...styles.btnDanger, padding: "5px 10px", fontSize: "12px" }}
-                                        onClick={() => deleteSection(section, lesson)}
-                                      >Eliminar</button>
+                                        style={{
+                                          ...styles.btnDanger,
+                                          padding: "5px 10px",
+                                          fontSize: "12px",
+                                        }}
+                                        onClick={() =>
+                                          deleteSection(section, lesson)
+                                        }
+                                      >
+                                        Eliminar
+                                      </button>
                                     </div>
                                   </div>
                                 </div>
@@ -1726,7 +2192,13 @@ export default function TeacherContentManager() {
                           )}
                           {/* Add content button */}
                           <button
-                            style={{ ...styles.btnSuccess, width: "100%", marginTop: "8px", padding: "8px", fontSize: "13px" }}
+                            style={{
+                              ...styles.btnSuccess,
+                              width: "100%",
+                              marginTop: "8px",
+                              padding: "8px",
+                              fontSize: "13px",
+                            }}
                             onClick={() => openCreateSectionForLesson(lesson)}
                           >
                             + Agregar Contenido
@@ -1740,7 +2212,6 @@ export default function TeacherContentManager() {
             )}
           </section>
         )}
-
       </main>
 
       {/* MODALES */}
@@ -1990,104 +2461,148 @@ export default function TeacherContentManager() {
                     const dim = e.target.value as SectionDimension;
                     setSectionDimension(dim);
                     if (dim === "saber") setSectionKind("quiz");
-                    else if (dim === "auto_ser" || dim === "auto_decidir") setSectionKind("autoevaluacion");
-                    else if (sectionKind === "quiz" || sectionKind === "autoevaluacion") setSectionKind("text");
+                    else if (dim === "auto_ser" || dim === "auto_decidir")
+                      setSectionKind("autoevaluacion");
+                    else if (
+                      sectionKind === "quiz" ||
+                      sectionKind === "autoevaluacion"
+                    )
+                      setSectionKind("text");
                   }}
                 >
                   <option value="hacer_proceso">📘 Hacer (Proceso)</option>
                   <option value="hacer_producto">📗 Hacer (Producto)</option>
                   <option value="saber">📋 Saber (Quiz automático)</option>
-                  <option value="auto_ser">⭐ Autoevaluación SER (5 pts)</option>
-                  <option value="auto_decidir">⭐ Autoevaluación DECIDIR (5 pts)</option>
+                  <option value="auto_ser">
+                    ⭐ Autoevaluación SER (5 pts)
+                  </option>
+                  <option value="auto_decidir">
+                    ⭐ Autoevaluación DECIDIR (5 pts)
+                  </option>
                 </select>
               </div>
             </div>
 
             {/* Tipo de contenido — solo visible cuando NO es Saber ni auto-eval */}
-            {sectionDimension !== "saber" && sectionDimension !== "auto_ser" && sectionDimension !== "auto_decidir" && (
-              <div style={{ marginBottom: "16px" }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    color: "#a1a1aa",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Tipo de contenido *
-                </label>
-                <select
-                  style={styles.select}
-                  value={sectionKind}
-                  onChange={(e) => setSectionKind(e.target.value as SectionKind)}
-                >
-                  <option value="text">📝 Texto</option>
-                  <option value="video">🎬 Video (URL)</option>
-                  <option value="image">🖼️ Imagen (URL)</option>
-                  <option value="link">🔗 Enlace</option>
-                  <option value="drive">📁 Google Drive</option>
-                  <option value="html">💻 HTML</option>
-                </select>
-              </div>
-            )}
+            {sectionDimension !== "saber" &&
+              sectionDimension !== "auto_ser" &&
+              sectionDimension !== "auto_decidir" && (
+                <div style={{ marginBottom: "16px" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "13px",
+                      color: "#a1a1aa",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    Tipo de contenido *
+                  </label>
+                  <select
+                    style={styles.select}
+                    value={sectionKind}
+                    onChange={(e) =>
+                      setSectionKind(e.target.value as SectionKind)
+                    }
+                  >
+                    <option value="text">📝 Texto</option>
+                    <option value="video">🎬 Video (URL)</option>
+                    <option value="image">🖼️ Imagen (URL)</option>
+                    <option value="link">🔗 Enlace</option>
+                    <option value="drive">📁 Google Drive</option>
+                    <option value="html">💻 HTML</option>
+                  </select>
+                </div>
+              )}
 
             {/* Contenido de texto / URL — cuando NO es quiz ni auto-eval */}
-            {sectionDimension !== "saber" && sectionDimension !== "auto_ser" && sectionDimension !== "auto_decidir" && (
-              <div style={{ marginBottom: "16px" }}>
+            {sectionDimension !== "saber" &&
+              sectionDimension !== "auto_ser" &&
+              sectionDimension !== "auto_decidir" && (
+                <div style={{ marginBottom: "16px" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "13px",
+                      color: "#a1a1aa",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    {sectionKind === "text" && "Contenido de texto *"}
+                    {sectionKind === "video" &&
+                      "URL del video * (YouTube, Vimeo, etc.)"}
+                    {sectionKind === "image" &&
+                      "URL de la imagen * (Imgur, Google Drive, etc.)"}
+                    {sectionKind === "link" && "URL del enlace *"}
+                    {sectionKind === "drive" &&
+                      "Link de Google Drive * (Pegar link compartido)"}
+                    {sectionKind === "html" && "Código HTML *"}
+                  </label>
+                  <textarea
+                    style={{
+                      ...styles.textarea,
+                      minHeight:
+                        sectionKind === "text" || sectionKind === "html"
+                          ? "200px"
+                          : "80px",
+                      fontFamily:
+                        sectionKind === "html" ? "monospace" : "inherit",
+                    }}
+                    value={sectionContent}
+                    onChange={(e) => setSectionContent(e.target.value)}
+                    placeholder={
+                      sectionKind === "text"
+                        ? "Escribe el contenido aquí..."
+                        : sectionKind === "video"
+                          ? "https://www.youtube.com/watch?v=..."
+                          : sectionKind === "image"
+                            ? "https://i.imgur.com/..."
+                            : sectionKind === "link"
+                              ? "https://ejemplo.com/recurso"
+                              : sectionKind === "drive"
+                                ? "https://drive.google.com/file/d/.../view?usp=sharing"
+                                : "<div>Tu código HTML aquí</div>"
+                    }
+                  />
+                  {sectionKind === "image" && (
+                    <p
+                      style={{
+                        fontSize: "12px",
+                        color: "#71717a",
+                        marginTop: "8px",
+                      }}
+                    >
+                      💡 Puedes subir imágenes gratis a imgur.com o imgbb.com y
+                      pegar la URL aquí.
+                    </p>
+                  )}
+                </div>
+              )}
+
+            {/* Indicadores de Autoevaluación */}
+            {(sectionDimension === "auto_ser" ||
+              sectionDimension === "auto_decidir") && (
+              <div style={{ marginBottom: 16 }}>
                 <label
                   style={{
                     display: "block",
-                    fontSize: "13px",
+                    fontSize: 13,
                     color: "#a1a1aa",
-                    marginBottom: "6px",
+                    marginBottom: 8,
                   }}
                 >
-                  {sectionKind === "text" && "Contenido de texto *"}
-                  {sectionKind === "video" && "URL del video * (YouTube, Vimeo, etc.)"}
-                  {sectionKind === "image" && "URL de la imagen * (Imgur, Google Drive, etc.)"}
-                  {sectionKind === "link" && "URL del enlace *"}
-                  {sectionKind === "drive" && "Link de Google Drive * (Pegar link compartido)"}
-                  {sectionKind === "html" && "Código HTML *"}
+                  Indicadores de autoevaluación (
+                  {sectionDimension === "auto_ser" ? "SER" : "DECIDIR"}) — 1
+                  punto cada uno
                 </label>
-                <textarea
-                  style={{
-                    ...styles.textarea,
-                    minHeight: sectionKind === "text" || sectionKind === "html" ? "200px" : "80px",
-                    fontFamily: sectionKind === "html" ? "monospace" : "inherit",
-                  }}
-                  value={sectionContent}
-                  onChange={(e) => setSectionContent(e.target.value)}
-                  placeholder={
-                    sectionKind === "text"
-                      ? "Escribe el contenido aquí..."
-                      : sectionKind === "video"
-                        ? "https://www.youtube.com/watch?v=..."
-                        : sectionKind === "image"
-                          ? "https://i.imgur.com/..."
-                          : sectionKind === "link"
-                            ? "https://ejemplo.com/recurso"
-                            : sectionKind === "drive"
-                              ? "https://drive.google.com/file/d/.../view?usp=sharing"
-                              : "<div>Tu código HTML aquí</div>"
-                  }
-                />
-                {sectionKind === "image" && (
-                  <p style={{ fontSize: "12px", color: "#71717a", marginTop: "8px" }}>
-                    💡 Puedes subir imágenes gratis a imgur.com o imgbb.com y pegar la URL aquí.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Indicadores de Autoevaluación */}
-            {(sectionDimension === "auto_ser" || sectionDimension === "auto_decidir") && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 13, color: "#a1a1aa", marginBottom: 8 }}>
-                  Indicadores de autoevaluación ({sectionDimension === "auto_ser" ? "SER" : "DECIDIR"}) — 1 punto cada uno
-                </label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
                   {autoIndicators.map((ind, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div
+                      key={i}
+                      style={{ display: "flex", gap: 8, alignItems: "center" }}
+                    >
                       <input
                         style={{ ...styles.input, flex: 1 }}
                         value={ind}
@@ -2100,8 +2615,20 @@ export default function TeacherContentManager() {
                       />
                       <button
                         type="button"
-                        onClick={() => setAutoIndicators(autoIndicators.filter((_, j) => j !== i))}
-                        style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 12 }}
+                        onClick={() =>
+                          setAutoIndicators(
+                            autoIndicators.filter((_, j) => j !== i),
+                          )
+                        }
+                        style={{
+                          background: "rgba(239,68,68,0.2)",
+                          border: "1px solid rgba(239,68,68,0.3)",
+                          color: "#f87171",
+                          borderRadius: 6,
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
                       >
                         ✕
                       </button>
@@ -2110,13 +2637,23 @@ export default function TeacherContentManager() {
                   <button
                     type="button"
                     onClick={() => setAutoIndicators([...autoIndicators, ""])}
-                    style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.3)", color: "#a5b4fc", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 13, alignSelf: "flex-start" }}
+                    style={{
+                      background: "rgba(99,102,241,0.2)",
+                      border: "1px solid rgba(99,102,241,0.3)",
+                      color: "#a5b4fc",
+                      borderRadius: 6,
+                      padding: "8px 14px",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      alignSelf: "flex-start",
+                    }}
                   >
                     + Agregar indicador
                   </button>
                 </div>
                 <p style={{ color: "#71717a", fontSize: 11, marginTop: 6 }}>
-                  El estudiante calificará cada indicador del 1 al 5. El promedio se convierte a nota sobre 5 puntos.
+                  El estudiante calificará cada indicador del 1 al 5. El
+                  promedio se convierte a nota sobre 5 puntos.
                 </p>
               </div>
             )}
@@ -2124,15 +2661,43 @@ export default function TeacherContentManager() {
             {/* Quiz builder — solo cuando dimensión es Saber */}
             {sectionDimension === "saber" && (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ marginBottom: "12px", display: "flex", alignItems: "center", gap: "12px" }}>
-                  <label style={{ fontSize: "13px", color: "#a1a1aa", whiteSpace: "nowrap" }}>Intentos permitidos:</label>
+                <div
+                  style={{
+                    marginBottom: "12px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                  }}
+                >
+                  <label
+                    style={{
+                      fontSize: "13px",
+                      color: "#a1a1aa",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Intentos permitidos:
+                  </label>
                   <input
                     type="number"
                     min={1}
                     max={10}
                     value={quizMaxAttempts}
-                    onChange={(e) => setQuizMaxAttempts(Math.max(1, parseInt(e.target.value) || 1))}
-                    style={{ width: 70, background: "rgba(30,30,30,0.8)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#e4e4e7", padding: "4px 8px", fontSize: 13, textAlign: "center" }}
+                    onChange={(e) =>
+                      setQuizMaxAttempts(
+                        Math.max(1, parseInt(e.target.value) || 1),
+                      )
+                    }
+                    style={{
+                      width: 70,
+                      background: "rgba(30,30,30,0.8)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 6,
+                      color: "#e4e4e7",
+                      padding: "4px 8px",
+                      fontSize: 13,
+                      textAlign: "center",
+                    }}
                   />
                 </div>
                 <div style={{ marginBottom: "12px" }}>
@@ -2152,11 +2717,35 @@ export default function TeacherContentManager() {
                       marginBottom: "12px",
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: "13px", color: "#71717a" }}>Pregunta {qi + 1}</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: "13px", color: "#71717a" }}>
+                          Pregunta {qi + 1}
+                        </span>
                         {quizErrors[qi] && (
-                          <span style={{ fontSize: "12px", color: "#f87171", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "2px 8px" }}>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              color: "#f87171",
+                              background: "rgba(239,68,68,0.12)",
+                              border: "1px solid rgba(239,68,68,0.3)",
+                              borderRadius: 4,
+                              padding: "2px 8px",
+                            }}
+                          >
                             ⚠ {quizErrors[qi]}
                           </span>
                         )}
@@ -2164,8 +2753,16 @@ export default function TeacherContentManager() {
                       {quizQuestions.length > 1 && (
                         <button
                           type="button"
-                          style={{ ...styles.btnDanger, padding: "3px 10px", fontSize: "12px" }}
-                          onClick={() => setQuizQuestions((prev) => prev.filter((_, i) => i !== qi))}
+                          style={{
+                            ...styles.btnDanger,
+                            padding: "3px 10px",
+                            fontSize: "12px",
+                          }}
+                          onClick={() =>
+                            setQuizQuestions((prev) =>
+                              prev.filter((_, i) => i !== qi),
+                            )
+                          }
                         >
                           Eliminar
                         </button>
@@ -2177,16 +2774,37 @@ export default function TeacherContentManager() {
                       value={q.question}
                       onChange={(e) => {
                         setQuizQuestions((prev) =>
-                          prev.map((pq, i) => i === qi ? { ...pq, question: e.target.value } : pq)
+                          prev.map((pq, i) =>
+                            i === qi ? { ...pq, question: e.target.value } : pq,
+                          ),
                         );
-                        if (quizErrors[qi]) setQuizErrors((prev) => { const n = { ...prev }; delete n[qi]; return n; });
+                        if (quizErrors[qi])
+                          setQuizErrors((prev) => {
+                            const n = { ...prev };
+                            delete n[qi];
+                            return n;
+                          });
                       }}
                     />
-                    <div style={{ fontSize: "12px", color: "#71717a", marginBottom: "6px" }}>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "#71717a",
+                        marginBottom: "6px",
+                      }}
+                    >
                       Opciones (marca la correcta):
                     </div>
                     {q.options.map((opt, oi) => (
-                      <div key={oi} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                      <div
+                        key={oi}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          marginBottom: "6px",
+                        }}
+                      >
                         <input
                           type="radio"
                           name={`correct-q${qi}`}
@@ -2194,11 +2812,16 @@ export default function TeacherContentManager() {
                           onChange={() =>
                             setQuizQuestions((prev) =>
                               prev.map((pq, i) =>
-                                i !== qi ? pq : {
-                                  ...pq,
-                                  options: pq.options.map((o, j) => ({ ...o, is_correct: j === oi })),
-                                }
-                              )
+                                i !== qi
+                                  ? pq
+                                  : {
+                                      ...pq,
+                                      options: pq.options.map((o, j) => ({
+                                        ...o,
+                                        is_correct: j === oi,
+                                      })),
+                                    },
+                              ),
                             )
                           }
                           style={{ accentColor: "#5eead4", flexShrink: 0 }}
@@ -2210,26 +2833,49 @@ export default function TeacherContentManager() {
                           onChange={(e) => {
                             setQuizQuestions((prev) =>
                               prev.map((pq, i) =>
-                                i !== qi ? pq : {
-                                  ...pq,
-                                  options: pq.options.map((o, j) =>
-                                    j === oi ? { ...o, option_text: e.target.value } : o
-                                  ),
-                                }
-                              )
+                                i !== qi
+                                  ? pq
+                                  : {
+                                      ...pq,
+                                      options: pq.options.map((o, j) =>
+                                        j === oi
+                                          ? {
+                                              ...o,
+                                              option_text: e.target.value,
+                                            }
+                                          : o,
+                                      ),
+                                    },
+                              ),
                             );
-                            if (quizErrors[qi]) setQuizErrors((prev) => { const n = { ...prev }; delete n[qi]; return n; });
+                            if (quizErrors[qi])
+                              setQuizErrors((prev) => {
+                                const n = { ...prev };
+                                delete n[qi];
+                                return n;
+                              });
                           }}
                         />
                         {q.options.length > 2 && (
                           <button
                             type="button"
-                            style={{ ...styles.btnDanger, padding: "4px 8px", fontSize: "12px" }}
+                            style={{
+                              ...styles.btnDanger,
+                              padding: "4px 8px",
+                              fontSize: "12px",
+                            }}
                             onClick={() =>
                               setQuizQuestions((prev) =>
                                 prev.map((pq, i) =>
-                                  i !== qi ? pq : { ...pq, options: pq.options.filter((_, j) => j !== oi) }
-                                )
+                                  i !== qi
+                                    ? pq
+                                    : {
+                                        ...pq,
+                                        options: pq.options.filter(
+                                          (_, j) => j !== oi,
+                                        ),
+                                      },
+                                ),
                               )
                             }
                           >
@@ -2240,12 +2886,25 @@ export default function TeacherContentManager() {
                     ))}
                     <button
                       type="button"
-                      style={{ ...styles.btnSecondary, padding: "4px 12px", fontSize: "12px", marginTop: "4px" }}
+                      style={{
+                        ...styles.btnSecondary,
+                        padding: "4px 12px",
+                        fontSize: "12px",
+                        marginTop: "4px",
+                      }}
                       onClick={() =>
                         setQuizQuestions((prev) =>
                           prev.map((pq, i) =>
-                            i !== qi ? pq : { ...pq, options: [...pq.options, { option_text: "", is_correct: false }] }
-                          )
+                            i !== qi
+                              ? pq
+                              : {
+                                  ...pq,
+                                  options: [
+                                    ...pq.options,
+                                    { option_text: "", is_correct: false },
+                                  ],
+                                },
+                          ),
                         )
                       }
                     >
@@ -2260,12 +2919,16 @@ export default function TeacherContentManager() {
                   onClick={() =>
                     setQuizQuestions((prev) => [
                       ...prev,
-                      { question: "", sort_order: prev.length, options: [
-                        { option_text: "", is_correct: true },
-                        { option_text: "", is_correct: false },
-                        { option_text: "", is_correct: false },
-                        { option_text: "", is_correct: false },
-                      ]},
+                      {
+                        question: "",
+                        sort_order: prev.length,
+                        options: [
+                          { option_text: "", is_correct: true },
+                          { option_text: "", is_correct: false },
+                          { option_text: "", is_correct: false },
+                          { option_text: "", is_correct: false },
+                        ],
+                      },
                     ])
                   }
                 >
