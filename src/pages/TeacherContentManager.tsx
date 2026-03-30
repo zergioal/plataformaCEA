@@ -121,9 +121,9 @@ const styles = {
     fontSize: "14px",
   },
   btnPrimary: {
-    background: "linear-gradient(135deg, #3b3b3b 0%, #4a4a4a 100%)",
+    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
     color: "white",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
+    border: "1px solid rgba(96,165,250,0.3)",
     borderRadius: "8px",
     padding: "10px 20px",
     fontWeight: "600",
@@ -343,6 +343,14 @@ export default function TeacherContentManager() {
   const [sectionContent, setSectionContent] = useState("");
   const [sectionDimension, setSectionDimension] = useState<SectionDimension>("hacer_proceso");
   const [savingSection, setSavingSection] = useState(false);
+  const [saveBtnShake, setSaveBtnShake] = useState(false);
+  const [expandedLessons, setExpandedLessons] = useState<Set<number>>(new Set());
+  const [lessonSectionsMap, setLessonSectionsMap] = useState<Map<number, Section[]>>(new Map());
+  const [loadingAccordion, setLoadingAccordion] = useState<Set<number>>(new Set());
+  function triggerShake() {
+    setSaveBtnShake(true);
+    setTimeout(() => setSaveBtnShake(false), 600);
+  }
 
   // Estado quiz builder
   const [quizMaxAttempts, setQuizMaxAttempts] = useState(2);
@@ -359,6 +367,7 @@ export default function TeacherContentManager() {
       { option_text: "", is_correct: false },
     ]},
   ]);
+  const [quizErrors, setQuizErrors] = useState<Record<number, string>>({});
 
   // Flag para evitar recargas innecesarias
   const [profileLoaded, setProfileLoaded] = useState(
@@ -712,11 +721,14 @@ export default function TeacherContentManager() {
         options: [
           { option_text: "", is_correct: true },
           { option_text: "", is_correct: false },
+          { option_text: "", is_correct: false },
+          { option_text: "", is_correct: false },
         ],
       },
     ];
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function openCreateSection() {
     setEditingSection(null);
     setSectionTitle("");
@@ -819,32 +831,39 @@ export default function TeacherContentManager() {
       "Muestra actitud positiva hacia el aprendizaje",
     ]);
     setQuizQuestions(defaultQuizQuestions());
+    setQuizErrors({});
   }
 
   async function saveQuizData(sectionId: number) {
     // Validar que haya al menos una pregunta con texto y exactamente una opción correcta
+    const errors: Record<number, string> = {};
     for (let qi = 0; qi < quizQuestions.length; qi++) {
       const q = quizQuestions[qi];
       if (!q.question.trim()) {
-        setMsg(`La pregunta ${qi + 1} no tiene texto`);
-        return false;
+        errors[qi] = "Falta el texto de la pregunta";
+        continue;
       }
       if (q.options.length < 2) {
-        setMsg(`La pregunta ${qi + 1} necesita al menos 2 opciones`);
-        return false;
+        errors[qi] = "Necesita al menos 2 opciones";
+        continue;
       }
       const correctCount = q.options.filter((o) => o.is_correct).length;
       if (correctCount !== 1) {
-        setMsg(`La pregunta ${qi + 1} debe tener exactamente 1 respuesta correcta`);
-        return false;
+        errors[qi] = "Debe tener exactamente 1 respuesta correcta marcada";
+        continue;
       }
-      for (const o of q.options) {
-        if (!o.option_text.trim()) {
-          setMsg(`Hay opciones vacías en la pregunta ${qi + 1}`);
-          return false;
-        }
+      const hasEmpty = q.options.some((o) => !o.option_text.trim());
+      if (hasEmpty) {
+        errors[qi] = "Hay opciones sin texto";
       }
     }
+    if (Object.keys(errors).length > 0) {
+      setQuizErrors(errors);
+      setMsg("Revisa los avisos en las preguntas marcadas antes de guardar");
+      triggerShake();
+      return false;
+    }
+    setQuizErrors({});
 
     // Upsert quiz
     const { data: quizData, error: quizErr } = await supabase
@@ -893,6 +912,7 @@ export default function TeacherContentManager() {
     const title = sectionTitle.trim();
     if (!title) {
       setMsg("El título es obligatorio");
+      triggerShake();
       return;
     }
 
@@ -910,22 +930,22 @@ export default function TeacherContentManager() {
     } else if (effectiveKind === "quiz") {
       content_json = {};
     } else if (effectiveKind === "text") {
-      if (!content) { setMsg("El contenido de texto es obligatorio"); return; }
+      if (!content) { setMsg("El contenido de texto es obligatorio"); triggerShake(); return; }
       content_json = { text: content };
     } else if (effectiveKind === "video") {
-      if (!content) { setMsg("La URL del video es obligatoria"); return; }
+      if (!content) { setMsg("La URL del video es obligatoria"); triggerShake(); return; }
       content_json = { url: content, title };
     } else if (effectiveKind === "image") {
-      if (!content) { setMsg("La URL de la imagen es obligatoria"); return; }
+      if (!content) { setMsg("La URL de la imagen es obligatoria"); triggerShake(); return; }
       content_json = { url: content, alt: title };
     } else if (effectiveKind === "link") {
-      if (!content) { setMsg("La URL del enlace es obligatoria"); return; }
+      if (!content) { setMsg("La URL del enlace es obligatoria"); triggerShake(); return; }
       content_json = { url: content, label: title };
     } else if (effectiveKind === "html") {
-      if (!content) { setMsg("El código HTML es obligatorio"); return; }
+      if (!content) { setMsg("El código HTML es obligatorio"); triggerShake(); return; }
       content_json = { html: content };
     } else if (effectiveKind === "drive") {
-      if (!content) { setMsg("El link de Google Drive es obligatorio"); return; }
+      if (!content) { setMsg("El link de Google Drive es obligatorio"); triggerShake(); return; }
       const drivePatterns = [
         /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
         /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
@@ -936,7 +956,7 @@ export default function TeacherContentManager() {
         const match = content.match(pattern);
         if (match) { fileId = match[1]; break; }
       }
-      if (!fileId) { setMsg("El link no parece ser de Google Drive válido"); return; }
+      if (!fileId) { setMsg("El link no parece ser de Google Drive válido"); triggerShake(); return; }
       content_json = { driveId: fileId, originalUrl: content };
     }
 
@@ -1021,11 +1041,12 @@ export default function TeacherContentManager() {
       .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
       .eq("lesson_id", selectedLesson.id)
       .order("sort_order");
-    setSections((data as Section[]) ?? []);
+    refreshAccordionLesson(selectedLesson.id, (data as Section[]) ?? []);
   }
 
-  async function deleteSection(section: Section) {
-    if (!selectedLesson) return;
+  async function deleteSection(section: Section, lessonOverride?: Lesson) {
+    const lesson = lessonOverride ?? selectedLesson;
+    if (!lesson) return;
     if (!confirm(`¿Eliminar la sección "${section.title}"?`)) return;
 
     const { error } = await supabase
@@ -1038,13 +1059,12 @@ export default function TeacherContentManager() {
     }
     setMsg("✅ Sección eliminada");
 
-    // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
       .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
-      .eq("lesson_id", selectedLesson.id)
+      .eq("lesson_id", lesson.id)
       .order("sort_order");
-    setSections((data as Section[]) ?? []);
+    refreshAccordionLesson(lesson.id, (data as Section[]) ?? []);
   }
 
   // ========== REORDENAMIENTO ==========
@@ -1115,68 +1135,46 @@ export default function TeacherContentManager() {
     setLessons((data as Lesson[]) ?? []);
   }
 
-  async function moveSectionUp(section: Section, currentIndex: number) {
-    if (currentIndex === 0 || !selectedLesson) return;
+  async function moveSectionUp(section: Section, currentIndex: number, sectionsArr?: Section[], lessonOverride?: Lesson) {
+    const lesson = lessonOverride ?? selectedLesson;
+    if (currentIndex === 0 || !lesson) return;
 
-    const prevSection = sections[currentIndex - 1];
+    const src = sectionsArr ?? sections;
+    const prevSection = src[currentIndex - 1];
     const currentOrder = section.sort_order;
     const prevOrder = prevSection.sort_order;
 
-    // Swap usando valores temporales negativos para evitar conflictos
-    await supabase
-      .from("lesson_sections")
-      .update({ sort_order: -999999 })
-      .eq("id", section.id);
+    await supabase.from("lesson_sections").update({ sort_order: -999999 }).eq("id", section.id);
+    await supabase.from("lesson_sections").update({ sort_order: currentOrder }).eq("id", prevSection.id);
+    await supabase.from("lesson_sections").update({ sort_order: prevOrder }).eq("id", section.id);
 
-    await supabase
-      .from("lesson_sections")
-      .update({ sort_order: currentOrder })
-      .eq("id", prevSection.id);
-
-    await supabase
-      .from("lesson_sections")
-      .update({ sort_order: prevOrder })
-      .eq("id", section.id);
-
-    // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
       .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
-      .eq("lesson_id", selectedLesson.id)
+      .eq("lesson_id", lesson.id)
       .order("sort_order");
-    setSections((data as Section[]) ?? []);
+    refreshAccordionLesson(lesson.id, (data as Section[]) ?? []);
   }
 
-  async function moveSectionDown(section: Section, currentIndex: number) {
-    if (currentIndex === sections.length - 1 || !selectedLesson) return;
+  async function moveSectionDown(section: Section, currentIndex: number, sectionsArr?: Section[], lessonOverride?: Lesson) {
+    const lesson = lessonOverride ?? selectedLesson;
+    const src = sectionsArr ?? sections;
+    if (currentIndex === src.length - 1 || !lesson) return;
 
-    const nextSection = sections[currentIndex + 1];
+    const nextSection = src[currentIndex + 1];
     const currentOrder = section.sort_order;
     const nextOrder = nextSection.sort_order;
 
-    // Swap usando valores temporales negativos
-    await supabase
-      .from("lesson_sections")
-      .update({ sort_order: -999999 })
-      .eq("id", section.id);
+    await supabase.from("lesson_sections").update({ sort_order: -999999 }).eq("id", section.id);
+    await supabase.from("lesson_sections").update({ sort_order: currentOrder }).eq("id", nextSection.id);
+    await supabase.from("lesson_sections").update({ sort_order: nextOrder }).eq("id", section.id);
 
-    await supabase
-      .from("lesson_sections")
-      .update({ sort_order: currentOrder })
-      .eq("id", nextSection.id);
-
-    await supabase
-      .from("lesson_sections")
-      .update({ sort_order: nextOrder })
-      .eq("id", section.id);
-
-    // Recargar secciones
     const { data } = await supabase
       .from("lesson_sections")
       .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
-      .eq("lesson_id", selectedLesson.id)
+      .eq("lesson_id", lesson.id)
       .order("sort_order");
-    setSections((data as Section[]) ?? []);
+    refreshAccordionLesson(lesson.id, (data as Section[]) ?? []);
   }
 
   // ========== NAVEGACIÓN ==========
@@ -1200,9 +1198,56 @@ export default function TeacherContentManager() {
     setView("lessons");
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function goToSections(lesson: Lesson) {
     setSelectedLesson(lesson);
     setView("sections");
+  }
+
+  async function toggleLesson(lesson: Lesson) {
+    const newExpanded = new Set(expandedLessons);
+    if (newExpanded.has(lesson.id)) {
+      newExpanded.delete(lesson.id);
+      setExpandedLessons(newExpanded);
+    } else {
+      newExpanded.add(lesson.id);
+      setExpandedLessons(newExpanded);
+      if (!lessonSectionsMap.has(lesson.id)) {
+        setLoadingAccordion((prev) => new Set([...prev, lesson.id]));
+        const { data } = await supabase
+          .from("lesson_sections")
+          .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+          .eq("lesson_id", lesson.id)
+          .eq("is_active", true)
+          .order("sort_order");
+        setLessonSectionsMap((prev) => new Map(prev).set(lesson.id, (data as Section[]) ?? []));
+        setLoadingAccordion((prev) => { const s = new Set(prev); s.delete(lesson.id); return s; });
+      }
+    }
+  }
+
+  function refreshAccordionLesson(lessonId: number, data: Section[]) {
+    setSections(data);
+    setLessonSectionsMap((prev) => new Map(prev).set(lessonId, data));
+  }
+
+  function openCreateSectionForLesson(lesson: Lesson) {
+    setSelectedLesson(lesson);
+    setSections(lessonSectionsMap.get(lesson.id) ?? []);
+    setEditingSection(null);
+    setSectionTitle("");
+    setSectionKind("text");
+    setSectionContent("");
+    setSectionDimension("hacer_proceso");
+    setQuizQuestions(defaultQuizQuestions());
+    setQuizErrors({});
+    setShowSectionModal(true);
+  }
+
+  function openEditSectionForLesson(lesson: Lesson, section: Section) {
+    setSelectedLesson(lesson);
+    setSections(lessonSectionsMap.get(lesson.id) ?? []);
+    openEditSection(section);
   }
 
   // ========== GUARDS ==========
@@ -1228,6 +1273,46 @@ export default function TeacherContentManager() {
   // ========== RENDER ==========
   return (
     <div style={styles.container}>
+      <style>{`
+        @keyframes shake {
+          0%,100% { transform: translateX(0); }
+          15%      { transform: translateX(-7px); }
+          30%      { transform: translateX(7px); }
+          45%      { transform: translateX(-5px); }
+          60%      { transform: translateX(5px); }
+          75%      { transform: translateX(-3px); }
+          90%      { transform: translateX(3px); }
+        }
+        .btn-save-shake {
+          animation: shake 0.55s ease;
+          background: linear-gradient(135deg,#b91c1c 0%,#dc2626 100%) !important;
+          border-color: #ef4444 !important;
+        }
+        .btn-add-question {
+          background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
+          color: #fff;
+          border: 1px solid #22c55e;
+          border-radius: 8px;
+          padding: 10px 0;
+          font-size: 14px;
+          font-weight: 600;
+          width: 100%;
+          margin-top: 4px;
+          cursor: pointer;
+          letter-spacing: 0.03em;
+          transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+          box-shadow: 0 2px 8px rgba(34,197,94,0.15);
+        }
+        .btn-add-question:hover {
+          background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+          box-shadow: 0 4px 16px rgba(34,197,94,0.35);
+          transform: translateY(-1px);
+        }
+        .btn-add-question:active {
+          transform: translateY(0);
+          box-shadow: 0 1px 4px rgba(34,197,94,0.2);
+        }
+      `}</style>
       {/* HEADER */}
       <header style={styles.header}>
         <div
@@ -1335,14 +1420,6 @@ export default function TeacherContentManager() {
                 onClick={() => goToLessons(selectedModule)}
               >
                 📖 {selectedModule.title}
-              </span>
-            </>
-          )}
-          {selectedLesson && (
-            <>
-              <span style={{ color: "#52525b" }}>/</span>
-              <span style={styles.breadcrumbActive}>
-                📝 {selectedLesson.title}
               </span>
             </>
           )}
@@ -1461,76 +1538,28 @@ export default function TeacherContentManager() {
               <div>
                 {modules.map((module, idx) => (
                   <div key={module.id} style={styles.moduleCard}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "start",
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              background: "rgba(255, 255, 255, 0.1)",
-                              padding: "4px 10px",
-                              borderRadius: "6px",
-                              fontSize: "12px",
-                              fontWeight: "600",
-                              color: "#a1a1aa",
-                            }}
-                          >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                      <div style={{ flex: 1 }} onClick={() => goToLessons(module)}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px", cursor: "pointer" }}>
+                          <span style={{ background: "rgba(255,255,255,0.1)", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", color: "#a1a1aa" }}>
                             M{idx + 1}
                           </span>
-                          <span
-                            style={{
-                              fontSize: "16px",
-                              fontWeight: "600",
-                              color: "#fff",
-                            }}
-                          >
+                          <span style={{ fontSize: "16px", fontWeight: "600", color: "#93c5fd", textDecoration: "underline", textDecorationColor: "rgba(147,197,253,0.3)" }}>
                             {module.title}
                           </span>
                         </div>
                         {module.description && (
-                          <p
-                            style={{
-                              fontSize: "13px",
-                              color: "#71717a",
-                              margin: "0 0 0 52px",
-                            }}
-                          >
+                          <p style={{ fontSize: "13px", color: "#71717a", margin: "0 0 0 52px" }}>
                             {module.description}
                           </p>
                         )}
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button
-                          style={{
-                            ...styles.btnSecondary,
-                            padding: "8px 14px",
-                            fontSize: "13px",
-                          }}
-                          onClick={() => openEditModule(module)}
+                          style={{ ...styles.btnSecondary, padding: "8px 14px", fontSize: "13px" }}
+                          onClick={(e) => { e.stopPropagation(); openEditModule(module); }}
                         >
                           ✏️ Editar nombre
-                        </button>
-                        <button
-                          style={{
-                            ...styles.btnPrimary,
-                            padding: "8px 14px",
-                            fontSize: "13px",
-                          }}
-                          onClick={() => goToLessons(module)}
-                        >
-                          Editar Lecciones →
                         </button>
                       </div>
                     </div>
@@ -1557,9 +1586,17 @@ export default function TeacherContentManager() {
               >
                 📖 Lecciones de "{selectedModule.title}"
               </h2>
-              <button style={styles.btnSuccess} onClick={openCreateLesson}>
-                + Nueva Lección
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  style={{ ...styles.btnSecondary, padding: "8px 14px", fontSize: "13px" }}
+                  onClick={() => nav(`/teacher/module/${selectedModule.id}/grades`)}
+                >
+                  📊 Registro
+                </button>
+                <button style={styles.btnSuccess} onClick={openCreateLesson}>
+                  + Nueva Lección
+                </button>
+              </div>
             </div>
 
             {loadingData ? (
@@ -1584,476 +1621,126 @@ export default function TeacherContentManager() {
               </div>
             ) : (
               <div>
-                {lessons.map((lesson, idx) => (
-                  <div key={lesson.id} style={styles.lessonCard}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            background: "rgba(255, 255, 255, 0.08)",
-                            padding: "6px 12px",
-                            borderRadius: "6px",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                            color: "#a1a1aa",
-                          }}
-                        >
-                          {idx + 1}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "15px",
-                            fontWeight: "500",
-                            color: "#e4e4e7",
-                          }}
-                        >
-                          {lesson.title}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <button
-                          style={{
-                            padding: "8px 12px",
-                            fontSize: "16px",
-                            fontWeight: "bold",
-                            background:
-                              idx === 0
-                                ? "rgba(255, 255, 255, 0.05)"
-                                : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                            color: idx === 0 ? "#52525b" : "#fff",
-                            border: "none",
-                            borderRadius: "8px",
-                            cursor: idx === 0 ? "not-allowed" : "pointer",
-                            transition: "all 0.2s ease",
-                            boxShadow:
-                              idx === 0
-                                ? "none"
-                                : "0 2px 8px rgba(16, 185, 129, 0.3)",
-                          }}
-                          onClick={() => moveLessonUp(lesson, idx)}
-                          disabled={idx === 0}
-                          title="Subir"
-                          onMouseEnter={(e) => {
-                            if (idx !== 0) {
-                              e.currentTarget.style.transform =
-                                "translateY(-2px)";
-                              e.currentTarget.style.boxShadow =
-                                "0 4px 12px rgba(16, 185, 129, 0.4)";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "translateY(0)";
-                            e.currentTarget.style.boxShadow =
-                              idx === 0
-                                ? "none"
-                                : "0 2px 8px rgba(16, 185, 129, 0.3)";
-                          }}
-                        >
-                          ⬆
-                        </button>
-                        <button
-                          style={{
-                            padding: "8px 12px",
-                            fontSize: "16px",
-                            fontWeight: "bold",
-                            background:
-                              idx === lessons.length - 1
-                                ? "rgba(255, 255, 255, 0.05)"
-                                : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-                            color:
-                              idx === lessons.length - 1 ? "#52525b" : "#fff",
-                            border: "none",
-                            borderRadius: "8px",
-                            cursor:
-                              idx === lessons.length - 1
-                                ? "not-allowed"
-                                : "pointer",
-                            transition: "all 0.2s ease",
-                            boxShadow:
-                              idx === lessons.length - 1
-                                ? "none"
-                                : "0 2px 8px rgba(59, 130, 246, 0.3)",
-                          }}
-                          onClick={() => moveLessonDown(lesson, idx)}
-                          disabled={idx === lessons.length - 1}
-                          title="Bajar"
-                          onMouseEnter={(e) => {
-                            if (idx !== lessons.length - 1) {
-                              e.currentTarget.style.transform =
-                                "translateY(2px)";
-                              e.currentTarget.style.boxShadow =
-                                "0 4px 12px rgba(59, 130, 246, 0.4)";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "translateY(0)";
-                            e.currentTarget.style.boxShadow =
-                              idx === lessons.length - 1
-                                ? "none"
-                                : "0 2px 8px rgba(59, 130, 246, 0.3)";
-                          }}
-                        >
-                          ⬇
-                        </button>
-                        <button
-                          style={{
-                            ...styles.btnSecondary,
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                          }}
-                          onClick={() => openEditLesson(lesson)}
-                        >
-                          Editar título
-                        </button>
-                        <button
-                          style={{
-                            ...styles.btnPrimary,
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                          }}
-                          onClick={() => goToSections(lesson)}
-                        >
-                          Editar Contenido →
-                        </button>
-                        <button
-                          style={{
-                            ...styles.btnDanger,
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                          }}
-                          onClick={() => deleteLesson(lesson)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* VISTA: SECCIONES */}
-        {view === "sections" && selectedLesson && (
-          <section style={styles.card}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "20px",
-              }}
-            >
-              <h2
-                style={{ fontSize: "18px", fontWeight: "600", color: "#fff" }}
-              >
-                📝 Contenido de "{selectedLesson.title}"
-              </h2>
-              <button style={styles.btnSuccess} onClick={openCreateSection}>
-                + Agregar Contenido
-              </button>
-            </div>
-
-            {loadingData ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "40px",
-                  color: "#71717a",
-                }}
-              >
-                Cargando...
-              </div>
-            ) : sections.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px" }}>
-                <div style={{ fontSize: "48px", marginBottom: "12px" }}>📄</div>
-                <p style={{ color: "#71717a", marginBottom: "16px" }}>
-                  Esta lección no tiene contenido
-                </p>
-                <button style={styles.btnSuccess} onClick={openCreateSection}>
-                  Agregar primer contenido
-                </button>
-              </div>
-            ) : (
-              <div>
-                {sections.map((section, idx) => {
-                  const kindStyle = KIND_COLORS[section.kind] ?? {
-                    bg: "rgba(100,100,100,0.2)",
-                    color: "#aaa",
-                  };
+                {lessons.map((lesson, idx) => {
+                  const isExpanded = expandedLessons.has(lesson.id);
+                  const lessonSects = lessonSectionsMap.get(lesson.id) ?? [];
+                  const isLoadingAccordion = loadingAccordion.has(lesson.id);
                   return (
-                    <div key={section.id} style={styles.sectionCard}>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "start",
-                        }}
-                      >
-                        <div style={{ flex: 1 }}>
+                    <div key={lesson.id} style={{ marginBottom: "8px" }}>
+                      {/* Lesson header card */}
+                      <div style={{ ...styles.lessonCard, marginBottom: 0, borderRadius: isExpanded ? "8px 8px 0 0" : "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "10px",
-                              marginBottom: "8px",
-                            }}
+                            style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, cursor: "pointer" }}
+                            onClick={() => toggleLesson(lesson)}
                           >
-                            <span
-                              style={{
-                                ...styles.kindBadge,
-                                background: kindStyle.bg,
-                                color: kindStyle.color,
-                              }}
-                            >
-                              {KIND_LABELS[section.kind] ?? section.kind}
+                            <span style={{ background: "rgba(255,255,255,0.08)", padding: "6px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "600", color: "#a1a1aa" }}>
+                              {idx + 1}
                             </span>
-                            {section.dimension && (
-                              <span
-                                style={{
-                                  ...styles.kindBadge,
-                                  background: DIMENSION_COLORS[section.dimension as SectionDimension]?.bg ?? "rgba(100,100,100,0.2)",
-                                  color: DIMENSION_COLORS[section.dimension as SectionDimension]?.color ?? "#aaa",
-                                }}
-                              >
-                                {DIMENSION_LABELS[section.dimension as SectionDimension] ?? section.dimension}
-                              </span>
-                            )}
-                            <span
-                              style={{
-                                fontSize: "14px",
-                                fontWeight: "500",
-                                color: "#e4e4e7",
-                              }}
-                            >
-                              {section.title}
+                            <span style={{ fontSize: "15px", fontWeight: "500", color: "#e4e4e7" }}>
+                              {lesson.title}
+                            </span>
+                            <span style={{ fontSize: "12px", color: "#52525b" }}>
+                              {isExpanded ? "▼" : "▶"}
                             </span>
                           </div>
-
-                          <div
-                            style={{
-                              fontSize: "13px",
-                              color: "#71717a",
-                              marginLeft: "4px",
-                              maxHeight: "60px",
-                              overflow: "hidden",
-                            }}
-                          >
-                            {section.kind === "text" && (
-                              <span>
-                                {(section.content_json?.text ?? "").substring(
-                                  0,
-                                  150,
-                                )}
-                                ...
-                              </span>
-                            )}
-                            {section.kind === "video" && (
-                              <span>🎬 {section.content_json?.url ?? ""}</span>
-                            )}
-                            {section.kind === "image" && (
-                              <span>🖼️ {section.content_json?.url ?? ""}</span>
-                            )}
-                            {section.kind === "link" && (
-                              <span>🔗 {section.content_json?.url ?? ""}</span>
-                            )}
-                            {section.kind === "html" && (
-                              <span>
-                                💻 Código HTML (
-                                {(section.content_json?.html ?? "").length}{" "}
-                                caracteres)
-                              </span>
-                            )}
-                            {section.kind === "drive" && (
-                              <span>
-                                📁 {section.content_json?.originalUrl ?? ""}
-                              </span>
-                            )}
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                              style={{ padding: "8px 12px", fontSize: "16px", fontWeight: "bold", background: idx === 0 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #10b981 0%, #059669 100%)", color: idx === 0 ? "#52525b" : "#fff", border: "none", borderRadius: "8px", cursor: idx === 0 ? "not-allowed" : "pointer", transition: "all 0.2s ease", boxShadow: idx === 0 ? "none" : "0 2px 8px rgba(16,185,129,0.3)" }}
+                              onClick={() => moveLessonUp(lesson, idx)}
+                              disabled={idx === 0}
+                              title="Subir"
+                            >⬆</button>
+                            <button
+                              style={{ padding: "8px 12px", fontSize: "16px", fontWeight: "bold", background: idx === lessons.length - 1 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)", color: idx === lessons.length - 1 ? "#52525b" : "#fff", border: "none", borderRadius: "8px", cursor: idx === lessons.length - 1 ? "not-allowed" : "pointer", transition: "all 0.2s ease", boxShadow: idx === lessons.length - 1 ? "none" : "0 2px 8px rgba(59,130,246,0.3)" }}
+                              onClick={() => moveLessonDown(lesson, idx)}
+                              disabled={idx === lessons.length - 1}
+                              title="Bajar"
+                            >⬇</button>
+                            <button
+                              style={{ ...styles.btnSecondary, padding: "6px 12px", fontSize: "12px" }}
+                              onClick={() => openEditLesson(lesson)}
+                            >
+                              Editar título
+                            </button>
+                            <button
+                              style={{ ...styles.btnDanger, padding: "6px 12px", fontSize: "12px" }}
+                              onClick={() => deleteLesson(lesson)}
+                            >
+                              Eliminar
+                            </button>
                           </div>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            marginLeft: "16px",
-                          }}
-                        >
-                          <button
-                            style={{
-                              padding: "8px 12px",
-                              fontSize: "16px",
-                              fontWeight: "bold",
-                              background:
-                                idx === 0
-                                  ? "rgba(255, 255, 255, 0.05)"
-                                  : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                              color: idx === 0 ? "#52525b" : "#fff",
-                              border: "none",
-                              borderRadius: "8px",
-                              cursor: idx === 0 ? "not-allowed" : "pointer",
-                              transition: "all 0.2s ease",
-                              boxShadow:
-                                idx === 0
-                                  ? "none"
-                                  : "0 2px 8px rgba(16, 185, 129, 0.3)",
-                            }}
-                            onClick={() => moveSectionUp(section, idx)}
-                            disabled={idx === 0}
-                            title="Subir"
-                            onMouseEnter={(e) => {
-                              if (idx !== 0) {
-                                e.currentTarget.style.transform =
-                                  "translateY(-2px)";
-                                e.currentTarget.style.boxShadow =
-                                  "0 4px 12px rgba(16, 185, 129, 0.4)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = "translateY(0)";
-                              e.currentTarget.style.boxShadow =
-                                idx === 0
-                                  ? "none"
-                                  : "0 2px 8px rgba(16, 185, 129, 0.3)";
-                            }}
-                          >
-                            ⬆
-                          </button>
-                          <button
-                            style={{
-                              padding: "8px 12px",
-                              fontSize: "16px",
-                              fontWeight: "bold",
-                              background:
-                                idx === sections.length - 1
-                                  ? "rgba(255, 255, 255, 0.05)"
-                                  : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-                              color:
-                                idx === sections.length - 1
-                                  ? "#52525b"
-                                  : "#fff",
-                              border: "none",
-                              borderRadius: "8px",
-                              cursor:
-                                idx === sections.length - 1
-                                  ? "not-allowed"
-                                  : "pointer",
-                              transition: "all 0.2s ease",
-                              boxShadow:
-                                idx === sections.length - 1
-                                  ? "none"
-                                  : "0 2px 8px rgba(59, 130, 246, 0.3)",
-                            }}
-                            onClick={() => moveSectionDown(section, idx)}
-                            disabled={idx === sections.length - 1}
-                            title="Bajar"
-                            onMouseEnter={(e) => {
-                              if (idx !== sections.length - 1) {
-                                e.currentTarget.style.transform =
-                                  "translateY(2px)";
-                                e.currentTarget.style.boxShadow =
-                                  "0 4px 12px rgba(59, 130, 246, 0.4)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = "translateY(0)";
-                              e.currentTarget.style.boxShadow =
-                                idx === sections.length - 1
-                                  ? "none"
-                                  : "0 2px 8px rgba(59, 130, 246, 0.3)";
-                            }}
-                          >
-                            ⬇
-                          </button>
-                          <button
-                            style={{
-                              ...styles.btnSecondary,
-                              padding: "6px 12px",
-                              fontSize: "12px",
-                            }}
-                            onClick={() => openEditSection(section)}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            style={{
-                              ...styles.btnDanger,
-                              padding: "6px 12px",
-                              fontSize: "12px",
-                            }}
-                            onClick={() => deleteSection(section)}
-                          >
-                            Eliminar
-                          </button>
                         </div>
                       </div>
+
+                      {/* Accordion: sections */}
+                      {isExpanded && (
+                        <div style={{ background: "rgba(15,15,20,0.8)", border: "1px solid rgba(255,255,255,0.06)", borderTop: "none", borderRadius: "0 0 8px 8px", padding: "12px 16px" }}>
+                          {isLoadingAccordion ? (
+                            <div style={{ color: "#71717a", padding: "12px", textAlign: "center", fontSize: "13px" }}>Cargando contenidos...</div>
+                          ) : lessonSects.length === 0 ? (
+                            <div style={{ color: "#52525b", fontSize: "13px", padding: "8px 0", textAlign: "center" }}>Sin contenidos aún</div>
+                          ) : (
+                            lessonSects.map((section, sidx) => {
+                              const kindStyle = KIND_COLORS[section.kind] ?? { bg: "rgba(100,100,100,0.2)", color: "#aaa" };
+                              return (
+                                <div key={section.id} style={{ ...styles.sectionCard, marginBottom: "8px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                                        <span style={{ ...styles.kindBadge, background: kindStyle.bg, color: kindStyle.color }}>{KIND_LABELS[section.kind] ?? section.kind}</span>
+                                        {section.dimension && (
+                                          <span style={{ ...styles.kindBadge, background: DIMENSION_COLORS[section.dimension as SectionDimension]?.bg ?? "rgba(100,100,100,0.2)", color: DIMENSION_COLORS[section.dimension as SectionDimension]?.color ?? "#aaa" }}>
+                                            {DIMENSION_LABELS[section.dimension as SectionDimension] ?? section.dimension}
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: "13px", fontWeight: "500", color: "#e4e4e7" }}>{section.title}</span>
+                                      </div>
+                                    </div>
+                                    <div style={{ display: "flex", gap: "6px", marginLeft: "12px" }}>
+                                      <button
+                                        style={{ padding: "5px 10px", fontSize: "14px", fontWeight: "bold", background: sidx === 0 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #10b981 0%, #059669 100%)", color: sidx === 0 ? "#52525b" : "#fff", border: "none", borderRadius: "6px", cursor: sidx === 0 ? "not-allowed" : "pointer" }}
+                                        onClick={() => moveSectionUp(section, sidx, lessonSects, lesson)}
+                                        disabled={sidx === 0}
+                                        title="Subir"
+                                      >⬆</button>
+                                      <button
+                                        style={{ padding: "5px 10px", fontSize: "14px", fontWeight: "bold", background: sidx === lessonSects.length - 1 ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)", color: sidx === lessonSects.length - 1 ? "#52525b" : "#fff", border: "none", borderRadius: "6px", cursor: sidx === lessonSects.length - 1 ? "not-allowed" : "pointer" }}
+                                        onClick={() => moveSectionDown(section, sidx, lessonSects, lesson)}
+                                        disabled={sidx === lessonSects.length - 1}
+                                        title="Bajar"
+                                      >⬇</button>
+                                      <button
+                                        style={{ ...styles.btnSecondary, padding: "5px 10px", fontSize: "12px" }}
+                                        onClick={() => openEditSectionForLesson(lesson, section)}
+                                      >Editar</button>
+                                      <button
+                                        style={{ ...styles.btnDanger, padding: "5px 10px", fontSize: "12px" }}
+                                        onClick={() => deleteSection(section, lesson)}
+                                      >Eliminar</button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                          {/* Add content button */}
+                          <button
+                            style={{ ...styles.btnSuccess, width: "100%", marginTop: "8px", padding: "8px", fontSize: "13px" }}
+                            onClick={() => openCreateSectionForLesson(lesson)}
+                          >
+                            + Agregar Contenido
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             )}
-
-            {/* Leyenda */}
-            <div
-              style={{
-                marginTop: "24px",
-                padding: "16px",
-                background: "rgba(40, 40, 40, 0.5)",
-                borderRadius: "10px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: "#a1a1aa",
-                  marginBottom: "12px",
-                }}
-              >
-                Tipos de contenido disponibles:
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-                {Object.entries(KIND_LABELS).map(([kind, label]) => {
-                  const ks = KIND_COLORS[kind];
-                  return (
-                    <span
-                      key={kind}
-                      style={{
-                        ...styles.kindBadge,
-                        background: ks?.bg,
-                        color: ks?.color,
-                      }}
-                    >
-                      {label}
-                    </span>
-                  );
-                })}
-              </div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#71717a",
-                  marginTop: "12px",
-                }}
-              >
-                💡 <strong>Tip:</strong> Para imágenes y videos, usa URLs
-                externas (Imgur, YouTube, Google Drive, etc.)
-              </div>
-            </div>
           </section>
         )}
+
       </main>
 
       {/* MODALES */}
@@ -2448,25 +2135,10 @@ export default function TeacherContentManager() {
                     style={{ width: 70, background: "rgba(30,30,30,0.8)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6, color: "#e4e4e7", padding: "4px 8px", fontSize: 13, textAlign: "center" }}
                   />
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <div style={{ marginBottom: "12px" }}>
                   <label style={{ fontSize: "13px", color: "#a1a1aa" }}>
                     Preguntas del Quiz *
                   </label>
-                  <button
-                    type="button"
-                    style={{ ...styles.btnSecondary, padding: "6px 14px", fontSize: "13px" }}
-                    onClick={() =>
-                      setQuizQuestions((prev) => [
-                        ...prev,
-                        { question: "", sort_order: prev.length, options: [
-                          { option_text: "", is_correct: true },
-                          { option_text: "", is_correct: false },
-                        ]},
-                      ])
-                    }
-                  >
-                    + Pregunta
-                  </button>
                 </div>
 
                 {quizQuestions.map((q, qi) => (
@@ -2474,14 +2146,21 @@ export default function TeacherContentManager() {
                     key={qi}
                     style={{
                       background: "rgba(20,20,20,0.6)",
-                      border: "1px solid rgba(255,255,255,0.08)",
+                      border: `1px solid ${quizErrors[qi] ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.08)"}`,
                       borderRadius: "8px",
                       padding: "14px",
                       marginBottom: "12px",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      <span style={{ fontSize: "13px", color: "#71717a" }}>Pregunta {qi + 1}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: "13px", color: "#71717a" }}>Pregunta {qi + 1}</span>
+                        {quizErrors[qi] && (
+                          <span style={{ fontSize: "12px", color: "#f87171", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "2px 8px" }}>
+                            ⚠ {quizErrors[qi]}
+                          </span>
+                        )}
+                      </div>
                       {quizQuestions.length > 1 && (
                         <button
                           type="button"
@@ -2496,11 +2175,12 @@ export default function TeacherContentManager() {
                       style={{ ...styles.input, marginBottom: "10px" }}
                       placeholder="Texto de la pregunta..."
                       value={q.question}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         setQuizQuestions((prev) =>
                           prev.map((pq, i) => i === qi ? { ...pq, question: e.target.value } : pq)
-                        )
-                      }
+                        );
+                        if (quizErrors[qi]) setQuizErrors((prev) => { const n = { ...prev }; delete n[qi]; return n; });
+                      }}
                     />
                     <div style={{ fontSize: "12px", color: "#71717a", marginBottom: "6px" }}>
                       Opciones (marca la correcta):
@@ -2527,7 +2207,7 @@ export default function TeacherContentManager() {
                           style={{ ...styles.input, flex: 1 }}
                           placeholder={`Opción ${oi + 1}...`}
                           value={opt.option_text}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             setQuizQuestions((prev) =>
                               prev.map((pq, i) =>
                                 i !== qi ? pq : {
@@ -2537,8 +2217,9 @@ export default function TeacherContentManager() {
                                   ),
                                 }
                               )
-                            )
-                          }
+                            );
+                            if (quizErrors[qi]) setQuizErrors((prev) => { const n = { ...prev }; delete n[qi]; return n; });
+                          }}
                         />
                         {q.options.length > 2 && (
                           <button
@@ -2572,6 +2253,24 @@ export default function TeacherContentManager() {
                     </button>
                   </div>
                 ))}
+
+                <button
+                  type="button"
+                  className="btn-add-question"
+                  onClick={() =>
+                    setQuizQuestions((prev) => [
+                      ...prev,
+                      { question: "", sort_order: prev.length, options: [
+                        { option_text: "", is_correct: true },
+                        { option_text: "", is_correct: false },
+                        { option_text: "", is_correct: false },
+                        { option_text: "", is_correct: false },
+                      ]},
+                    ])
+                  }
+                >
+                  + Pregunta
+                </button>
               </div>
             )}
 
@@ -2587,6 +2286,7 @@ export default function TeacherContentManager() {
               </button>
               <button
                 style={styles.btnPrimary}
+                className={saveBtnShake ? "btn-save-shake" : ""}
                 onClick={saveSection}
                 disabled={savingSection}
               >

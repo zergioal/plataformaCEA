@@ -4,7 +4,6 @@ import PublicNav from "./PublicNav";
 import PublicFooter from "./PublicFooter";
 import logoCea from "../../assets/logo-cea.png";
 import fondo from "../../assets/CEA.jpeg";
-
 import { institutionalInfo } from "../../data/careers";
 
 export default function PublicLayout() {

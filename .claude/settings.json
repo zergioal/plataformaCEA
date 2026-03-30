@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(grep -l \"lesson_sections\\\\|CREATE TABLE\" \"d:/PROYECTOS WEB/cea-plataforma/web/sql\"/*.sql)",
+      "Bash(find 'd:/PROYECTOS WEB/cea-plataforma' -type f -path */supabase/migrations/* -name *.sql)"
     ]
   }
 }

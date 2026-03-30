@@ -116,6 +116,12 @@ export default function TeacherDimensionGrades() {
   const [msg, setMsg] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
 
+  const [lessonsList, setLessonsList] = useState<{ id: number; title: string }[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newIndicatorTitle, setNewIndicatorTitle] = useState("");
+  const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
+  const [savingIndicator, setSavingIndicator] = useState(false);
+
   useEffect(() => {
     if (!session || !isTeacherish || invalid) return;
     if (loadedRef.current) return;
@@ -209,11 +215,13 @@ export default function TeacherDimensionGrades() {
       // Secciones de esa dimensión en el módulo, ordenadas por lección y luego por sección
       const { data: lessons } = await supabase
         .from("lessons")
-        .select("id, sort_order")
+        .select("id, sort_order, title")
         .eq("module_id", mid)
         .order("sort_order");
       const lessonIds = (lessons ?? []).map((l: { id: number }) => l.id);
       const lessonOrder = new Map((lessons ?? []).map((l: { id: number; sort_order: number }) => [l.id, l.sort_order]));
+      setLessonsList((lessons ?? []).map((l: { id: number; title: string }) => ({ id: l.id, title: l.title })));
+      if (lessons && lessons.length > 0) setSelectedLessonId(lessons[lessons.length - 1].id);
 
       if (lessonIds.length > 0) {
         const { data: sections } = await supabase
@@ -333,6 +341,61 @@ export default function TeacherDimensionGrades() {
     }
 
     setSavingCell(null);
+  }
+
+  // ─── Añadir indicador desde registro ─────────────────────────────────────
+
+  async function saveNewIndicator() {
+    if (!newIndicatorTitle.trim() || !selectedLessonId) return;
+    setSavingIndicator(true);
+
+    const { data: existing } = await supabase
+      .from("lesson_sections")
+      .select("sort_order")
+      .eq("lesson_id", selectedLessonId)
+      .order("sort_order", { ascending: false })
+      .limit(1);
+
+    const maxOrder = (existing?.[0] as { sort_order: number } | undefined)?.sort_order ?? 0;
+
+    const { data: newSection, error } = await supabase
+      .from("lesson_sections")
+      .insert({
+        lesson_id: selectedLessonId,
+        title: newIndicatorTitle.trim(),
+        kind: "text",
+        content_json: { text: "" },
+        dimension: dim,
+        sort_order: maxOrder + 1,
+        is_active: true,
+      })
+      .select("id, title")
+      .single();
+
+    if (error || !newSection) {
+      setMsg("Error al crear indicador: " + error?.message);
+      setSavingIndicator(false);
+      return;
+    }
+
+    const newCol: ActivityCol = { section_id: newSection.id, title: newSection.title, isAuto: false };
+    const newCols = [...cols, newCol];
+    setCols(newCols);
+
+    const newCells = new Map(cells);
+    for (const s of students) newCells.set(cellKey(s.id, newSection.id), null);
+    setCells(newCells);
+
+    const newAvgs = new Map(averages);
+    for (const s of students) {
+      const scores = newCols.map((c) => newCells.get(cellKey(s.id, c.section_id)) ?? null);
+      newAvgs.set(s.id, calcAvg(scores, cfg.max, cfg.min));
+    }
+    setAverages(newAvgs);
+
+    setNewIndicatorTitle("");
+    setShowAddModal(false);
+    setSavingIndicator(false);
   }
 
   // ─── PDF ──────────────────────────────────────────────────────────────────
@@ -464,6 +527,15 @@ export default function TeacherDimensionGrades() {
                       </div>
                     </th>
                   ))}
+                  {dim !== "ser" && dim !== "decidir" && (
+                    <th style={{ ...thStyle, width: 44 }}>
+                      <button
+                        title="Añadir indicador"
+                        onClick={() => setShowAddModal(true)}
+                        style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)", color: "#a5b4fc", borderRadius: 6, width: 28, height: 28, cursor: "pointer", fontSize: 18, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                      >+</button>
+                    </th>
+                  )}
                   <th style={{ ...thStyle, color: cfg.color }}>
                     TOTAL<br /><span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8" }}>({cfg.max})</span>
                   </th>
@@ -556,6 +628,7 @@ export default function TeacherDimensionGrades() {
                         );
                       })}
 
+                      {dim !== "ser" && dim !== "decidir" && <td style={tdStyle} />}
                       <td style={{ ...tdStyle, color: cfg.color, fontWeight: 700 }}>
                         {avg}
                       </td>
@@ -572,6 +645,80 @@ export default function TeacherDimensionGrades() {
           Rango de notas: {cfg.min} a {cfg.max}. El promedio de actividades se copia automáticamente al registro principal.
         </div>
       </div>
+
+      {/* Modal añadir indicador */}
+      {showAddModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            style={{ background: "#1e1e2e", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: 28, width: 420, maxWidth: "calc(100vw - 32px)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, color: cfg.color, marginBottom: 20 }}>
+              Añadir indicador — {cfg.label}
+            </div>
+
+            {/* Selector de lección */}
+            {lessonsList.length > 1 && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Lección</label>
+                <select
+                  value={selectedLessonId ?? ""}
+                  onChange={(e) => setSelectedLessonId(Number(e.target.value))}
+                  style={{ width: "100%", background: "rgba(30,30,40,0.9)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#e4e4e7", padding: "8px 10px", fontSize: 13 }}
+                >
+                  {lessonsList.map((l) => (
+                    <option key={l.id} value={l.id}>{l.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {lessonsList.length === 1 && (
+              <div style={{ marginBottom: 16, fontSize: 12, color: "#71717a" }}>
+                Lección: <span style={{ color: "#cbd5e1" }}>{lessonsList[0].title}</span>
+              </div>
+            )}
+            {lessonsList.length === 0 && (
+              <div style={{ marginBottom: 16, fontSize: 13, color: "#fca5a5" }}>
+                Este módulo no tiene lecciones. Crea una lección desde el gestor de contenido primero.
+              </div>
+            )}
+
+            {/* Título del indicador */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Título del indicador</label>
+              <input
+                autoFocus
+                type="text"
+                value={newIndicatorTitle}
+                onChange={(e) => setNewIndicatorTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveNewIndicator(); if (e.key === "Escape") setShowAddModal(false); }}
+                placeholder="Ej. Práctica de laboratorio 1"
+                style={{ width: "100%", background: "rgba(30,30,40,0.9)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#e4e4e7", padding: "10px 12px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+
+            {/* Botones */}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowAddModal(false)}
+                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "#94a3b8", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 13 }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveNewIndicator}
+                disabled={savingIndicator || !newIndicatorTitle.trim() || lessonsList.length === 0}
+                style={{ background: savingIndicator || !newIndicatorTitle.trim() || lessonsList.length === 0 ? "rgba(99,102,241,0.3)" : "rgba(99,102,241,0.8)", border: "1px solid rgba(99,102,241,0.5)", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: savingIndicator || !newIndicatorTitle.trim() ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}
+              >
+                {savingIndicator ? "Guardando..." : "Añadir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
