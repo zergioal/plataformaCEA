@@ -465,7 +465,7 @@
   }
 
   .carousel-slides {
-    @apply relative h-80 md:h-96 lg:h-[450px];
+    @apply relative h-64 sm:h-80 md:h-[480px] lg:h-[600px];
   }
 
   .carousel-slide {
@@ -514,7 +514,7 @@
 
   /* Tarjetas de carrera */
   .career-card {
-    @apply card overflow-hidden cursor-pointer
+    @apply card overflow-hidden cursor-pointer h-full flex flex-col
            hover:shadow-xl transition-all duration-300 hover:-translate-y-2;
   }
 

@@ -1,22 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Carousel, CareerCard } from "../../components/public";
 import { careers, institutionalInfo } from "../../data/careers";
-
-// Imágenes reales del CEA para el carrusel
-const carouselImages = [
-  {
-    src: "/images/CEA.jpeg",
-    alt: "Fachada del Centro de Educación Alternativa Madre María Oliva en Cochabamba",
-  },
-  {
-    src: "/images/CEA1.jpeg",
-    alt: "Estudiantes del CEA Madre María Oliva en actividades de formación técnica",
-  },
-  {
-    src: "/images/CEA2.jpeg",
-    alt: "Instalaciones y talleres del CEA Madre María Oliva",
-  },
-];
+import { supabase } from "../../lib/supabase";
 
 // Imágenes reales por carrera
 const careerImages: Record<string, string> = {
@@ -54,7 +39,38 @@ function useScrollAnimation() {
 export default function HomePage() {
   const containerRef = useScrollAnimation();
 
-  // SEO: título para la página principal
+  // Estado dinámico — arranca con los valores hardcodeados como default
+  const [mission, setMission] = useState(institutionalInfo.mission.content);
+  const [vision, setVision] = useState(institutionalInfo.vision.content);
+  const [contactPhone, setContactPhone] = useState(institutionalInfo.contact.phone);
+  const [contactMobile, setContactMobile] = useState(institutionalInfo.contact.mobile);
+  const [contactAddress, setContactAddress] = useState(institutionalInfo.contact.address);
+  const [carouselImages, setCarouselImages] = useState([
+    { src: "/images/CEA.jpeg", alt: "Fachada del Centro de Educación Alternativa Madre María Oliva en Cochabamba" },
+    { src: "/images/CEA1.jpeg", alt: "Estudiantes del CEA Madre María Oliva en actividades de formación técnica" },
+    { src: "/images/CEA2.jpeg", alt: "Instalaciones y talleres del CEA Madre María Oliva" },
+  ]);
+  const [requirements, setRequirements] = useState<string[]>(institutionalInfo.requirements);
+
+  // Cargar desde site_settings (sobreescribe defaults si existen)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("site_settings").select("key,value");
+        if (error || !data || data.length === 0) return;
+        const map = Object.fromEntries(data.map((r) => [r.key, r.value ?? ""]));
+        if (map["institution_mission"]) setMission(map["institution_mission"]);
+        if (map["institution_vision"])  setVision(map["institution_vision"]);
+        if (map["contact_phone"])       setContactPhone(map["contact_phone"]);
+        if (map["contact_mobile"])      setContactMobile(map["contact_mobile"]);
+        if (map["contact_address"])     setContactAddress(map["contact_address"]);
+        if (map["gallery_images"])  { try { const g = JSON.parse(map["gallery_images"]); if (Array.isArray(g) && g.length > 0) setCarouselImages(g); } catch { /* keep default */ } }
+        if (map["requirements"])    { try { const r = JSON.parse(map["requirements"]); if (Array.isArray(r) && r.length > 0) setRequirements(r); } catch { /* keep default */ } }
+      } catch { /* sin conexión o tabla inexistente, conservar defaults */ }
+    })();
+  }, []);
+
+  // SEO
   useEffect(() => {
     document.title =
       "CEA Madre María Oliva | Centro de Educación Alternativa - Cochabamba, Bolivia";
@@ -62,6 +78,13 @@ export default function HomePage() {
 
   return (
     <div ref={containerRef}>
+      {/* Carrusel — full width en móvil, contenedor con padding en desktop */}
+      <section className="bg-black md:bg-white md:py-12 md:px-4">
+        <div className="md:max-w-5xl md:mx-auto md:rounded-xl md:overflow-hidden md:shadow-xl">
+          <Carousel images={carouselImages} />
+        </div>
+      </section>
+
       {/* Sección Institución */}
       <section id="institucion" className="py-16 px-4">
         <div className="max-w-6xl mx-auto">
@@ -88,9 +111,7 @@ export default function HomePage() {
               <h3 className="institutional-card-title">
                 {institutionalInfo.mission.title}
               </h3>
-              <p className="institutional-card-text">
-                {institutionalInfo.mission.content}
-              </p>
+              <p className="institutional-card-text">{mission}</p>
             </div>
 
             {/* Visión */}
@@ -101,22 +122,8 @@ export default function HomePage() {
               <h3 className="institutional-card-title">
                 {institutionalInfo.vision.title}
               </h3>
-              <p className="institutional-card-text">
-                {institutionalInfo.vision.content}
-              </p>
+              <p className="institutional-card-text">{vision}</p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Galería / Carrusel */}
-      <section className="py-16 px-4 bg-white">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-10 text-gray-900 animate-on-scroll">
-            Galería
-          </h2>
-          <div className="animate-on-scroll">
-            <Carousel images={carouselImages} />
           </div>
         </div>
       </section>
@@ -128,11 +135,11 @@ export default function HomePage() {
             Nuestras Carreras
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
             {careers.map((career, index) => (
               <div
                 key={career.id}
-                className="animate-on-scroll"
+                className="animate-on-scroll flex flex-col"
                 style={{ transitionDelay: `${index * 100}ms` }}
               >
                 <CareerCard
@@ -154,7 +161,7 @@ export default function HomePage() {
           </h2>
 
           <div className="requirements-list">
-            {institutionalInfo.requirements.map((req, index) => (
+            {requirements.map((req, index) => (
               <div
                 key={index}
                 className="animate-on-scroll requirement-item"
@@ -180,17 +187,14 @@ export default function HomePage() {
           <div className="space-y-4 mb-8">
             <p className="contact-item">
               <span>📍</span>
-              <span>Dirección: {institutionalInfo.contact.address}</span>
+              <span>Dirección: {contactAddress}</span>
             </p>
             <p className="contact-item">
               <span>📱</span>
               <span>
                 Celular:{" "}
-                <a
-                  href={`tel:${institutionalInfo.contact.mobile}`}
-                  className="text-blue-600 hover:underline"
-                >
-                  {institutionalInfo.contact.mobile}
+                <a href={`tel:${contactMobile}`} className="text-blue-600 hover:underline">
+                  {contactMobile}
                 </a>
               </span>
             </p>
@@ -198,18 +202,11 @@ export default function HomePage() {
               <span>📞</span>
               <span>
                 Teléfono:{" "}
-                <a
-                  href={`tel:${institutionalInfo.contact.phone}`}
-                  className="text-blue-600 hover:underline"
-                >
-                  {institutionalInfo.contact.phone}
+                <a href={`tel:${contactPhone}`} className="text-blue-600 hover:underline">
+                  {contactPhone}
                 </a>
               </span>
             </p>
-            {/* <p className="contact-item">
-              <span>✉️</span>
-              <span>Correo: <a href={`mailto:${institutionalInfo.contact.email}`} className="text-blue-600 hover:underline">{institutionalInfo.contact.email}</a></span>
-            </p> */}
           </div>
 
           {/* Botones de redes sociales */}

@@ -252,6 +252,8 @@ export default function StudentDashboard() {
   } | null>(null);
   const [displaySemester, setDisplaySemester] = useState<string | null>(null);
 
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+
   function num0(x: number | null | undefined) {
     return typeof x === "number" && Number.isFinite(x) ? x : 0;
   }
@@ -525,7 +527,23 @@ export default function StudentDashboard() {
     }
 
     loadAll();
-  }, [session, profile]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user.id, profile?.career_id, profile?.current_semester]);
+
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("key,value")
+      .in("key", ["announcement_text", "announcement_active"])
+      .then(({ data }) => {
+        if (!data) return;
+        const map = Object.fromEntries(data.map((r) => [r.key, r.value ?? ""]));
+        if (map["announcement_active"] === "true" && map["announcement_text"]) {
+          setAnnouncement(map["announcement_text"]);
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const unlockedMap = useMemo(() => {
     const map: Record<number, boolean> = {};
@@ -663,6 +681,14 @@ export default function StudentDashboard() {
       </header>
 
       <main className="mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+        {/* Anuncio global */}
+        {announcement && (
+          <div className="w-full max-w-4xl mx-auto bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+            <p className="text-amber-200 text-sm leading-relaxed">{announcement}</p>
+          </div>
+        )}
+
         {/* Tarjeta de perfil mejorada - RESPONSIVE */}
         <section className="w-full max-w-4xl mx-auto bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 lg:p-8 shadow-2xl">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 mb-6 sm:mb-8">

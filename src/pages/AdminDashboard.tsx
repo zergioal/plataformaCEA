@@ -340,6 +340,39 @@ export default function AdminDashboard() {
   const [loadingLocked, setLoadingLocked] = useState(false);
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
 
+  const [adminSection, setAdminSection] = useState<"home" | "carreras" | "docentes" | "estudiantes" | "config">("home");
+
+  // ── Config section state ──────────────────────────────────
+  const [configTab, setConfigTab] = useState<"institucion" | "anuncio" | "semestre" | "exportar">("institucion");
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [cfgName, setCfgName] = useState("");
+  const [cfgMission, setCfgMission] = useState("");
+  const [cfgVision, setCfgVision] = useState("");
+  const [cfgPhone, setCfgPhone] = useState("");
+  const [cfgMobile, setCfgMobile] = useState("");
+  const [cfgEmail, setCfgEmail] = useState("");
+  const [cfgAddress, setCfgAddress] = useState("");
+  const [cfgAnnouncement, setCfgAnnouncement] = useState("");
+  const [cfgAnnouncementActive, setCfgAnnouncementActive] = useState(false);
+  const [cfgSemester, setCfgSemester] = useState("1/2026");
+  const [cfgBulkSemester, setCfgBulkSemester] = useState(false);
+  const [configSaved, setConfigSaved] = useState<string | null>(null);
+  const [cfgGallery, setCfgGallery] = useState<{src:string;alt:string}[]>([
+    { src: "/images/CEA.jpeg",  alt: "Fachada del CEA Madre María Oliva" },
+    { src: "/images/CEA1.jpeg", alt: "Estudiantes en formación técnica" },
+    { src: "/images/CEA2.jpeg", alt: "Instalaciones y talleres" },
+  ]);
+  const [cfgRequirements, setCfgRequirements] = useState<string[]>([
+    "3 Fotocopias de Cédula de Identidad",
+    "3 Fotocopias de Certificado de Nacimiento",
+    "100 Bs. de aporte estudiantil semestral",
+  ]);
+  const [newGalleryUrl, setNewGalleryUrl] = useState("");
+  const [newGalleryAlt, setNewGalleryAlt] = useState("");
+  const [newRequirement, setNewRequirement] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   // ========== FUNCIONES HELPER ==========
   function showMessage(
     title: string,
@@ -500,16 +533,46 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
+    if (adminSection === "home") return;
     void loadCatalogs();
-  }, [loadCatalogs]);
+  }, [adminSection]);
+
+  // Load site settings when entering config section
+  useEffect(() => {
+    if (adminSection !== "config") return;
+    setLoadingConfig(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("site_settings").select("key,value");
+        if (!error && data && data.length > 0) {
+          const map = Object.fromEntries(data.map((r) => [r.key, r.value ?? ""]));
+          if (map["institution_name"]) setCfgName(map["institution_name"]);
+          if (map["institution_mission"]) setCfgMission(map["institution_mission"]);
+          if (map["institution_vision"]) setCfgVision(map["institution_vision"]);
+          if (map["contact_phone"]) setCfgPhone(map["contact_phone"]);
+          if (map["contact_mobile"]) setCfgMobile(map["contact_mobile"]);
+          if (map["contact_email"]) setCfgEmail(map["contact_email"]);
+          if (map["contact_address"]) setCfgAddress(map["contact_address"]);
+          setCfgAnnouncement(map["announcement_text"] ?? "");
+          setCfgAnnouncementActive(map["announcement_active"] === "true");
+          if (map["active_semester"]) setCfgSemester(map["active_semester"]);
+          if (map["gallery_images"]) { try { const g = JSON.parse(map["gallery_images"]); if (Array.isArray(g) && g.length > 0) setCfgGallery(g); } catch { /* keep default */ } }
+          if (map["requirements"]) { try { const r = JSON.parse(map["requirements"]); if (Array.isArray(r) && r.length > 0) setCfgRequirements(r); } catch { /* keep default */ } }
+        }
+      } catch { /* tabla no existe, conservar defaults */ }
+      setLoadingConfig(false);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminSection]);
 
   useEffect(() => {
+    if (adminSection === "home") return;
     if (careers.length > 0 && levels.length > 0) {
       void loadTeachers();
       void loadStudents();
       void loadLockedAccounts();
     }
-  }, [careers.length, levels.length, loadTeachers, loadStudents, loadLockedAccounts]);
+  }, [careers.length, levels.length, loadTeachers, loadStudents, loadLockedAccounts, adminSection]);
 
   // ========== FUNCIONES DE CARRERAS ==========
   const studentsPerCareer = useMemo(() => {
@@ -1579,6 +1642,74 @@ export default function AdminDashboard() {
       .sort((a, b) => a.sort_order - b.sort_order);
   }, [levels, role, careerId]);
 
+  // ─── Config save helpers ──────────────────────────────────
+  const upsertSettings = async (rows: { key: string; value: string }[]): Promise<string | null> => {
+    const { error } = await supabase
+      .from("site_settings")
+      .upsert(rows.map(r => ({ key: r.key, value: r.value, updated_at: new Date().toISOString() })),
+        { onConflict: "key" });
+    return error ? error.message : null;
+  };
+
+  const saveInstitution = async () => {
+    setSavingConfig(true);
+    const err = await upsertSettings([
+      { key: "institution_name", value: cfgName },
+      { key: "institution_mission", value: cfgMission },
+      { key: "institution_vision", value: cfgVision },
+      { key: "contact_phone", value: cfgPhone },
+      { key: "contact_mobile", value: cfgMobile },
+      { key: "contact_email", value: cfgEmail },
+      { key: "contact_address", value: cfgAddress },
+    ]);
+    setSavingConfig(false);
+    if (err) { void showMessage("Error al guardar", err, "error"); return; }
+    setConfigSaved("institucion");
+    setTimeout(() => setConfigSaved(null), 2500);
+  };
+
+  const saveAnnouncement = async () => {
+    setSavingConfig(true);
+    const err = await upsertSettings([
+      { key: "announcement_text", value: cfgAnnouncement },
+      { key: "announcement_active", value: String(cfgAnnouncementActive) },
+    ]);
+    setSavingConfig(false);
+    if (err) { void showMessage("Error al guardar", err, "error"); return; }
+    setConfigSaved("anuncio");
+    setTimeout(() => setConfigSaved(null), 2500);
+  };
+
+  const saveSemester = async () => {
+    setSavingConfig(true);
+    const err = await upsertSettings([{ key: "active_semester", value: cfgSemester }]);
+    if (!err && cfgBulkSemester) {
+      await supabase.from("profiles").update({ current_semester: cfgSemester }).neq("id", "00000000-0000-0000-0000-000000000000");
+    }
+    setSavingConfig(false);
+    if (err) { void showMessage("Error al guardar", err, "error"); return; }
+    setConfigSaved("semestre");
+    setTimeout(() => setConfigSaved(null), 2500);
+  };
+
+  const saveGallery = async () => {
+    setSavingConfig(true);
+    const err = await upsertSettings([{ key: "gallery_images", value: JSON.stringify(cfgGallery) }]);
+    setSavingConfig(false);
+    if (err) { void showMessage("Error al guardar", err, "error"); return; }
+    setConfigSaved("gallery");
+    setTimeout(() => setConfigSaved(null), 2500);
+  };
+
+  const saveRequirements = async () => {
+    setSavingConfig(true);
+    const err = await upsertSettings([{ key: "requirements", value: JSON.stringify(cfgRequirements) }]);
+    setSavingConfig(false);
+    if (err) { void showMessage("Error al guardar", err, "error"); return; }
+    setConfigSaved("requirements");
+    setTimeout(() => setConfigSaved(null), 2500);
+  };
+
   // ========== RENDER ==========
   return (
     <div style={darkStyles.container}>
@@ -1641,34 +1772,87 @@ export default function AdminDashboard() {
       </header>
 
       <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
-        {/* MENSAJE */}
+        {/* Message */}
         {msg && (
-          <div
-            style={{
-              padding: "16px 20px",
-              borderRadius: "12px",
-              marginBottom: "20px",
-              background: msg.includes("✅")
-                ? "rgba(34, 197, 94, 0.15)"
-                : "rgba(239, 68, 68, 0.15)",
-              border: `1px solid ${msg.includes("✅") ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)"}`,
-              color: msg.includes("✅") ? "#86efac" : "#fca5a5",
-            }}
-          >
-            <pre
-              style={{
-                margin: 0,
-                whiteSpace: "pre-wrap",
-                fontFamily: "inherit",
-              }}
-            >
-              {msg}
-            </pre>
+          <div style={{ padding: "16px 20px", borderRadius: "12px", marginBottom: "20px", background: msg.includes("✅") ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", border: `1px solid ${msg.includes("✅") ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`, color: msg.includes("✅") ? "#86efac" : "#fca5a5" }}>
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{msg}</pre>
           </div>
         )}
 
-        {/* SECCIÓN CUENTAS BLOQUEADAS */}
-        {(lockedAccounts.length > 0 || loadingLocked) && (
+        {/* HOME */}
+        {adminSection === "home" && (
+          <div>
+            <p style={{ color: "#71717a", marginBottom: "32px", fontSize: "15px" }}>Selecciona una sección para comenzar.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+              {/* Carreras */}
+              <button
+                onClick={() => setAdminSection("carreras")}
+                style={{ background: "linear-gradient(135deg, rgba(30,58,138,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(59,130,246,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(96,165,250,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(59,130,246,0.2)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(59,130,246,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+                </div>
+                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Carreras</h3>
+                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Gestión de carreras, niveles y estructura académica.</p>
+                <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(96,165,250,0.3)" }}>→</span>
+              </button>
+
+              {/* Docentes */}
+              <button
+                onClick={() => setAdminSection("docentes")}
+                style={{ background: "linear-gradient(135deg, rgba(20,83,45,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(74,222,128,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(34,197,94,0.2)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(34,197,94,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Docentes</h3>
+                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Registro, credenciales y gestión de facilitadores.</p>
+                <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(74,222,128,0.3)" }}>→</span>
+              </button>
+
+              {/* Estudiantes */}
+              <button
+                onClick={() => setAdminSection("estudiantes")}
+                style={{ background: "linear-gradient(135deg, rgba(88,28,135,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(192,132,252,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(168,85,247,0.2)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(168,85,247,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Estudiantes</h3>
+                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Alta de estudiantes, matrículas, niveles y expedientes.</p>
+                <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(192,132,252,0.3)" }}>→</span>
+              </button>
+
+              {/* Configuración */}
+              <button
+                onClick={() => setAdminSection("config")}
+                style={{ background: "linear-gradient(135deg, rgba(120,53,15,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(251,146,60,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(251,146,60,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(251,146,60,0.15)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(251,146,60,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(251,146,60,0.1)", border: "1px solid rgba(251,146,60,0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </div>
+                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Configuración</h3>
+                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Información institucional, página pública, anuncios y ajustes generales.</p>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CARRERAS */}
+        {adminSection === "carreras" && (
+          <div>
+            <button onClick={() => setAdminSection("home")} style={{ marginBottom: "20px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>← Inicio</button>
+
+        {/* SECCIÓN CUENTAS BLOQUEADAS — visible en carreras también si hay bloqueadas */}
+        {lockedAccounts.length > 0 && (
           <section
             style={{
               ...darkStyles.card,
@@ -1834,7 +2018,8 @@ export default function AdminDashboard() {
                 gap: "8px",
               }}
             >
-              🎓 Carreras
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+              Carreras
             </h2>
             <div style={{ display: "flex", gap: "12px" }}>
               <input
@@ -2053,6 +2238,156 @@ export default function AdminDashboard() {
             </table>
           </div>
         </section>
+          </div>
+        )}
+
+        {/* DOCENTES */}
+        {adminSection === "docentes" && (
+          <div>
+            <button onClick={() => setAdminSection("home")} style={{ marginBottom: "20px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>← Inicio</button>
+
+        {/* SECCIÓN CUENTAS BLOQUEADAS */}
+        {lockedAccounts.length > 0 && (
+          <section
+            style={{
+              ...darkStyles.card,
+              padding: "24px",
+              marginBottom: "24px",
+              border: "2px solid rgba(239, 68, 68, 0.4)",
+              background: "linear-gradient(135deg, rgba(127, 29, 29, 0.3) 0%, rgba(30, 30, 30, 0.95) 100%)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  color: "#fca5a5",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                🔒 Cuentas Bloqueadas ({lockedAccounts.length})
+              </h2>
+              <button
+                style={{ ...darkStyles.btnSecondary, padding: "6px 12px", fontSize: "13px" }}
+                onClick={() => void loadLockedAccounts()}
+                disabled={loadingLocked}
+              >
+                {loadingLocked ? "Cargando..." : "🔄 Actualizar"}
+              </button>
+            </div>
+
+            {loadingLocked ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#a1a1aa" }}>
+                Cargando cuentas bloqueadas...
+              </div>
+            ) : lockedAccounts.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#86efac" }}>
+                ✅ No hay cuentas bloqueadas
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Código</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Nombre</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Rol</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Intentos</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Bloqueado</th>
+                      <th style={{ padding: "12px", textAlign: "center", color: "#a1a1aa", fontSize: "13px" }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lockedAccounts.map((acc) => (
+                      <tr
+                        key={acc.id}
+                        style={{
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                          background: "rgba(239, 68, 68, 0.05)",
+                        }}
+                      >
+                        <td style={{ padding: "12px", color: "#fff", fontFamily: "monospace" }}>
+                          {acc.code || "—"}
+                        </td>
+                        <td style={{ padding: "12px", color: "#fff" }}>
+                          {acc.full_name || "Sin nombre"}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          <span
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "500",
+                              background:
+                                acc.role === "teacher"
+                                  ? "rgba(59, 130, 246, 0.2)"
+                                  : acc.role === "student"
+                                    ? "rgba(34, 197, 94, 0.2)"
+                                    : "rgba(168, 85, 247, 0.2)",
+                              color:
+                                acc.role === "teacher"
+                                  ? "#93c5fd"
+                                  : acc.role === "student"
+                                    ? "#86efac"
+                                    : "#c4b5fd",
+                            }}
+                          >
+                            {acc.role === "teacher" ? "Docente" : acc.role === "student" ? "Estudiante" : acc.role}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px", color: "#fca5a5", fontWeight: "600" }}>
+                          {acc.failed_attempts}
+                        </td>
+                        <td style={{ padding: "12px", color: "#a1a1aa", fontSize: "13px" }}>
+                          {acc.locked_at
+                            ? new Date(acc.locked_at).toLocaleString("es-BO", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                        {!isReadOnly && (
+                        <td style={{ padding: "12px", textAlign: "center" }}>
+                          <button
+                            style={{
+                              ...darkStyles.btnPrimary,
+                              padding: "6px 12px",
+                              fontSize: "13px",
+                              background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                            }}
+                            onClick={() => void unlockAccount(acc.id, acc.code)}
+                            disabled={unlockingId === acc.id}
+                          >
+                            {unlockingId === acc.id ? "..." : "🔓 Desbloquear"}
+                          </button>
+                        </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p style={{ marginTop: "12px", fontSize: "12px", color: "#a1a1aa" }}>
+              Las cuentas se bloquean automáticamente después de 5 intentos fallidos de inicio de sesión.
+            </p>
+          </section>
+        )}
 
         {/* SECCIÓN DOCENTES */}
         <section
@@ -2069,7 +2404,8 @@ export default function AdminDashboard() {
             }}
           >
             <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#fff" }}>
-              👨‍🏫 Docentes
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Docentes
             </h2>
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <input
@@ -2253,6 +2589,156 @@ export default function AdminDashboard() {
             </table>
           </div>
         </section>
+          </div>
+        )}
+
+        {/* ESTUDIANTES */}
+        {adminSection === "estudiantes" && (
+          <div>
+            <button onClick={() => setAdminSection("home")} style={{ marginBottom: "20px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>← Inicio</button>
+
+        {/* SECCIÓN CUENTAS BLOQUEADAS */}
+        {lockedAccounts.length > 0 && (
+          <section
+            style={{
+              ...darkStyles.card,
+              padding: "24px",
+              marginBottom: "24px",
+              border: "2px solid rgba(239, 68, 68, 0.4)",
+              background: "linear-gradient(135deg, rgba(127, 29, 29, 0.3) 0%, rgba(30, 30, 30, 0.95) 100%)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  color: "#fca5a5",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                🔒 Cuentas Bloqueadas ({lockedAccounts.length})
+              </h2>
+              <button
+                style={{ ...darkStyles.btnSecondary, padding: "6px 12px", fontSize: "13px" }}
+                onClick={() => void loadLockedAccounts()}
+                disabled={loadingLocked}
+              >
+                {loadingLocked ? "Cargando..." : "🔄 Actualizar"}
+              </button>
+            </div>
+
+            {loadingLocked ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#a1a1aa" }}>
+                Cargando cuentas bloqueadas...
+              </div>
+            ) : lockedAccounts.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#86efac" }}>
+                ✅ No hay cuentas bloqueadas
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Código</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Nombre</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Rol</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Intentos</th>
+                      <th style={{ padding: "12px", textAlign: "left", color: "#a1a1aa", fontSize: "13px" }}>Bloqueado</th>
+                      <th style={{ padding: "12px", textAlign: "center", color: "#a1a1aa", fontSize: "13px" }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lockedAccounts.map((acc) => (
+                      <tr
+                        key={acc.id}
+                        style={{
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                          background: "rgba(239, 68, 68, 0.05)",
+                        }}
+                      >
+                        <td style={{ padding: "12px", color: "#fff", fontFamily: "monospace" }}>
+                          {acc.code || "—"}
+                        </td>
+                        <td style={{ padding: "12px", color: "#fff" }}>
+                          {acc.full_name || "Sin nombre"}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          <span
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "500",
+                              background:
+                                acc.role === "teacher"
+                                  ? "rgba(59, 130, 246, 0.2)"
+                                  : acc.role === "student"
+                                    ? "rgba(34, 197, 94, 0.2)"
+                                    : "rgba(168, 85, 247, 0.2)",
+                              color:
+                                acc.role === "teacher"
+                                  ? "#93c5fd"
+                                  : acc.role === "student"
+                                    ? "#86efac"
+                                    : "#c4b5fd",
+                            }}
+                          >
+                            {acc.role === "teacher" ? "Docente" : acc.role === "student" ? "Estudiante" : acc.role}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px", color: "#fca5a5", fontWeight: "600" }}>
+                          {acc.failed_attempts}
+                        </td>
+                        <td style={{ padding: "12px", color: "#a1a1aa", fontSize: "13px" }}>
+                          {acc.locked_at
+                            ? new Date(acc.locked_at).toLocaleString("es-BO", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                        {!isReadOnly && (
+                        <td style={{ padding: "12px", textAlign: "center" }}>
+                          <button
+                            style={{
+                              ...darkStyles.btnPrimary,
+                              padding: "6px 12px",
+                              fontSize: "13px",
+                              background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                            }}
+                            onClick={() => void unlockAccount(acc.id, acc.code)}
+                            disabled={unlockingId === acc.id}
+                          >
+                            {unlockingId === acc.id ? "..." : "🔓 Desbloquear"}
+                          </button>
+                        </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p style={{ marginTop: "12px", fontSize: "12px", color: "#a1a1aa" }}>
+              Las cuentas se bloquean automáticamente después de 5 intentos fallidos de inicio de sesión.
+            </p>
+          </section>
+        )}
 
         {/* SECCIÓN ESTUDIANTES */}
         <section style={{ ...darkStyles.card, padding: "24px" }}>
@@ -2267,7 +2753,8 @@ export default function AdminDashboard() {
             }}
           >
             <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#fff" }}>
-              👨‍🎓 Estudiantes
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Estudiantes
             </h2>
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <select
@@ -2659,6 +3146,275 @@ export default function AdminDashboard() {
             </table>
           </div>
         </section>
+          </div>
+        )}
+        {/* ─── CONFIGURACIÓN ─── */}
+        {adminSection === "config" && (
+          <div>
+            <button onClick={() => setAdminSection("home")} style={{ marginBottom: "20px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>← Inicio</button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+              <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </div>
+              <h2 style={{ fontSize: "22px", fontWeight: "700", color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>Configuración del Sistema</h2>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: "6px", marginBottom: "24px", flexWrap: "wrap" }}>
+              {(["institucion","anuncio","semestre","exportar"] as const).map((tab) => {
+                const labels: Record<string,string> = { institucion: "Institución", anuncio: "Anuncio Global", semestre: "Semestre Activo", exportar: "Exportar Datos" };
+                return (
+                  <button key={tab} onClick={() => setConfigTab(tab)} style={{ padding: "8px 18px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer", transition: "all 0.2s", background: configTab === tab ? "rgba(251,146,60,0.2)" : "rgba(30,30,40,0.8)", border: configTab === tab ? "1px solid rgba(251,146,60,0.5)" : "1px solid rgba(71,85,105,0.4)", color: configTab === tab ? "#fb923c" : "#94a3b8" }}>
+                    {labels[tab]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {loadingConfig && <div style={{ color: "#64748b", fontSize: "12px", marginBottom: "12px" }}>Sincronizando con base de datos...</div>}
+
+            {configTab === "institucion" && (
+              <div style={{ ...darkStyles.card, padding: "28px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "20px" }}>Información Institucional</h3>
+                <div style={{ display: "grid", gap: "16px" }}>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Institución</label>
+                    <input value={cfgName} onChange={e => setCfgName(e.target.value)} style={{ ...darkStyles.input, width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Misión</label>
+                    <textarea value={cfgMission} onChange={e => setCfgMission(e.target.value)} rows={3} style={{ ...darkStyles.input, width: "100%", resize: "vertical", boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Visión</label>
+                    <textarea value={cfgVision} onChange={e => setCfgVision(e.target.value)} rows={3} style={{ ...darkStyles.input, width: "100%", resize: "vertical", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <div>
+                      <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Teléfono fijo</label>
+                      <input value={cfgPhone} onChange={e => setCfgPhone(e.target.value)} style={{ ...darkStyles.input, width: "100%", boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Celular / WhatsApp</label>
+                      <input value={cfgMobile} onChange={e => setCfgMobile(e.target.value)} style={{ ...darkStyles.input, width: "100%", boxSizing: "border-box" }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Correo electrónico</label>
+                    <input value={cfgEmail} onChange={e => setCfgEmail(e.target.value)} style={{ ...darkStyles.input, width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Dirección</label>
+                    <input value={cfgAddress} onChange={e => setCfgAddress(e.target.value)} style={{ ...darkStyles.input, width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <button onClick={saveInstitution} disabled={savingConfig} style={{ ...darkStyles.btnPrimary, opacity: savingConfig ? 0.6 : 1 }}>
+                    {savingConfig ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                  {configSaved === "institucion" && <span style={{ color: "#4ade80", fontSize: "13px" }}>✓ Guardado</span>}
+                </div>
+                <p style={{ marginTop: "12px", color: "#64748b", fontSize: "12px" }}>Estos datos se reflejan en la página pública de la institución.</p>
+              </div>
+            )}
+
+            {/* Galería / Carrusel */}
+            {configTab === "institucion" && (
+              <div style={{ ...darkStyles.card, padding: "28px", marginTop: "16px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>Imágenes del Carrusel</h3>
+                <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Fotos que aparecen en la galería de la página pública. Puedes subir un archivo o pegar una URL.</p>
+
+                {/* Lista actual */}
+                <div style={{ display: "grid", gap: "10px", marginBottom: "16px" }}>
+                  {cfgGallery.map((img, i) => (
+                    <div key={i} style={{ display: "flex", gap: "10px", alignItems: "center", background: "rgba(30,41,59,0.5)", borderRadius: "10px", padding: "8px 12px" }}>
+                      <img src={img.src} alt={img.alt} style={{ width: "56px", height: "40px", objectFit: "cover", borderRadius: "6px", background: "#1e293b", flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <input value={img.alt} onChange={e => setCfgGallery(prev => prev.map((x,j) => j===i ? {...x,alt:e.target.value} : x))} placeholder="Descripción de la imagen" style={{ ...darkStyles.input, flex: 1, fontSize: "13px" }} />
+                      <span style={{ color: "#475569", fontSize: "11px", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{img.src}</span>
+                      <button onClick={() => setCfgGallery(prev => prev.filter((_,j) => j!==i))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "16px", padding: "2px 6px", flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                  {cfgGallery.length === 0 && <p style={{ color: "#475569", fontSize: "13px" }}>No hay imágenes. Sube o añade una URL.</p>}
+                </div>
+
+                {/* Subir archivo */}
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Subir imagen desde tu dispositivo</label>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: uploadingImage ? "rgba(14,116,144,0.4)" : "rgba(6,182,212,0.15)", border: "1px solid rgba(6,182,212,0.3)", borderRadius: "10px", cursor: uploadingImage ? "wait" : "pointer", color: "#22d3ee", fontSize: "13px", fontWeight: "600", transition: "all 0.2s" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    {uploadingImage ? "Subiendo..." : "Seleccionar archivo"}
+                    <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploadingImage}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploadingImage(true);
+                        const ext = file.name.split(".").pop();
+                        const path = `gallery/${Date.now()}.${ext}`;
+                        const { error } = await supabase.storage.from("public-assets").upload(path, file, { upsert: true });
+                        if (!error) {
+                          const { data: urlData } = supabase.storage.from("public-assets").getPublicUrl(path);
+                          setCfgGallery(prev => [...prev, { src: urlData.publicUrl, alt: file.name.replace(/\.[^.]+$/, "") }]);
+                        } else {
+                          const isBucketMissing = error.message.toLowerCase().includes("bucket") || error.message.toLowerCase().includes("not found");
+                          void showMessage(
+                            "No se pudo subir la imagen",
+                            isBucketMissing
+                              ? 'El bucket de almacenamiento no existe todavía.\n\nEjecuta el archivo sql/storage_setup.sql en el Editor SQL de Supabase y vuelve a intentarlo.'
+                              : "Error: " + error.message,
+                            "error"
+                          );
+                        }
+                        setUploadingImage(false);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <p style={{ color: "#475569", fontSize: "11px", marginTop: "6px" }}>Requiere bucket <code style={{ background: "rgba(255,255,255,0.06)", padding: "1px 5px", borderRadius: "4px" }}>public-assets</code> en Supabase Storage (público).</p>
+                </div>
+
+                {/* Añadir por URL */}
+                <div style={{ marginBottom: "16px" }}>
+                  <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>O añadir por URL</label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input value={newGalleryUrl} onChange={e => setNewGalleryUrl(e.target.value)} placeholder="https://... o /images/foto.jpg" style={{ ...darkStyles.input, flex: 2 }} />
+                    <input value={newGalleryAlt} onChange={e => setNewGalleryAlt(e.target.value)} placeholder="Descripción" style={{ ...darkStyles.input, flex: 1 }} />
+                    <button onClick={() => { if(newGalleryUrl.trim()) { setCfgGallery(prev => [...prev, {src:newGalleryUrl.trim(), alt:newGalleryAlt.trim()}]); setNewGalleryUrl(""); setNewGalleryAlt(""); }}} style={{ ...darkStyles.btnSecondary, whiteSpace: "nowrap" }}>+ Añadir</button>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <button onClick={saveGallery} disabled={savingConfig || uploadingImage} style={{ ...darkStyles.btnPrimary, opacity: (savingConfig || uploadingImage) ? 0.6 : 1 }}>
+                    {savingConfig ? "Guardando..." : "Guardar galería"}
+                  </button>
+                  {configSaved === "gallery" && <span style={{ color: "#4ade80", fontSize: "13px" }}>✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Requisitos de Inscripción */}
+            {configTab === "institucion" && (
+              <div style={{ ...darkStyles.card, padding: "28px", marginTop: "16px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>Requisitos de Inscripción</h3>
+                <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Lista que aparece en la sección "Requisitos" de la página pública.</p>
+                <div style={{ display: "grid", gap: "8px", marginBottom: "12px" }}>
+                  {cfgRequirements.map((req, i) => (
+                    <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", background: "rgba(30,41,59,0.5)", borderRadius: "10px", padding: "8px 12px" }}>
+                      <span style={{ color: "#94a3b8", fontSize: "13px", width: "20px", flexShrink: 0 }}>{i + 1}.</span>
+                      <input value={req} onChange={e => setCfgRequirements(prev => prev.map((x,j) => j===i ? e.target.value : x))} style={{ ...darkStyles.input, flex: 1, fontSize: "13px" }} />
+                      <button onClick={() => setCfgRequirements(prev => prev.filter((_,j) => j!==i))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "16px", padding: "2px 6px", flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                  {cfgRequirements.length === 0 && <p style={{ color: "#475569", fontSize: "13px" }}>No hay requisitos. Añade uno abajo.</p>}
+                </div>
+                <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                  <input value={newRequirement} onChange={e => setNewRequirement(e.target.value)} onKeyDown={e => { if(e.key==="Enter" && newRequirement.trim()) { setCfgRequirements(prev => [...prev, newRequirement.trim()]); setNewRequirement(""); }}} placeholder="Ej: Fotocopia de CI — Enter para añadir" style={{ ...darkStyles.input, flex: 1 }} />
+                  <button onClick={() => { if(newRequirement.trim()) { setCfgRequirements(prev => [...prev, newRequirement.trim()]); setNewRequirement(""); }}} style={{ ...darkStyles.btnSecondary }}>+ Añadir</button>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <button onClick={saveRequirements} disabled={savingConfig} style={{ ...darkStyles.btnPrimary, opacity: savingConfig ? 0.6 : 1 }}>
+                    {savingConfig ? "Guardando..." : "Guardar requisitos"}
+                  </button>
+                  {configSaved === "requirements" && <span style={{ color: "#4ade80", fontSize: "13px" }}>✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+
+            {configTab === "anuncio" && (
+              <div style={{ ...darkStyles.card, padding: "28px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "6px" }}>Anuncio Global</h3>
+                <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px" }}>Este mensaje aparece en el dashboard de todos los estudiantes cuando está activo.</p>
+                <div style={{ display: "grid", gap: "16px" }}>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Mensaje</label>
+                    <textarea value={cfgAnnouncement} onChange={e => setCfgAnnouncement(e.target.value)} rows={4} placeholder="Escribe el mensaje para todos los estudiantes..." style={{ ...darkStyles.input, width: "100%", resize: "vertical", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button onClick={() => setCfgAnnouncementActive(v => !v)} style={{ width: "42px", height: "24px", borderRadius: "12px", background: cfgAnnouncementActive ? "#22c55e" : "#374151", border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                      <span style={{ position: "absolute", top: "3px", left: cfgAnnouncementActive ? "21px" : "3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                    </button>
+                    <span style={{ color: cfgAnnouncementActive ? "#4ade80" : "#94a3b8", fontSize: "13px" }}>{cfgAnnouncementActive ? "Anuncio activo (visible para estudiantes)" : "Anuncio desactivado"}</span>
+                  </div>
+                </div>
+                <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <button onClick={saveAnnouncement} disabled={savingConfig} style={{ ...darkStyles.btnPrimary, opacity: savingConfig ? 0.6 : 1 }}>
+                    {savingConfig ? "Guardando..." : "Guardar anuncio"}
+                  </button>
+                  {configSaved === "anuncio" && <span style={{ color: "#4ade80", fontSize: "13px" }}>✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+
+            {configTab === "semestre" && (
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div style={{ ...darkStyles.card, padding: "28px" }}>
+                  <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "6px" }}>Semestre Activo</h3>
+                  <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px" }}>Define el período académico actual. Los nuevos registros usarán este semestre automáticamente.</p>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Período (ej: 1/2026)</label>
+                      <input value={cfgSemester} onChange={e => setCfgSemester(e.target.value)} placeholder="1/2026" style={{ ...darkStyles.input, width: "160px" }} />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button onClick={() => setCfgBulkSemester(v => !v)} style={{ width: "42px", height: "24px", borderRadius: "12px", background: cfgBulkSemester ? "#f59e0b" : "#374151", border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                      <span style={{ position: "absolute", top: "3px", left: cfgBulkSemester ? "21px" : "3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+                    </button>
+                    <span style={{ color: cfgBulkSemester ? "#fbbf24" : "#94a3b8", fontSize: "13px" }}>Actualizar semestre en todos los perfiles de usuario</span>
+                  </div>
+                  {cfgBulkSemester && (
+                    <div style={{ marginTop: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: "10px", padding: "12px 16px", fontSize: "13px", color: "#fbbf24" }}>
+                      ⚠ Esto actualizará el semestre activo en los perfiles de <strong>todos los usuarios</strong> de la plataforma.
+                    </div>
+                  )}
+                  <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button onClick={saveSemester} disabled={savingConfig} style={{ ...darkStyles.btnPrimary, opacity: savingConfig ? 0.6 : 1 }}>
+                      {savingConfig ? "Guardando..." : "Guardar semestre"}
+                    </button>
+                    {configSaved === "semestre" && <span style={{ color: "#4ade80", fontSize: "13px" }}>✓ Guardado</span>}
+                  </div>
+                </div>
+
+                <div style={{ ...darkStyles.card, padding: "24px" }}>
+                  <h4 style={{ fontSize: "15px", fontWeight: "600", color: "#fff", marginBottom: "8px" }}>Gestión de Carreras y Niveles</h4>
+                  <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Administra la estructura académica de la institución.</p>
+                  <button onClick={() => setAdminSection("carreras")} style={{ ...darkStyles.btnSecondary, display: "flex", alignItems: "center", gap: "8px" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+                    Ir a Gestión de Carreras →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {configTab === "exportar" && (
+              <div style={{ ...darkStyles.card, padding: "28px" }}>
+                <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "6px" }}>Exportación General</h3>
+                <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "24px" }}>Genera respaldos de los datos de la plataforma en formato PDF o CSV.</p>
+                <div style={{ display: "grid", gap: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", background: "rgba(30,41,59,0.6)", borderRadius: "12px", border: "1px solid rgba(51,65,85,0.5)" }}>
+                    <div>
+                      <div style={{ color: "#e2e8f0", fontWeight: "600", fontSize: "14px" }}>Lista de Estudiantes</div>
+                      <div style={{ color: "#64748b", fontSize: "12px", marginTop: "2px" }}>Todos los estudiantes con carrera, nivel y estado</div>
+                    </div>
+                    <button onClick={() => setAdminSection("estudiantes")} style={{ ...darkStyles.btnSecondary, fontSize: "12px", padding: "6px 14px" }}>Ir a Estudiantes →</button>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", background: "rgba(30,41,59,0.6)", borderRadius: "12px", border: "1px solid rgba(51,65,85,0.5)" }}>
+                    <div>
+                      <div style={{ color: "#e2e8f0", fontWeight: "600", fontSize: "14px" }}>Lista de Docentes</div>
+                      <div style={{ color: "#64748b", fontSize: "12px", marginTop: "2px" }}>Registro de facilitadores y administrativos</div>
+                    </div>
+                    <button onClick={() => setAdminSection("docentes")} style={{ ...darkStyles.btnSecondary, fontSize: "12px", padding: "6px 14px" }}>Ir a Docentes →</button>
+                  </div>
+                  <div style={{ padding: "16px 20px", background: "rgba(30,41,59,0.4)", borderRadius: "12px", border: "1px dashed rgba(51,65,85,0.5)", opacity: 0.6 }}>
+                    <div style={{ color: "#94a3b8", fontWeight: "600", fontSize: "14px" }}>Respaldo de Calificaciones (CSV)</div>
+                    <div style={{ color: "#475569", fontSize: "12px", marginTop: "2px" }}>Exportación masiva de notas — próximamente</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
 
       {/* ========== MODALES ========== */}
@@ -2929,7 +3685,6 @@ export default function AdminDashboard() {
             zIndex: 1000,
             padding: "20px",
           }}
-          onClick={closeGradesModal}
         >
           <div
             style={{
@@ -3186,7 +3941,6 @@ export default function AdminDashboard() {
             zIndex: 1000,
             padding: "20px",
           }}
-          onClick={resetForm}
         >
           <div
             style={{
@@ -3555,7 +4309,6 @@ export default function AdminDashboard() {
             zIndex: 1000,
             padding: "20px",
           }}
-          onClick={resetForm}
         >
           <div
             style={{
@@ -3956,7 +4709,6 @@ export default function AdminDashboard() {
             zIndex: 1000,
             padding: "20px",
           }}
-          onClick={() => setShowResetModal(false)}
         >
           <div
             style={{

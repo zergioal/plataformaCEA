@@ -2,7 +2,8 @@
 // 🎨 PARTE 1: Dashboard oscuro + Modales funcionando + Nueva estructura de tabla
 
 import { useEffect, useState, useMemo } from "react";
-import { Navigate, useNavigate, Link } from "react-router-dom";
+import type { Dispatch, SetStateAction } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
 import logoCea from "../assets/logo-cea.png";
@@ -254,6 +255,23 @@ export default function TeacherDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [dashView, setDashView] = useState<"home" | "filiacion" | "config">("home");
+
+  // ── Teacher config state ──────────────────────────────────
+  const [tcTab, setTcTab] = useState<"horario" | "evaluacion" | "periodo" | "plantillas">("horario");
+  const [loadingTC, setLoadingTC] = useState(false);
+  const [savingTC, setSavingTC] = useState(false);
+  const [tcSaved, setTcSaved] = useState<string | null>(null);
+  const [scheduleRows, setScheduleRows] = useState<{day:string;time:string;room:string}[]>([]);
+  const [saberPct, setSaberPct] = useState(25);
+  const [hacerProcesoPct, setHacerProcesoPct] = useState(25);
+  const [hacerProductoPct, setHacerProductoPct] = useState(25);
+  const [serPct, setSerPct] = useState(25);
+  const [decidirPct, setDecidirPct] = useState(0);
+  const [minPassing, setMinPassing] = useState(51);
+  const [tcSemester, setTcSemester] = useState("");
+  const [obsTemplates, setObsTemplates] = useState<string[]>([]);
+  const [newTemplate, setNewTemplate] = useState("");
 
   // Estado para mostrar estudiantes inactivos
   const [showInactiveStudents, setShowInactiveStudents] = useState(false);
@@ -345,7 +363,7 @@ export default function TeacherDashboard() {
   }
 
   useEffect(() => {
-    if (!session || !isTeacherish || initialLoadDone) return;
+    if (!session || !isTeacherish || initialLoadDone || dashView !== "filiacion") return;
 
     async function load() {
       setMsg(null);
@@ -395,7 +413,57 @@ export default function TeacherDashboard() {
     }
 
     load();
-  }, [session, isTeacherish, initialLoadDone]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, isTeacherish, initialLoadDone, dashView]);
+
+  // Cargar perfil inmediatamente al entrar (independiente de dashView)
+  useEffect(() => {
+    if (!session || !isTeacherish || profileData) return;
+    (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift")
+        .eq("id", session.user.id)
+        .single();
+      if (!prof) return;
+      setProfileData(prof as ProfileData);
+      setEditPhone(prof.phone ?? "");
+      setEditEmail(prof.contact_email ?? "");
+      setEditLikes(prof.likes ?? "");
+      setSelectedAvatar(prof.avatar_key ?? "av1");
+      if (prof.career_id) {
+        const { data: car } = await supabase.from("careers").select("id,name").eq("id", prof.career_id).single();
+        if (car) setCareerName((car as Career).name);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user.id, isTeacherish]);
+
+  // Load teacher settings when entering config
+  useEffect(() => {
+    if (dashView !== "config" || !session?.user.id) return;
+    setLoadingTC(true);
+    supabase
+      .from("teacher_settings")
+      .select("*")
+      .eq("teacher_id", session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setScheduleRows((data.schedule_rows as {day:string;time:string;room:string}[]) ?? []);
+          setSaberPct(data.saber_pct ?? 25);
+          setHacerProcesoPct(data.hacer_proceso_pct ?? 25);
+          setHacerProductoPct(data.hacer_producto_pct ?? 25);
+          setSerPct(data.ser_pct ?? 25);
+          setDecidirPct(data.decidir_pct ?? 0);
+          setMinPassing(data.min_passing ?? 51);
+          setTcSemester(data.active_semester ?? "");
+          setObsTemplates((data.observation_templates as string[]) ?? []);
+        }
+      })
+      .finally(() => setLoadingTC(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashView, session?.user.id]);
 
   async function loadStudents(
     careerId: number | null,
@@ -1386,6 +1454,32 @@ export default function TeacherDashboard() {
     avatars.find((a) => a.key === (profileData?.avatar_key ?? "av1")) ??
     avatars[0];
 
+  const totalPct = saberPct + hacerProcesoPct + hacerProductoPct + serPct + decidirPct;
+
+  const saveTeacherSettings = async (patch: Record<string, unknown>) => {
+    if (!session?.user.id) return;
+    setSavingTC(true);
+    await supabase.from("teacher_settings").upsert({ teacher_id: session.user.id, updated_at: new Date().toISOString(), ...patch });
+    setSavingTC(false);
+  };
+
+  const saveSchedule = async () => {
+    await saveTeacherSettings({ schedule_rows: scheduleRows });
+    setTcSaved("horario"); setTimeout(() => setTcSaved(null), 2500);
+  };
+  const saveEvaluation = async () => {
+    await saveTeacherSettings({ saber_pct: saberPct, hacer_proceso_pct: hacerProcesoPct, hacer_producto_pct: hacerProductoPct, ser_pct: serPct, decidir_pct: decidirPct, min_passing: minPassing });
+    setTcSaved("evaluacion"); setTimeout(() => setTcSaved(null), 2500);
+  };
+  const savePeriodo = async () => {
+    await saveTeacherSettings({ active_semester: tcSemester });
+    setTcSaved("periodo"); setTimeout(() => setTcSaved(null), 2500);
+  };
+  const savePlantillas = async () => {
+    await saveTeacherSettings({ observation_templates: obsTemplates });
+    setTcSaved("plantillas"); setTimeout(() => setTcSaved(null), 2500);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Header - RESPONSIVE */}
@@ -1484,22 +1578,6 @@ export default function TeacherDashboard() {
                 </div>
 
                 <div className="flex flex-wrap justify-center sm:justify-end gap-2 sm:gap-3">
-                  <Link
-                    to="/teacher/content"
-                    className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 text-sm sm:text-base"
-                  >
-                    <span className="sm:hidden">✏️</span>
-                    <span className="hidden sm:inline">
-                      ✏️ Editar Contenido
-                    </span>
-                  </Link>
-                  <Link
-                    to="/teacher/modules"
-                    className="px-3 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-900/30 text-sm sm:text-base"
-                  >
-                    <span className="sm:hidden">📚</span>
-                    <span className="hidden sm:inline">📚 Calificaciones</span>
-                  </Link>
                   <button
                     className="px-3 sm:px-5 py-2 sm:py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all duration-200 border border-slate-700/50 text-sm sm:text-base"
                     onClick={() => setEditMode(!editMode)}
@@ -1587,6 +1665,219 @@ export default function TeacherDashboard() {
             </div>
           </div>
         </section>
+
+        {/* HOME VIEW */}
+        {dashView === "home" && (
+          <section className="w-full max-w-5xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              {/* Filiación */}
+              <button
+                onClick={() => { setDashView("filiacion"); setStudentsExpanded(true); }}
+                className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-left hover:border-cyan-500/40 hover:bg-gradient-to-br hover:from-slate-800 hover:to-cyan-950/60 transition-all duration-300 shadow-xl hover:shadow-cyan-900/20 hover:scale-[1.02]"
+              >
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mb-5 group-hover:bg-cyan-500/15 transition-colors">
+                  <svg className="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-white mb-1.5">Filiación</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">Lista de estudiantes, asistencia, exportación de contactos y gestión por niveles.</p>
+                <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                </div>
+              </button>
+
+              {/* Registro */}
+              <button
+                onClick={() => nav("/teacher/modules")}
+                className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-left hover:border-blue-500/40 hover:from-slate-800 hover:to-blue-950/60 transition-all duration-300 shadow-xl hover:shadow-blue-900/20 hover:scale-[1.02]"
+              >
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 mb-5 group-hover:bg-blue-500/15 transition-colors">
+                  <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-white mb-1.5">Registro</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">Calificaciones por dimensión: Ser, Saber, Hacer Proceso, Hacer Producto y Decidir.</p>
+                <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                </div>
+              </button>
+
+              {/* Contenidos y Actividades */}
+              <button
+                onClick={() => nav("/teacher/content")}
+                className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-left hover:border-emerald-500/40 hover:from-slate-800 hover:to-emerald-950/60 transition-all duration-300 shadow-xl hover:shadow-emerald-900/20 hover:scale-[1.02]"
+              >
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-5 group-hover:bg-emerald-500/15 transition-colors">
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-white mb-1.5">Contenidos y Actividades</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">Lecciones, materiales, quizzes y actividades evaluativas por módulo.</p>
+                <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                </div>
+              </button>
+
+              {/* Configuración */}
+              <button
+                onClick={() => setDashView("config")}
+                className="group relative overflow-hidden rounded-2xl border border-slate-700/30 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-7 text-left cursor-pointer hover:border-slate-600/50 hover:shadow-xl transition-all duration-200"
+              >
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-700/30 border border-slate-600/20 mb-5">
+                  <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-white mb-1.5">Configuración</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">Ajustes del curso, criterios de evaluación, períodos y plantillas.</p>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* CONFIG VIEW */}
+        {dashView === "config" && (
+          <div>
+            <button
+              onClick={() => setDashView("home")}
+              className="mb-5 flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
+            >
+              ← Volver al inicio
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-slate-700/50 border border-slate-600/30">
+                <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white">Configuración del Curso</h2>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-6 flex-wrap">
+              {(["horario","evaluacion","periodo","plantillas"] as const).map((tab) => {
+                const labels: Record<string,string> = { horario:"Horario", evaluacion:"Evaluación", periodo:"Período", plantillas:"Plantillas" };
+                return (
+                  <button key={tab} onClick={() => setTcTab(tab)} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tcTab === tab ? "bg-cyan-500/20 border border-cyan-500/50 text-cyan-300" : "bg-slate-800/60 border border-slate-700/40 text-slate-400 hover:text-slate-200"}`}>
+                    {labels[tab]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {loadingTC && <div className="text-slate-400 text-center py-10">Cargando configuración...</div>}
+
+            {!loadingTC && tcTab === "horario" && (
+              <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
+                <h3 className="text-base font-bold text-white mb-1">Horario del Curso</h3>
+                <p className="text-slate-500 text-sm mb-5">Define las sesiones de clase. Esta información es visible para los estudiantes.</p>
+                <div className="space-y-3 mb-4">
+                  {scheduleRows.map((row, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <select value={row.day} onChange={e => setScheduleRows(prev => prev.map((r,j) => j===i ? {...r,day:e.target.value} : r))} className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm flex-shrink-0" style={{width:"130px"}}>
+                        {["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"].map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <input value={row.time} onChange={e => setScheduleRows(prev => prev.map((r,j) => j===i ? {...r,time:e.target.value} : r))} placeholder="19:00–21:00" className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm" style={{width:"130px"}} />
+                      <input value={row.room} onChange={e => setScheduleRows(prev => prev.map((r,j) => j===i ? {...r,room:e.target.value} : r))} placeholder="Aula / Sala" className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm flex-1" />
+                      <button onClick={() => setScheduleRows(prev => prev.filter((_,j) => j!==i))} className="text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors text-sm">✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setScheduleRows(prev => [...prev, {day:"Lunes",time:"",room:""}])} className="text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center gap-1 mb-5 transition-colors">
+                  + Añadir sesión
+                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={saveSchedule} disabled={savingTC} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                    {savingTC ? "Guardando..." : "Guardar horario"}
+                  </button>
+                  {tcSaved === "horario" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+
+            {!loadingTC && tcTab === "evaluacion" && (
+              <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
+                <h3 className="text-base font-bold text-white mb-1">Criterios de Evaluación</h3>
+                <p className="text-slate-500 text-sm mb-5">Define los pesos por dimensión para tus módulos. La suma debe ser 100%.</p>
+                <div className="space-y-4 mb-2">
+                  {([
+                    ["Saber (Teoría)", saberPct, setSaberPct],
+                    ["Hacer — Proceso", hacerProcesoPct, setHacerProcesoPct],
+                    ["Hacer — Producto", hacerProductoPct, setHacerProductoPct],
+                    ["Ser", serPct, setSerPct],
+                    ["Decidir", decidirPct, setDecidirPct],
+                  ] as [string, number, Dispatch<SetStateAction<number>>][]).map(([label, val, setter]) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <span className="text-slate-300 text-sm w-40 flex-shrink-0">{label}</span>
+                      <input type="range" min={0} max={100} value={val} onChange={e => setter(Number(e.target.value))} className="flex-1 accent-cyan-500" />
+                      <span className="text-cyan-400 text-sm font-bold w-10 text-right">{val}%</span>
+                    </div>
+                  ))}
+                </div>
+                <div className={`text-sm font-semibold mb-4 ${totalPct === 100 ? "text-emerald-400" : "text-amber-400"}`}>
+                  Total: {totalPct}% {totalPct !== 100 && "(debe sumar 100%)"}
+                </div>
+                <div className="mb-5">
+                  <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">Nota mínima de aprobación</label>
+                  <input type="number" value={minPassing} onChange={e => setMinPassing(Number(e.target.value))} min={0} max={100} className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm w-24" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={saveEvaluation} disabled={savingTC || totalPct !== 100} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                    {savingTC ? "Guardando..." : "Guardar criterios"}
+                  </button>
+                  {tcSaved === "evaluacion" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+
+            {!loadingTC && tcTab === "periodo" && (
+              <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
+                <h3 className="text-base font-bold text-white mb-1">Período de Asistencia</h3>
+                <p className="text-slate-500 text-sm mb-5">Sobrescribe el semestre activo para tu grupo específico (deja vacío para usar el semestre global).</p>
+                <div className="mb-5">
+                  <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">Semestre de tu grupo (ej: 1/2026)</label>
+                  <input value={tcSemester} onChange={e => setTcSemester(e.target.value)} placeholder="Vacío = usar semestre global" className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm w-56" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={savePeriodo} disabled={savingTC} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                    {savingTC ? "Guardando..." : "Guardar período"}
+                  </button>
+                  {tcSaved === "periodo" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+
+            {!loadingTC && tcTab === "plantillas" && (
+              <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
+                <h3 className="text-base font-bold text-white mb-1">Plantillas de Observaciones</h3>
+                <p className="text-slate-500 text-sm mb-5">Textos predefinidos para el registro de notas. Se pueden seleccionar rápidamente al registrar observaciones.</p>
+                <div className="space-y-2 mb-4">
+                  {obsTemplates.map((t, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-300 text-sm">{t}</div>
+                      <button onClick={() => setObsTemplates(prev => prev.filter((_,j) => j!==i))} className="text-red-400 hover:text-red-300 px-2 py-1 mt-1 rounded-lg hover:bg-red-500/10 transition-colors text-sm flex-shrink-0">✕</button>
+                    </div>
+                  ))}
+                  {obsTemplates.length === 0 && <div className="text-slate-500 text-sm py-2">No hay plantillas. Añade una abajo.</div>}
+                </div>
+                <div className="flex gap-2 mb-5">
+                  <input value={newTemplate} onChange={e => setNewTemplate(e.target.value)} onKeyDown={e => { if(e.key==="Enter" && newTemplate.trim()) { setObsTemplates(prev => [...prev, newTemplate.trim()]); setNewTemplate(""); }}} placeholder="Escribe una plantilla y presiona Enter..." className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-4 py-2 text-sm" />
+                  <button onClick={() => { if(newTemplate.trim()) { setObsTemplates(prev => [...prev, newTemplate.trim()]); setNewTemplate(""); }}} className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors">+ Añadir</button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={savePlantillas} disabled={savingTC} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                    {savingTC ? "Guardando..." : "Guardar plantillas"}
+                  </button>
+                  {tcSaved === "plantillas" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* FILIACIÓN VIEW */}
+        {dashView === "filiacion" && (
+          <div>
+            <button
+              onClick={() => setDashView("home")}
+              className="mb-4 flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
+            >
+              ← Volver al inicio
+            </button>
 
         {/* Widget de Semestre */}
         <section className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-4 shadow-lg">
@@ -2062,6 +2353,8 @@ export default function TeacherDashboard() {
           </>
           )}
         </section>
+          </div>
+        )}
       </main>
 
       {/* Modal Avatar */}
