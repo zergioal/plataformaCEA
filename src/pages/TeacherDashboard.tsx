@@ -255,14 +255,20 @@ export default function TeacherDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
-  const [dashView, setDashView] = useState<"home" | "filiacion" | "config">("home");
+  const [dashView, setDashView] = useState<"home" | "filiacion" | "config">(
+    "home",
+  );
 
   // ── Teacher config state ──────────────────────────────────
-  const [tcTab, setTcTab] = useState<"horario" | "evaluacion" | "periodo" | "plantillas">("horario");
+  const [tcTab, setTcTab] = useState<
+    "horario" | "evaluacion" | "periodo" | "plantillas"
+  >("horario");
   const [loadingTC, setLoadingTC] = useState(false);
   const [savingTC, setSavingTC] = useState(false);
   const [tcSaved, setTcSaved] = useState<string | null>(null);
-  const [scheduleRows, setScheduleRows] = useState<{day:string;time:string;room:string}[]>([]);
+  const [scheduleRows, setScheduleRows] = useState<
+    { day: string; time: string; room: string }[]
+  >([]);
   const [saberPct, setSaberPct] = useState(25);
   const [hacerProcesoPct, setHacerProcesoPct] = useState(25);
   const [hacerProductoPct, setHacerProductoPct] = useState(25);
@@ -278,7 +284,9 @@ export default function TeacherDashboard() {
   const [togglingActive, setTogglingActive] = useState(false);
 
   // Estado para estadísticas de asistencia
-  const [attendanceStats, setAttendanceStats] = useState<Map<string, { total: number; faltas: number }>>(new Map());
+  const [attendanceStats, setAttendanceStats] = useState<
+    Map<string, { total: number; faltas: number }>
+  >(new Map());
 
   // Estado para sistema de semestres
   function computeCurrentSemester(): string {
@@ -286,7 +294,9 @@ export default function TeacherDashboard() {
     const s = now.getMonth() < 6 ? 1 : 2;
     return `${s}/${now.getFullYear()}`;
   }
-  const [viewSemester, setViewSemester] = useState<string>(computeCurrentSemester);
+  const [viewSemester, setViewSemester] = useState<string>(
+    computeCurrentSemester,
+  );
   const [showSemesterModal, setShowSemesterModal] = useState(false);
   const [semesterInput, setSemesterInput] = useState("");
   const [editStudentSemester, setEditStudentSemester] = useState("");
@@ -327,12 +337,12 @@ export default function TeacherDashboard() {
     if (!ts) return "Nunca";
     const diff = Date.now() - new Date(ts).getTime();
     const mins = Math.floor(diff / 60_000);
-    if (mins < 1)  return "Ahora mismo";
+    if (mins < 1) return "Ahora mismo";
     if (mins < 60) return `hace ${mins} min`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24)  return `hace ${hrs} h`;
+    if (hrs < 24) return `hace ${hrs} h`;
     const days = Math.floor(hrs / 24);
-    if (days < 7)  return `hace ${days} día${days !== 1 ? "s" : ""}`;
+    if (days < 7) return `hace ${days} día${days !== 1 ? "s" : ""}`;
     const weeks = Math.floor(days / 7);
     if (weeks < 5) return `hace ${weeks} sem`;
     const months = Math.floor(days / 30);
@@ -363,7 +373,13 @@ export default function TeacherDashboard() {
   }
 
   useEffect(() => {
-    if (!session || !isTeacherish || initialLoadDone || dashView !== "filiacion") return;
+    if (
+      !session ||
+      !isTeacherish ||
+      initialLoadDone ||
+      dashView !== "filiacion"
+    )
+      return;
 
     async function load() {
       setMsg(null);
@@ -406,14 +422,19 @@ export default function TeacherDashboard() {
 
         const loadedLevels = (levelsData as Level[]) ?? [];
         setLevels(loadedLevels);
-        await loadStudents(prof.career_id, prof.shift, loadedLevels, computeCurrentSemester());
+        await loadStudents(
+          prof.career_id,
+          prof.shift,
+          loadedLevels,
+          computeCurrentSemester(),
+        );
       }
 
       setInitialLoadDone(true);
     }
 
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, isTeacherish, initialLoadDone, dashView]);
 
   // Cargar perfil inmediatamente al entrar (independiente de dashView)
@@ -422,7 +443,9 @@ export default function TeacherDashboard() {
     (async () => {
       const { data: prof } = await supabase
         .from("profiles")
-        .select("id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift")
+        .select(
+          "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift",
+        )
         .eq("id", session.user.id)
         .single();
       if (!prof) return;
@@ -432,25 +455,33 @@ export default function TeacherDashboard() {
       setEditLikes(prof.likes ?? "");
       setSelectedAvatar(prof.avatar_key ?? "av1");
       if (prof.career_id) {
-        const { data: car } = await supabase.from("careers").select("id,name").eq("id", prof.career_id).single();
+        const { data: car } = await supabase
+          .from("careers")
+          .select("id,name")
+          .eq("id", prof.career_id)
+          .single();
         if (car) setCareerName((car as Career).name);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user.id, isTeacherish]);
 
   // Load teacher settings when entering config
   useEffect(() => {
     if (dashView !== "config" || !session?.user.id) return;
-    setLoadingTC(true);
-    supabase
-      .from("teacher_settings")
-      .select("*")
-      .eq("teacher_id", session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
+
+    const loadTC = async () => {
+      setLoadingTC(true);
+
+      try {
+        const { data } = await supabase
+          .from("teacher_settings")
+          .select("*")
+          .eq("teacher_id", session.user.id)
+          .maybeSingle();
+
         if (data) {
-          setScheduleRows((data.schedule_rows as {day:string;time:string;room:string}[]) ?? []);
+          setScheduleRows((data.schedule_rows as any) ?? []);
           setSaberPct(data.saber_pct ?? 25);
           setHacerProcesoPct(data.hacer_proceso_pct ?? 25);
           setHacerProductoPct(data.hacer_producto_pct ?? 25);
@@ -460,9 +491,14 @@ export default function TeacherDashboard() {
           setTcSemester(data.active_semester ?? "");
           setObsTemplates((data.observation_templates as string[]) ?? []);
         }
-      })
-      .finally(() => setLoadingTC(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingTC(false);
+      }
+    };
+
+    loadTC();
   }, [dashView, session?.user.id]);
 
   async function loadStudents(
@@ -590,16 +626,22 @@ export default function TeacherDashboard() {
     setLoadingStudents(false);
 
     // Cargar estadísticas de asistencia del semestre
-    await loadAttendanceStats(studentsWithLevel.map((s) => s.id), semesterFilter ?? computeCurrentSemester());
+    await loadAttendanceStats(
+      studentsWithLevel.map((s) => s.id),
+      semesterFilter ?? computeCurrentSemester(),
+    );
   }
 
   async function loadAttendanceStats(studentIds: string[], semester: string) {
-    if (studentIds.length === 0) { setAttendanceStats(new Map()); return; }
+    if (studentIds.length === 0) {
+      setAttendanceStats(new Map());
+      return;
+    }
     const [semNum, semYear] = semester.split("/");
     const year = parseInt(semYear ?? "2026");
     const s = parseInt(semNum ?? "1");
     const startDate = s === 1 ? `${year}-01-01` : `${year}-07-01`;
-    const endDate   = s === 1 ? `${year}-06-30` : `${year}-12-31`;
+    const endDate = s === 1 ? `${year}-06-30` : `${year}-12-31`;
 
     const { data } = await supabase
       .from("attendance")
@@ -622,8 +664,11 @@ export default function TeacherDashboard() {
   // Recargar estadísticas de asistencia cuando cambia el semestre visualizado
   useEffect(() => {
     if (!initialLoadDone || students.length === 0) return;
-    loadAttendanceStats(students.map((s) => s.id), viewSemester);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadAttendanceStats(
+      students.map((s) => s.id),
+      viewSemester,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewSemester]);
 
   // Aplicar filtros y ordenamiento
@@ -647,18 +692,53 @@ export default function TeacherDashboard() {
       let aVal: string | number = "";
       let bVal: string | number = "";
       switch (sortColumn) {
-        case "code":          aVal = a.code ?? ""; bVal = b.code ?? ""; break;
-        case "rudeal_number": aVal = a.rudeal_number ?? ""; bVal = b.rudeal_number ?? ""; break;
-        case "last_name_pat": aVal = (a.last_name_pat ?? "").toLowerCase(); bVal = (b.last_name_pat ?? "").toLowerCase(); break;
-        case "last_name_mat": aVal = (a.last_name_mat ?? "").toLowerCase(); bVal = (b.last_name_mat ?? "").toLowerCase(); break;
-        case "first_names":   aVal = (a.first_names ?? "").toLowerCase(); bVal = (b.first_names ?? "").toLowerCase(); break;
-        case "carnet_number": aVal = a.carnet_number ?? ""; bVal = b.carnet_number ?? ""; break;
-        case "gender":        aVal = a.gender ?? ""; bVal = b.gender ?? ""; break;
-        case "birth_date":    aVal = a.birth_date ?? ""; bVal = b.birth_date ?? ""; break;
-        case "level":         aVal = a.level_sort_order ?? 999; bVal = b.level_sort_order ?? 999; break;
-        case "phone":         aVal = a.phone ?? ""; bVal = b.phone ?? ""; break;
-        case "last_seen_at":  aVal = a.last_seen_at ?? ""; bVal = b.last_seen_at ?? ""; break;
-        default:              aVal = (a.last_name_pat ?? "").toLowerCase(); bVal = (b.last_name_pat ?? "").toLowerCase();
+        case "code":
+          aVal = a.code ?? "";
+          bVal = b.code ?? "";
+          break;
+        case "rudeal_number":
+          aVal = a.rudeal_number ?? "";
+          bVal = b.rudeal_number ?? "";
+          break;
+        case "last_name_pat":
+          aVal = (a.last_name_pat ?? "").toLowerCase();
+          bVal = (b.last_name_pat ?? "").toLowerCase();
+          break;
+        case "last_name_mat":
+          aVal = (a.last_name_mat ?? "").toLowerCase();
+          bVal = (b.last_name_mat ?? "").toLowerCase();
+          break;
+        case "first_names":
+          aVal = (a.first_names ?? "").toLowerCase();
+          bVal = (b.first_names ?? "").toLowerCase();
+          break;
+        case "carnet_number":
+          aVal = a.carnet_number ?? "";
+          bVal = b.carnet_number ?? "";
+          break;
+        case "gender":
+          aVal = a.gender ?? "";
+          bVal = b.gender ?? "";
+          break;
+        case "birth_date":
+          aVal = a.birth_date ?? "";
+          bVal = b.birth_date ?? "";
+          break;
+        case "level":
+          aVal = a.level_sort_order ?? 999;
+          bVal = b.level_sort_order ?? 999;
+          break;
+        case "phone":
+          aVal = a.phone ?? "";
+          bVal = b.phone ?? "";
+          break;
+        case "last_seen_at":
+          aVal = a.last_seen_at ?? "";
+          bVal = b.last_seen_at ?? "";
+          break;
+        default:
+          aVal = (a.last_name_pat ?? "").toLowerCase();
+          bVal = (b.last_name_pat ?? "").toLowerCase();
       }
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
@@ -669,7 +749,13 @@ export default function TeacherDashboard() {
     });
 
     setFilteredStudents(sorted);
-  }, [selectedLevelFilter, sortOrder, sortColumn, students, showInactiveStudents]);
+  }, [
+    selectedLevelFilter,
+    sortOrder,
+    sortColumn,
+    students,
+    showInactiveStudents,
+  ]);
 
   async function saveProfile() {
     if (!session) return;
@@ -1454,30 +1540,46 @@ export default function TeacherDashboard() {
     avatars.find((a) => a.key === (profileData?.avatar_key ?? "av1")) ??
     avatars[0];
 
-  const totalPct = saberPct + hacerProcesoPct + hacerProductoPct + serPct + decidirPct;
+  const totalPct =
+    saberPct + hacerProcesoPct + hacerProductoPct + serPct + decidirPct;
 
   const saveTeacherSettings = async (patch: Record<string, unknown>) => {
     if (!session?.user.id) return;
     setSavingTC(true);
-    await supabase.from("teacher_settings").upsert({ teacher_id: session.user.id, updated_at: new Date().toISOString(), ...patch });
+    await supabase.from("teacher_settings").upsert({
+      teacher_id: session.user.id,
+      updated_at: new Date().toISOString(),
+      ...patch,
+    });
     setSavingTC(false);
   };
 
   const saveSchedule = async () => {
     await saveTeacherSettings({ schedule_rows: scheduleRows });
-    setTcSaved("horario"); setTimeout(() => setTcSaved(null), 2500);
+    setTcSaved("horario");
+    setTimeout(() => setTcSaved(null), 2500);
   };
   const saveEvaluation = async () => {
-    await saveTeacherSettings({ saber_pct: saberPct, hacer_proceso_pct: hacerProcesoPct, hacer_producto_pct: hacerProductoPct, ser_pct: serPct, decidir_pct: decidirPct, min_passing: minPassing });
-    setTcSaved("evaluacion"); setTimeout(() => setTcSaved(null), 2500);
+    await saveTeacherSettings({
+      saber_pct: saberPct,
+      hacer_proceso_pct: hacerProcesoPct,
+      hacer_producto_pct: hacerProductoPct,
+      ser_pct: serPct,
+      decidir_pct: decidirPct,
+      min_passing: minPassing,
+    });
+    setTcSaved("evaluacion");
+    setTimeout(() => setTcSaved(null), 2500);
   };
   const savePeriodo = async () => {
     await saveTeacherSettings({ active_semester: tcSemester });
-    setTcSaved("periodo"); setTimeout(() => setTcSaved(null), 2500);
+    setTcSaved("periodo");
+    setTimeout(() => setTcSaved(null), 2500);
   };
   const savePlantillas = async () => {
     await saveTeacherSettings({ observation_templates: obsTemplates });
-    setTcSaved("plantillas"); setTimeout(() => setTcSaved(null), 2500);
+    setTcSaved("plantillas");
+    setTimeout(() => setTcSaved(null), 2500);
   };
 
   return (
@@ -1672,16 +1774,48 @@ export default function TeacherDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               {/* Filiación */}
               <button
-                onClick={() => { setDashView("filiacion"); setStudentsExpanded(true); }}
+                onClick={() => {
+                  setDashView("filiacion");
+                  setStudentsExpanded(true);
+                }}
                 className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-left hover:border-cyan-500/40 hover:bg-gradient-to-br hover:from-slate-800 hover:to-cyan-950/60 transition-all duration-300 shadow-xl hover:shadow-cyan-900/20 hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 mb-5 group-hover:bg-cyan-500/15 transition-colors">
-                  <svg className="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>
+                  <svg
+                    className="w-6 h-6 text-cyan-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
+                    />
+                  </svg>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1.5">Filiación</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">Lista de estudiantes, asistencia, exportación de contactos y gestión por niveles.</p>
+                <h3 className="text-lg font-bold text-white mb-1.5">
+                  Filiación
+                </h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Lista de estudiantes, asistencia, exportación de contactos y
+                  gestión por niveles.
+                </p>
                 <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                  <svg
+                    className="w-5 h-5 text-cyan-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                    />
+                  </svg>
                 </div>
               </button>
 
@@ -1691,12 +1825,41 @@ export default function TeacherDashboard() {
                 className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-left hover:border-blue-500/40 hover:from-slate-800 hover:to-blue-950/60 transition-all duration-300 shadow-xl hover:shadow-blue-900/20 hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 mb-5 group-hover:bg-blue-500/15 transition-colors">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+                  <svg
+                    className="w-6 h-6 text-blue-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
+                    />
+                  </svg>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1.5">Registro</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">Calificaciones por dimensión: Ser, Saber, Hacer Proceso, Hacer Producto y Decidir.</p>
+                <h3 className="text-lg font-bold text-white mb-1.5">
+                  Registro
+                </h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Calificaciones por dimensión: Ser, Saber, Hacer Proceso, Hacer
+                  Producto y Decidir.
+                </p>
                 <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                  <svg
+                    className="w-5 h-5 text-blue-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                    />
+                  </svg>
                 </div>
               </button>
 
@@ -1706,12 +1869,41 @@ export default function TeacherDashboard() {
                 className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800 to-slate-900 p-7 text-left hover:border-emerald-500/40 hover:from-slate-800 hover:to-emerald-950/60 transition-all duration-300 shadow-xl hover:shadow-emerald-900/20 hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-5 group-hover:bg-emerald-500/15 transition-colors">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                  <svg
+                    className="w-6 h-6 text-emerald-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
+                    />
+                  </svg>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1.5">Contenidos y Actividades</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">Lecciones, materiales, quizzes y actividades evaluativas por módulo.</p>
+                <h3 className="text-lg font-bold text-white mb-1.5">
+                  Contenidos y Actividades
+                </h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Lecciones, materiales, quizzes y actividades evaluativas por
+                  módulo.
+                </p>
                 <div className="absolute bottom-5 right-5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                  <svg
+                    className="w-5 h-5 text-emerald-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                    />
+                  </svg>
                 </div>
               </button>
 
@@ -1721,10 +1913,32 @@ export default function TeacherDashboard() {
                 className="group relative overflow-hidden rounded-2xl border border-slate-700/30 bg-gradient-to-br from-slate-800/80 to-slate-900/80 p-7 text-left cursor-pointer hover:border-slate-600/50 hover:shadow-xl transition-all duration-200"
               >
                 <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-slate-700/30 border border-slate-600/20 mb-5">
-                  <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  <svg
+                    className="w-6 h-6 text-slate-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1.5">Configuración</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">Ajustes del curso, criterios de evaluación, períodos y plantillas.</p>
+                <h3 className="text-lg font-bold text-white mb-1.5">
+                  Configuración
+                </h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Ajustes del curso, criterios de evaluación, períodos y
+                  plantillas.
+                </p>
               </button>
             </div>
           </section>
@@ -1742,127 +1956,344 @@ export default function TeacherDashboard() {
 
             <div className="flex items-center gap-3 mb-6">
               <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-slate-700/50 border border-slate-600/30">
-                <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <svg
+                  className="w-5 h-5 text-slate-300"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
               </div>
-              <h2 className="text-xl font-bold text-white">Configuración del Curso</h2>
+              <h2 className="text-xl font-bold text-white">
+                Configuración del Curso
+              </h2>
             </div>
 
             {/* Tabs */}
             <div className="flex gap-2 mb-6 flex-wrap">
-              {(["horario","evaluacion","periodo","plantillas"] as const).map((tab) => {
-                const labels: Record<string,string> = { horario:"Horario", evaluacion:"Evaluación", periodo:"Período", plantillas:"Plantillas" };
+              {(
+                ["horario", "evaluacion", "periodo", "plantillas"] as const
+              ).map((tab) => {
+                const labels: Record<string, string> = {
+                  horario: "Horario",
+                  evaluacion: "Evaluación",
+                  periodo: "Período",
+                  plantillas: "Plantillas",
+                };
                 return (
-                  <button key={tab} onClick={() => setTcTab(tab)} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tcTab === tab ? "bg-cyan-500/20 border border-cyan-500/50 text-cyan-300" : "bg-slate-800/60 border border-slate-700/40 text-slate-400 hover:text-slate-200"}`}>
+                  <button
+                    key={tab}
+                    onClick={() => setTcTab(tab)}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${tcTab === tab ? "bg-cyan-500/20 border border-cyan-500/50 text-cyan-300" : "bg-slate-800/60 border border-slate-700/40 text-slate-400 hover:text-slate-200"}`}
+                  >
                     {labels[tab]}
                   </button>
                 );
               })}
             </div>
 
-            {loadingTC && <div className="text-slate-400 text-center py-10">Cargando configuración...</div>}
+            {loadingTC && (
+              <div className="text-slate-400 text-center py-10">
+                Cargando configuración...
+              </div>
+            )}
 
             {!loadingTC && tcTab === "horario" && (
               <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
-                <h3 className="text-base font-bold text-white mb-1">Horario del Curso</h3>
-                <p className="text-slate-500 text-sm mb-5">Define las sesiones de clase. Esta información es visible para los estudiantes.</p>
+                <h3 className="text-base font-bold text-white mb-1">
+                  Horario del Curso
+                </h3>
+                <p className="text-slate-500 text-sm mb-5">
+                  Define las sesiones de clase. Esta información es visible para
+                  los estudiantes.
+                </p>
                 <div className="space-y-3 mb-4">
                   {scheduleRows.map((row, i) => (
                     <div key={i} className="flex gap-2 items-center">
-                      <select value={row.day} onChange={e => setScheduleRows(prev => prev.map((r,j) => j===i ? {...r,day:e.target.value} : r))} className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm flex-shrink-0" style={{width:"130px"}}>
-                        {["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"].map(d => <option key={d} value={d}>{d}</option>)}
+                      <select
+                        value={row.day}
+                        onChange={(e) =>
+                          setScheduleRows((prev) =>
+                            prev.map((r, j) =>
+                              j === i ? { ...r, day: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm flex-shrink-0"
+                        style={{ width: "130px" }}
+                      >
+                        {[
+                          "Lunes",
+                          "Martes",
+                          "Miércoles",
+                          "Jueves",
+                          "Viernes",
+                          "Sábado",
+                        ].map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
                       </select>
-                      <input value={row.time} onChange={e => setScheduleRows(prev => prev.map((r,j) => j===i ? {...r,time:e.target.value} : r))} placeholder="19:00–21:00" className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm" style={{width:"130px"}} />
-                      <input value={row.room} onChange={e => setScheduleRows(prev => prev.map((r,j) => j===i ? {...r,room:e.target.value} : r))} placeholder="Aula / Sala" className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm flex-1" />
-                      <button onClick={() => setScheduleRows(prev => prev.filter((_,j) => j!==i))} className="text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors text-sm">✕</button>
+                      <input
+                        value={row.time}
+                        onChange={(e) =>
+                          setScheduleRows((prev) =>
+                            prev.map((r, j) =>
+                              j === i ? { ...r, time: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="19:00–21:00"
+                        className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm"
+                        style={{ width: "130px" }}
+                      />
+                      <input
+                        value={row.room}
+                        onChange={(e) =>
+                          setScheduleRows((prev) =>
+                            prev.map((r, j) =>
+                              j === i ? { ...r, room: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="Aula / Sala"
+                        className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm flex-1"
+                      />
+                      <button
+                        onClick={() =>
+                          setScheduleRows((prev) =>
+                            prev.filter((_, j) => j !== i),
+                          )
+                        }
+                        className="text-red-400 hover:text-red-300 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors text-sm"
+                      >
+                        ✕
+                      </button>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setScheduleRows(prev => [...prev, {day:"Lunes",time:"",room:""}])} className="text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center gap-1 mb-5 transition-colors">
+                <button
+                  onClick={() =>
+                    setScheduleRows((prev) => [
+                      ...prev,
+                      { day: "Lunes", time: "", room: "" },
+                    ])
+                  }
+                  className="text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center gap-1 mb-5 transition-colors"
+                >
                   + Añadir sesión
                 </button>
                 <div className="flex items-center gap-3">
-                  <button onClick={saveSchedule} disabled={savingTC} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                  <button
+                    onClick={saveSchedule}
+                    disabled={savingTC}
+                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
                     {savingTC ? "Guardando..." : "Guardar horario"}
                   </button>
-                  {tcSaved === "horario" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                  {tcSaved === "horario" && (
+                    <span className="text-emerald-400 text-sm">✓ Guardado</span>
+                  )}
                 </div>
               </div>
             )}
 
             {!loadingTC && tcTab === "evaluacion" && (
               <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
-                <h3 className="text-base font-bold text-white mb-1">Criterios de Evaluación</h3>
-                <p className="text-slate-500 text-sm mb-5">Define los pesos por dimensión para tus módulos. La suma debe ser 100%.</p>
+                <h3 className="text-base font-bold text-white mb-1">
+                  Criterios de Evaluación
+                </h3>
+                <p className="text-slate-500 text-sm mb-5">
+                  Define los pesos por dimensión para tus módulos. La suma debe
+                  ser 100%.
+                </p>
                 <div className="space-y-4 mb-2">
-                  {([
-                    ["Saber (Teoría)", saberPct, setSaberPct],
-                    ["Hacer — Proceso", hacerProcesoPct, setHacerProcesoPct],
-                    ["Hacer — Producto", hacerProductoPct, setHacerProductoPct],
-                    ["Ser", serPct, setSerPct],
-                    ["Decidir", decidirPct, setDecidirPct],
-                  ] as [string, number, Dispatch<SetStateAction<number>>][]).map(([label, val, setter]) => (
+                  {(
+                    [
+                      ["Saber (Teoría)", saberPct, setSaberPct],
+                      ["Hacer — Proceso", hacerProcesoPct, setHacerProcesoPct],
+                      [
+                        "Hacer — Producto",
+                        hacerProductoPct,
+                        setHacerProductoPct,
+                      ],
+                      ["Ser", serPct, setSerPct],
+                      ["Decidir", decidirPct, setDecidirPct],
+                    ] as [string, number, Dispatch<SetStateAction<number>>][]
+                  ).map(([label, val, setter]) => (
                     <div key={label} className="flex items-center gap-3">
-                      <span className="text-slate-300 text-sm w-40 flex-shrink-0">{label}</span>
-                      <input type="range" min={0} max={100} value={val} onChange={e => setter(Number(e.target.value))} className="flex-1 accent-cyan-500" />
-                      <span className="text-cyan-400 text-sm font-bold w-10 text-right">{val}%</span>
+                      <span className="text-slate-300 text-sm w-40 flex-shrink-0">
+                        {label}
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={val}
+                        onChange={(e) => setter(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <span className="text-cyan-400 text-sm font-bold w-10 text-right">
+                        {val}%
+                      </span>
                     </div>
                   ))}
                 </div>
-                <div className={`text-sm font-semibold mb-4 ${totalPct === 100 ? "text-emerald-400" : "text-amber-400"}`}>
+                <div
+                  className={`text-sm font-semibold mb-4 ${totalPct === 100 ? "text-emerald-400" : "text-amber-400"}`}
+                >
                   Total: {totalPct}% {totalPct !== 100 && "(debe sumar 100%)"}
                 </div>
                 <div className="mb-5">
-                  <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">Nota mínima de aprobación</label>
-                  <input type="number" value={minPassing} onChange={e => setMinPassing(Number(e.target.value))} min={0} max={100} className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm w-24" />
+                  <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">
+                    Nota mínima de aprobación
+                  </label>
+                  <input
+                    type="number"
+                    value={minPassing}
+                    onChange={(e) => setMinPassing(Number(e.target.value))}
+                    min={0}
+                    max={100}
+                    className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm w-24"
+                  />
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={saveEvaluation} disabled={savingTC || totalPct !== 100} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                  <button
+                    onClick={saveEvaluation}
+                    disabled={savingTC || totalPct !== 100}
+                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
                     {savingTC ? "Guardando..." : "Guardar criterios"}
                   </button>
-                  {tcSaved === "evaluacion" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                  {tcSaved === "evaluacion" && (
+                    <span className="text-emerald-400 text-sm">✓ Guardado</span>
+                  )}
                 </div>
               </div>
             )}
 
             {!loadingTC && tcTab === "periodo" && (
               <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
-                <h3 className="text-base font-bold text-white mb-1">Período de Asistencia</h3>
-                <p className="text-slate-500 text-sm mb-5">Sobrescribe el semestre activo para tu grupo específico (deja vacío para usar el semestre global).</p>
+                <h3 className="text-base font-bold text-white mb-1">
+                  Período de Asistencia
+                </h3>
+                <p className="text-slate-500 text-sm mb-5">
+                  Sobrescribe el semestre activo para tu grupo específico (deja
+                  vacío para usar el semestre global).
+                </p>
                 <div className="mb-5">
-                  <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">Semestre de tu grupo (ej: 1/2026)</label>
-                  <input value={tcSemester} onChange={e => setTcSemester(e.target.value)} placeholder="Vacío = usar semestre global" className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm w-56" />
+                  <label className="block text-slate-400 text-xs uppercase tracking-wider mb-2">
+                    Semestre de tu grupo (ej: 1/2026)
+                  </label>
+                  <input
+                    value={tcSemester}
+                    onChange={(e) => setTcSemester(e.target.value)}
+                    placeholder="Vacío = usar semestre global"
+                    className="bg-slate-800 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm w-56"
+                  />
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={savePeriodo} disabled={savingTC} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                  <button
+                    onClick={savePeriodo}
+                    disabled={savingTC}
+                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
                     {savingTC ? "Guardando..." : "Guardar período"}
                   </button>
-                  {tcSaved === "periodo" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                  {tcSaved === "periodo" && (
+                    <span className="text-emerald-400 text-sm">✓ Guardado</span>
+                  )}
                 </div>
               </div>
             )}
 
             {!loadingTC && tcTab === "plantillas" && (
               <div className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-6">
-                <h3 className="text-base font-bold text-white mb-1">Plantillas de Observaciones</h3>
-                <p className="text-slate-500 text-sm mb-5">Textos predefinidos para el registro de notas. Se pueden seleccionar rápidamente al registrar observaciones.</p>
+                <h3 className="text-base font-bold text-white mb-1">
+                  Plantillas de Observaciones
+                </h3>
+                <p className="text-slate-500 text-sm mb-5">
+                  Textos predefinidos para el registro de notas. Se pueden
+                  seleccionar rápidamente al registrar observaciones.
+                </p>
                 <div className="space-y-2 mb-4">
                   {obsTemplates.map((t, i) => (
                     <div key={i} className="flex items-start gap-2">
-                      <div className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-300 text-sm">{t}</div>
-                      <button onClick={() => setObsTemplates(prev => prev.filter((_,j) => j!==i))} className="text-red-400 hover:text-red-300 px-2 py-1 mt-1 rounded-lg hover:bg-red-500/10 transition-colors text-sm flex-shrink-0">✕</button>
+                      <div className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-300 text-sm">
+                        {t}
+                      </div>
+                      <button
+                        onClick={() =>
+                          setObsTemplates((prev) =>
+                            prev.filter((_, j) => j !== i),
+                          )
+                        }
+                        className="text-red-400 hover:text-red-300 px-2 py-1 mt-1 rounded-lg hover:bg-red-500/10 transition-colors text-sm flex-shrink-0"
+                      >
+                        ✕
+                      </button>
                     </div>
                   ))}
-                  {obsTemplates.length === 0 && <div className="text-slate-500 text-sm py-2">No hay plantillas. Añade una abajo.</div>}
+                  {obsTemplates.length === 0 && (
+                    <div className="text-slate-500 text-sm py-2">
+                      No hay plantillas. Añade una abajo.
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 mb-5">
-                  <input value={newTemplate} onChange={e => setNewTemplate(e.target.value)} onKeyDown={e => { if(e.key==="Enter" && newTemplate.trim()) { setObsTemplates(prev => [...prev, newTemplate.trim()]); setNewTemplate(""); }}} placeholder="Escribe una plantilla y presiona Enter..." className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-4 py-2 text-sm" />
-                  <button onClick={() => { if(newTemplate.trim()) { setObsTemplates(prev => [...prev, newTemplate.trim()]); setNewTemplate(""); }}} className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors">+ Añadir</button>
+                  <input
+                    value={newTemplate}
+                    onChange={(e) => setNewTemplate(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newTemplate.trim()) {
+                        setObsTemplates((prev) => [
+                          ...prev,
+                          newTemplate.trim(),
+                        ]);
+                        setNewTemplate("");
+                      }
+                    }}
+                    placeholder="Escribe una plantilla y presiona Enter..."
+                    className="flex-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-4 py-2 text-sm"
+                  />
+                  <button
+                    onClick={() => {
+                      if (newTemplate.trim()) {
+                        setObsTemplates((prev) => [
+                          ...prev,
+                          newTemplate.trim(),
+                        ]);
+                        setNewTemplate("");
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors"
+                  >
+                    + Añadir
+                  </button>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={savePlantillas} disabled={savingTC} className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                  <button
+                    onClick={savePlantillas}
+                    disabled={savingTC}
+                    className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                  >
                     {savingTC ? "Guardando..." : "Guardar plantillas"}
                   </button>
-                  {tcSaved === "plantillas" && <span className="text-emerald-400 text-sm">✓ Guardado</span>}
+                  {tcSaved === "plantillas" && (
+                    <span className="text-emerald-400 text-sm">✓ Guardado</span>
+                  )}
                 </div>
               </div>
             )}
@@ -1879,480 +2310,589 @@ export default function TeacherDashboard() {
               ← Volver al inicio
             </button>
 
-        {/* Widget de Semestre */}
-        <section className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-4 shadow-lg">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-slate-400 text-sm font-medium">Semestre activo:</span>
-              <button
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300 font-bold transition-all"
-                onClick={() => { setSemesterInput(viewSemester); setShowSemesterModal(true); }}
-                title="Cambiar semestre visualizado"
-              >
-                📅 {viewSemester}
-                {viewSemester !== computeCurrentSemester() && (
-                  <span className="ml-1 px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-full">
-                    Vista histórica
+            {/* Widget de Semestre */}
+            <section className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-4 shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-400 text-sm font-medium">
+                    Semestre activo:
                   </span>
-                )}
-              </button>
-              {viewSemester !== computeCurrentSemester() && (
-                <button
-                  className="text-xs text-slate-400 hover:text-white underline transition-colors"
-                  onClick={() => setViewSemester(computeCurrentSemester())}
-                >
-                  Volver al actual
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-slate-500">Haz clic en el semestre para cambiar la vista</p>
-          </div>
-        </section>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300 font-bold transition-all"
+                    onClick={() => {
+                      setSemesterInput(viewSemester);
+                      setShowSemesterModal(true);
+                    }}
+                    title="Cambiar semestre visualizado"
+                  >
+                    📅 {viewSemester}
+                    {viewSemester !== computeCurrentSemester() && (
+                      <span className="ml-1 px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-full">
+                        Vista histórica
+                      </span>
+                    )}
+                  </button>
+                  {viewSemester !== computeCurrentSemester() && (
+                    <button
+                      className="text-xs text-slate-400 hover:text-white underline transition-colors"
+                      onClick={() => setViewSemester(computeCurrentSemester())}
+                    >
+                      Volver al actual
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Haz clic en el semestre para cambiar la vista
+                </p>
+              </div>
+            </section>
 
-        {/* Estadísticas de estudiantes por nivel */}
-        <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-              📊 Estadísticas por Nivel
-            </h2>
-            <div className="flex items-center gap-4 text-sm">
-              <span className="text-slate-400">
-                Total activos:{" "}
-                <span className="text-emerald-400 font-bold">
-                  {totalActiveStudents}
-                </span>
-              </span>
-              {totalInactiveStudents > 0 && (
-                <span className="text-slate-400">
-                  Inactivos:{" "}
-                  <span className="text-amber-400 font-bold">
-                    {totalInactiveStudents}
+            {/* Estadísticas de estudiantes por nivel */}
+            <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 p-4 sm:p-6 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                  📊 Estadísticas por Nivel
+                </h2>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-slate-400">
+                    Total activos:{" "}
+                    <span className="text-emerald-400 font-bold">
+                      {totalActiveStudents}
+                    </span>
                   </span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Gráfico de barras visual */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {levelStats.map((stat) => {
-              const maxCount = Math.max(...levelStats.map((s) => s.count), 1);
-              const percentage = (stat.count / maxCount) * 100;
-              const colors = [
-                "from-blue-500 to-blue-600",
-                "from-cyan-500 to-cyan-600",
-                "from-emerald-500 to-emerald-600",
-                "from-purple-500 to-purple-600",
-              ];
-              const colorClass = colors[stat.sortOrder % colors.length];
-
-              return (
-                <div
-                  key={stat.id}
-                  className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30 hover:border-slate-600/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedLevelFilter(stat.id)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-slate-300 truncate">
-                      {stat.name}
+                  {totalInactiveStudents > 0 && (
+                    <span className="text-slate-400">
+                      Inactivos:{" "}
+                      <span className="text-amber-400 font-bold">
+                        {totalInactiveStudents}
+                      </span>
                     </span>
-                    <span className="text-2xl font-bold text-white ml-2">
-                      {stat.count}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                  )}
+                </div>
+              </div>
+
+              {/* Gráfico de barras visual */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {levelStats.map((stat) => {
+                  const maxCount = Math.max(
+                    ...levelStats.map((s) => s.count),
+                    1,
+                  );
+                  const percentage = (stat.count / maxCount) * 100;
+                  const colors = [
+                    "from-blue-500 to-blue-600",
+                    "from-cyan-500 to-cyan-600",
+                    "from-emerald-500 to-emerald-600",
+                    "from-purple-500 to-purple-600",
+                  ];
+                  const colorClass = colors[stat.sortOrder % colors.length];
+
+                  return (
                     <div
-                      className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">
-                    {totalActiveStudents > 0
-                      ? Math.round((stat.count / totalActiveStudents) * 100)
-                      : 0}
-                    % del total
-                  </div>
+                      key={stat.id}
+                      className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30 hover:border-slate-600/50 transition-colors cursor-pointer"
+                      onClick={() => setSelectedLevelFilter(stat.id)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-slate-300 truncate">
+                          {stat.name}
+                        </span>
+                        <span className="text-2xl font-bold text-white ml-2">
+                          {stat.count}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        {totalActiveStudents > 0
+                          ? Math.round((stat.count / totalActiveStudents) * 100)
+                          : 0}
+                        % del total
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {levelStats.length === 0 && (
+                <div className="text-center py-8 text-slate-400">
+                  No hay niveles configurados
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </section>
 
-          {levelStats.length === 0 && (
-            <div className="text-center py-8 text-slate-400">
-              No hay niveles configurados
-            </div>
-          )}
-        </section>
-
-        {/* Lista de estudiantes - RESPONSIVE */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-            <button
-              className="flex items-center gap-3 text-left group"
-              onClick={() => setStudentsExpanded((v) => !v)}
-              title={studentsExpanded ? "Colapsar lista" : "Expandir lista de participantes"}
-            >
-              <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-blue-300 transition-colors">
-                Participantes
-                {!loadingStudents && (
-                  <span className="ml-2 text-base font-normal text-slate-400">
-                    ({filteredStudents.length})
+            {/* Lista de estudiantes - RESPONSIVE */}
+            <section className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                <button
+                  className="flex items-center gap-3 text-left group"
+                  onClick={() => setStudentsExpanded((v) => !v)}
+                  title={
+                    studentsExpanded
+                      ? "Colapsar lista"
+                      : "Expandir lista de participantes"
+                  }
+                >
+                  <h2 className="text-xl sm:text-2xl font-bold text-white group-hover:text-blue-300 transition-colors">
+                    Participantes
+                    {!loadingStudents && (
+                      <span className="ml-2 text-base font-normal text-slate-400">
+                        ({filteredStudents.length})
+                      </span>
+                    )}
+                    {loadingStudents && (
+                      <span className="ml-2 text-base font-normal text-slate-500">
+                        cargando...
+                      </span>
+                    )}
+                  </h2>
+                  <span className="text-slate-400 group-hover:text-blue-300 transition-colors text-lg">
+                    {studentsExpanded ? "▲" : "▼"}
                   </span>
-                )}
-                {loadingStudents && (
-                  <span className="ml-2 text-base font-normal text-slate-500">cargando...</span>
-                )}
-              </h2>
-              <span className="text-slate-400 group-hover:text-blue-300 transition-colors text-lg">
-                {studentsExpanded ? "▲" : "▼"}
-              </span>
-            </button>
-            <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
-              <select
-                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
-                value={selectedLevelFilter ?? ""}
-                onChange={(e) =>
-                  setSelectedLevelFilter(
-                    e.target.value ? Number(e.target.value) : null,
-                  )
-                }
-              >
-                <option value="">Todos los niveles</option>
-                {levels.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 text-sm sm:text-base"
-                onClick={() => setShowAddStudent(true)}
-              >
-                + <span className="hidden sm:inline">Añadir </span>Estudiante
-              </button>
-              <button
-                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-violet-900/30 text-sm sm:text-base"
-                onClick={exportContactsToVCF}
-                title="Exportar contactos de estudiantes en formato VCF"
-              >
-                📱 <span className="hidden sm:inline">Exportar </span>Contactos
-              </button>
-              <button
-                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-cyan-900/30 text-sm sm:text-base"
-                onClick={() => nav("/teacher/attendance")}
-                title="Registro de asistencia mensual"
-              >
-                📋 <span className="hidden sm:inline">Asistencia</span>
-              </button>
-              <button
-                className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
-                  showInactiveStudents
-                    ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-lg shadow-amber-900/30"
-                    : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                }`}
-                onClick={() => setShowInactiveStudents(!showInactiveStudents)}
-                title={
-                  showInactiveStudents
-                    ? "Ver estudiantes activos"
-                    : "Ver estudiantes inactivos"
-                }
-              >
-                {showInactiveStudents ? "👥 Ver Activos" : "👤 Ver Inactivos"}
-              </button>
-            </div>
-          </div>
-
-          {!studentsExpanded && !loadingStudents && filteredStudents.length > 0 && (
-            <div className="text-xs text-slate-500 px-1">
-              Click en "Participantes" para ver la lista completa
-            </div>
-          )}
-
-          {studentsExpanded && (
-          <>{/* Indicador de modo inactivos */}
-          {showInactiveStudents && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="text-amber-400 text-lg">⚠️</span>
-              <div>
-                <div className="text-amber-300 font-medium">
-                  Modo: Estudiantes Inactivos
-                </div>
-                <div className="text-amber-400/70 text-sm">
-                  Estos estudiantes no pueden acceder al sistema. Puedes
-                  reactivarlos con el botón "Activar".
-                </div>
-              </div>
-            </div>
-          )}
-
-          {loadingStudents ? (
-            <div className="bg-slate-900 rounded-2xl border border-slate-700/50 p-12 text-center">
-              <div className="text-slate-300 text-lg">
-                Cargando estudiantes...
-              </div>
-            </div>
-          ) : filteredStudents.length === 0 ? (
-            <div className="bg-slate-900 rounded-2xl border border-slate-700/50 p-12 text-center">
-              <div className="text-6xl mb-4 opacity-20">👥</div>
-              <div className="text-xl font-semibold text-white mb-2">
-                No hay estudiantes
-              </div>
-              <div className="text-slate-400">
-                {selectedLevelFilter
-                  ? "No hay estudiantes en este nivel"
-                  : "Agrega estudiantes con el botón '+ Añadir Estudiante'"}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-900 rounded-2xl border border-slate-700/50 overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-slate-800/50">
-                    <tr>
-                      {(() => {
-                        function Col({ col, label, center }: { col: string; label: string; center?: boolean }) {
-                          const active = sortColumn === col;
-                          return (
-                            <th
-                              className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors hover:bg-slate-700/40 ${center ? "text-center" : "text-left"} ${active ? "text-blue-400" : "text-slate-300"}`}
-                              onClick={() => {
-                                if (sortColumn === col) setSortOrder((p) => p === "asc" ? "desc" : "asc");
-                                else { setSortColumn(col); setSortOrder("asc"); }
-                              }}
-                            >
-                              {label}{" "}
-                              <span className={active ? "text-blue-400" : "text-slate-600"}>
-                                {active ? (sortOrder === "asc" ? "↑" : "↓") : "↕"}
-                              </span>
-                            </th>
-                          );
-                        }
-                        return (
-                          <>
-                            <th className="px-2 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider w-12">N°</th>
-                            <Col col="code"          label="Código" />
-                            <Col col="rudeal_number" label="RUDEAL" />
-                            <Col col="last_name_pat" label="Ap. Paterno" />
-                            <Col col="last_name_mat" label="Ap. Materno" />
-                            <Col col="first_names"   label="Nombres" />
-                            <Col col="carnet_number" label="Carnet" />
-                            <Col col="gender"        label="Gén." center />
-                            <Col col="birth_date"    label="Edad" center />
-                            <Col col="level"         label="Nivel" center />
-                            <Col col="phone"         label="Celular" />
-                            <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">Asistencia</th>
-                            <Col col="last_seen_at" label="Últ. conexión" center />
-                            <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">Acciones</th>
-                          </>
-                        );
-                      })()}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {filteredStudents.map((s, index) => (
-                      <tr
-                        key={s.id}
-                        className="hover:bg-slate-800/30 transition-colors"
-                      >
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-center text-slate-400 font-mono">
-                          {index + 1}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-white font-mono">
-                          {s.code || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
-                          {s.rudeal_number || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-200">
-                          {s.last_name_pat || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-200">
-                          {s.last_name_mat || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-200">
-                          {s.first_names || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
-                          {s.carnet_number || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300 text-center">
-                          {s.gender === "F"
-                            ? "F"
-                            : s.gender === "M"
-                              ? "M"
-                              : "-"}
-                        </td>
-                        <td
-                          className="px-4 py-3 whitespace-nowrap text-sm text-center font-bold"
-                          style={{
-                            color: s.birth_date
-                              ? calculateAge(s.birth_date) >= 15
-                                ? "#22c55e"
-                                : "#ef4444"
-                              : "#a1a1aa",
-                          }}
-                        >
-                          {s.birth_date ? calculateAge(s.birth_date) : "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg border border-blue-500/20">
-                            {s.level_name ?? "Sin nivel"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
-                          {s.phone || "-"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          {(() => {
-                            const stat = attendanceStats.get(s.id);
-                            if (!stat || stat.total === 0) return <span className="text-xs text-slate-600">-</span>;
-                            const presentes = stat.total - stat.faltas;
-                            const pct = Math.round((presentes / stat.total) * 100);
-                            const barColor = pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500";
-                            const textColor = pct >= 80 ? "text-emerald-400" : pct >= 60 ? "text-amber-400" : "text-red-400";
-                            return (
-                              <div className="flex flex-col items-center gap-0.5" title={`${presentes} presencias de ${stat.total} clases`}>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-14 bg-slate-700 rounded-full h-1.5">
-                                    <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-                                  </div>
-                                  <span className={`text-xs font-medium ${textColor}`}>{pct}%</span>
-                                </div>
-                                {pct < 60 && (
-                                  <span className="text-red-400 text-xs font-semibold leading-none">⚠ Riesgo</span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          {(() => {
-                            const ts = s.last_seen_at;
-                            const label = formatLastSeen(ts);
-                            const isNever = !ts;
-                            const isRecent = ts
-                              ? Date.now() - new Date(ts).getTime() < 15 * 60_000
-                              : false;
-                            return (
-                              <span
-                                className={`text-xs font-medium ${
-                                  isNever
-                                    ? "text-slate-600"
-                                    : isRecent
-                                      ? "text-emerald-400"
-                                      : "text-slate-400"
-                                }`}
-                                title={ts
-                                  ? new Date(ts).toLocaleString("es-BO")
-                                  : "Sin registro"}
-                              >
-                                {label}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              className="px-3 py-1.5 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                              onClick={() => openEditStudent(s)}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                              onClick={() =>
-                                openResetPassword(s.id, s.full_name ?? "")
-                              }
-                            >
-                              Reset
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                              onClick={() =>
-                                nav(`/teacher/student/${s.id}/grades`)
-                              }
-                            >
-                              Notas
-                            </button>
-                            <button
-                              className={`px-3 py-1.5 rounded-lg transition-colors ${
-                                !s.can_ascend
-                                  ? "text-slate-600 cursor-not-allowed"
-                                  : "text-teal-400 hover:bg-teal-500/10"
-                              }`}
-                              onClick={() =>
-                                s.can_ascend &&
-                                handleAscend(s.id, s.level_sort_order)
-                              }
-                              disabled={!s.can_ascend}
-                              title={
-                                s.can_ascend
-                                  ? "Ascender al siguiente nivel"
-                                  : "Debe completar y aprobar todos los módulos del nivel"
-                              }
-                            >
-                              Ascender
-                            </button>
-                            <button
-                              className="px-3 py-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
-                              onClick={() =>
-                                openAvatarUnlockModal(
-                                  s.id,
-                                  [
-                                    s.first_names,
-                                    s.last_name_pat,
-                                    s.last_name_mat,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ") ||
-                                    s.code ||
-                                    "",
-                                )
-                              }
-                              title="Gestionar avatares de desafío"
-                            >
-                              Avatares
-                            </button>
-                            <button
-                              className={`px-3 py-1.5 rounded-lg transition-colors ${
-                                s.is_active
-                                  ? "text-amber-400 hover:bg-amber-500/10"
-                                  : "text-emerald-400 hover:bg-emerald-500/10"
-                              }`}
-                              onClick={() =>
-                                handleToggleActive(
-                                  s.id,
-                                  s.full_name ?? s.code ?? "",
-                                  s.is_active !== false,
-                                )
-                              }
-                              disabled={togglingActive}
-                            >
-                              {s.is_active !== false ? "Desactivar" : "Activar"}
-                            </button>
-                            {!showInactiveStudents && (
-                              <button
-                                className="px-3 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                onClick={() =>
-                                  handleDeleteStudent(s.id, s.code ?? "")
-                                }
-                              >
-                                Eliminar
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                </button>
+                <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
+                  <select
+                    className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                    value={selectedLevelFilter ?? ""}
+                    onChange={(e) =>
+                      setSelectedLevelFilter(
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
+                  >
+                    <option value="">Todos los niveles</option>
+                    {levels.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
+                  </select>
+                  <button
+                    className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 text-sm sm:text-base"
+                    onClick={() => setShowAddStudent(true)}
+                  >
+                    + <span className="hidden sm:inline">Añadir </span>
+                    Estudiante
+                  </button>
+                  <button
+                    className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-violet-900/30 text-sm sm:text-base"
+                    onClick={exportContactsToVCF}
+                    title="Exportar contactos de estudiantes en formato VCF"
+                  >
+                    📱 <span className="hidden sm:inline">Exportar </span>
+                    Contactos
+                  </button>
+                  <button
+                    className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-cyan-900/30 text-sm sm:text-base"
+                    onClick={() => nav("/teacher/attendance")}
+                    title="Registro de asistencia mensual"
+                  >
+                    📋 <span className="hidden sm:inline">Asistencia</span>
+                  </button>
+                  <button
+                    className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
+                      showInactiveStudents
+                        ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-lg shadow-amber-900/30"
+                        : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                    }`}
+                    onClick={() =>
+                      setShowInactiveStudents(!showInactiveStudents)
+                    }
+                    title={
+                      showInactiveStudents
+                        ? "Ver estudiantes activos"
+                        : "Ver estudiantes inactivos"
+                    }
+                  >
+                    {showInactiveStudents
+                      ? "👥 Ver Activos"
+                      : "👤 Ver Inactivos"}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-          </>
-          )}
-        </section>
+
+              {!studentsExpanded &&
+                !loadingStudents &&
+                filteredStudents.length > 0 && (
+                  <div className="text-xs text-slate-500 px-1">
+                    Click en "Participantes" para ver la lista completa
+                  </div>
+                )}
+
+              {studentsExpanded && (
+                <>
+                  {/* Indicador de modo inactivos */}
+                  {showInactiveStudents && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+                      <span className="text-amber-400 text-lg">⚠️</span>
+                      <div>
+                        <div className="text-amber-300 font-medium">
+                          Modo: Estudiantes Inactivos
+                        </div>
+                        <div className="text-amber-400/70 text-sm">
+                          Estos estudiantes no pueden acceder al sistema. Puedes
+                          reactivarlos con el botón "Activar".
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {loadingStudents ? (
+                    <div className="bg-slate-900 rounded-2xl border border-slate-700/50 p-12 text-center">
+                      <div className="text-slate-300 text-lg">
+                        Cargando estudiantes...
+                      </div>
+                    </div>
+                  ) : filteredStudents.length === 0 ? (
+                    <div className="bg-slate-900 rounded-2xl border border-slate-700/50 p-12 text-center">
+                      <div className="text-6xl mb-4 opacity-20">👥</div>
+                      <div className="text-xl font-semibold text-white mb-2">
+                        No hay estudiantes
+                      </div>
+                      <div className="text-slate-400">
+                        {selectedLevelFilter
+                          ? "No hay estudiantes en este nivel"
+                          : "Agrega estudiantes con el botón '+ Añadir Estudiante'"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-900 rounded-2xl border border-slate-700/50 overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                          <thead className="bg-slate-800/50">
+                            <tr>
+                              {(() => {
+                                function Col({
+                                  col,
+                                  label,
+                                  center,
+                                }: {
+                                  col: string;
+                                  label: string;
+                                  center?: boolean;
+                                }) {
+                                  const active = sortColumn === col;
+                                  return (
+                                    <th
+                                      className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors hover:bg-slate-700/40 ${center ? "text-center" : "text-left"} ${active ? "text-blue-400" : "text-slate-300"}`}
+                                      onClick={() => {
+                                        if (sortColumn === col)
+                                          setSortOrder((p) =>
+                                            p === "asc" ? "desc" : "asc",
+                                          );
+                                        else {
+                                          setSortColumn(col);
+                                          setSortOrder("asc");
+                                        }
+                                      }}
+                                    >
+                                      {label}{" "}
+                                      <span
+                                        className={
+                                          active
+                                            ? "text-blue-400"
+                                            : "text-slate-600"
+                                        }
+                                      >
+                                        {active
+                                          ? sortOrder === "asc"
+                                            ? "↑"
+                                            : "↓"
+                                          : "↕"}
+                                      </span>
+                                    </th>
+                                  );
+                                }
+                                return (
+                                  <>
+                                    <th className="px-2 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider w-12">
+                                      N°
+                                    </th>
+                                    <Col col="code" label="Código" />
+                                    <Col col="rudeal_number" label="RUDEAL" />
+                                    <Col
+                                      col="last_name_pat"
+                                      label="Ap. Paterno"
+                                    />
+                                    <Col
+                                      col="last_name_mat"
+                                      label="Ap. Materno"
+                                    />
+                                    <Col col="first_names" label="Nombres" />
+                                    <Col col="carnet_number" label="Carnet" />
+                                    <Col col="gender" label="Gén." center />
+                                    <Col col="birth_date" label="Edad" center />
+                                    <Col col="level" label="Nivel" center />
+                                    <Col col="phone" label="Celular" />
+                                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                      Asistencia
+                                    </th>
+                                    <Col
+                                      col="last_seen_at"
+                                      label="Últ. conexión"
+                                      center
+                                    />
+                                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                      Acciones
+                                    </th>
+                                  </>
+                                );
+                              })()}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/50">
+                            {filteredStudents.map((s, index) => (
+                              <tr
+                                key={s.id}
+                                className="hover:bg-slate-800/30 transition-colors"
+                              >
+                                <td className="px-2 py-3 whitespace-nowrap text-sm text-center text-slate-400 font-mono">
+                                  {index + 1}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-white font-mono">
+                                  {s.code || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
+                                  {s.rudeal_number || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-200">
+                                  {s.last_name_pat || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-200">
+                                  {s.last_name_mat || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-200">
+                                  {s.first_names || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
+                                  {s.carnet_number || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300 text-center">
+                                  {s.gender === "F"
+                                    ? "F"
+                                    : s.gender === "M"
+                                      ? "M"
+                                      : "-"}
+                                </td>
+                                <td
+                                  className="px-4 py-3 whitespace-nowrap text-sm text-center font-bold"
+                                  style={{
+                                    color: s.birth_date
+                                      ? calculateAge(s.birth_date) >= 15
+                                        ? "#22c55e"
+                                        : "#ef4444"
+                                      : "#a1a1aa",
+                                  }}
+                                >
+                                  {s.birth_date
+                                    ? calculateAge(s.birth_date)
+                                    : "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg border border-blue-500/20">
+                                    {s.level_name ?? "Sin nivel"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-300">
+                                  {s.phone || "-"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  {(() => {
+                                    const stat = attendanceStats.get(s.id);
+                                    if (!stat || stat.total === 0)
+                                      return (
+                                        <span className="text-xs text-slate-600">
+                                          -
+                                        </span>
+                                      );
+                                    const presentes = stat.total - stat.faltas;
+                                    const pct = Math.round(
+                                      (presentes / stat.total) * 100,
+                                    );
+                                    const barColor =
+                                      pct >= 80
+                                        ? "bg-emerald-500"
+                                        : pct >= 60
+                                          ? "bg-amber-500"
+                                          : "bg-red-500";
+                                    const textColor =
+                                      pct >= 80
+                                        ? "text-emerald-400"
+                                        : pct >= 60
+                                          ? "text-amber-400"
+                                          : "text-red-400";
+                                    return (
+                                      <div
+                                        className="flex flex-col items-center gap-0.5"
+                                        title={`${presentes} presencias de ${stat.total} clases`}
+                                      >
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-14 bg-slate-700 rounded-full h-1.5">
+                                            <div
+                                              className={`h-1.5 rounded-full ${barColor}`}
+                                              style={{ width: `${pct}%` }}
+                                            />
+                                          </div>
+                                          <span
+                                            className={`text-xs font-medium ${textColor}`}
+                                          >
+                                            {pct}%
+                                          </span>
+                                        </div>
+                                        {pct < 60 && (
+                                          <span className="text-red-400 text-xs font-semibold leading-none">
+                                            ⚠ Riesgo
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                  {(() => {
+                                    const ts = s.last_seen_at;
+                                    const label = formatLastSeen(ts);
+                                    const isNever = !ts;
+                                    const isRecent = ts
+                                      ? Date.now() - new Date(ts).getTime() <
+                                        15 * 60_000
+                                      : false;
+                                    return (
+                                      <span
+                                        className={`text-xs font-medium ${
+                                          isNever
+                                            ? "text-slate-600"
+                                            : isRecent
+                                              ? "text-emerald-400"
+                                              : "text-slate-400"
+                                        }`}
+                                        title={
+                                          ts
+                                            ? new Date(ts).toLocaleString(
+                                                "es-BO",
+                                              )
+                                            : "Sin registro"
+                                        }
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      className="px-3 py-1.5 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                      onClick={() => openEditStudent(s)}
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      className="px-3 py-1.5 text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                                      onClick={() =>
+                                        openResetPassword(
+                                          s.id,
+                                          s.full_name ?? "",
+                                        )
+                                      }
+                                    >
+                                      Reset
+                                    </button>
+                                    <button
+                                      className="px-3 py-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                      onClick={() =>
+                                        nav(`/teacher/student/${s.id}/grades`)
+                                      }
+                                    >
+                                      Notas
+                                    </button>
+                                    <button
+                                      className={`px-3 py-1.5 rounded-lg transition-colors ${
+                                        !s.can_ascend
+                                          ? "text-slate-600 cursor-not-allowed"
+                                          : "text-teal-400 hover:bg-teal-500/10"
+                                      }`}
+                                      onClick={() =>
+                                        s.can_ascend &&
+                                        handleAscend(s.id, s.level_sort_order)
+                                      }
+                                      disabled={!s.can_ascend}
+                                      title={
+                                        s.can_ascend
+                                          ? "Ascender al siguiente nivel"
+                                          : "Debe completar y aprobar todos los módulos del nivel"
+                                      }
+                                    >
+                                      Ascender
+                                    </button>
+                                    <button
+                                      className="px-3 py-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                                      onClick={() =>
+                                        openAvatarUnlockModal(
+                                          s.id,
+                                          [
+                                            s.first_names,
+                                            s.last_name_pat,
+                                            s.last_name_mat,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" ") ||
+                                            s.code ||
+                                            "",
+                                        )
+                                      }
+                                      title="Gestionar avatares de desafío"
+                                    >
+                                      Avatares
+                                    </button>
+                                    <button
+                                      className={`px-3 py-1.5 rounded-lg transition-colors ${
+                                        s.is_active
+                                          ? "text-amber-400 hover:bg-amber-500/10"
+                                          : "text-emerald-400 hover:bg-emerald-500/10"
+                                      }`}
+                                      onClick={() =>
+                                        handleToggleActive(
+                                          s.id,
+                                          s.full_name ?? s.code ?? "",
+                                          s.is_active !== false,
+                                        )
+                                      }
+                                      disabled={togglingActive}
+                                    >
+                                      {s.is_active !== false
+                                        ? "Desactivar"
+                                        : "Activar"}
+                                    </button>
+                                    {!showInactiveStudents && (
+                                      <button
+                                        className="px-3 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                        onClick={() =>
+                                          handleDeleteStudent(
+                                            s.id,
+                                            s.code ?? "",
+                                          )
+                                        }
+                                      >
+                                        Eliminar
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
           </div>
         )}
       </main>
@@ -2805,7 +3345,8 @@ export default function TeacherDashboard() {
                   onChange={(e) => setEditStudentSemester(e.target.value)}
                 />
                 <p className="text-xs text-slate-400 mt-2">
-                  Formato: número/año (ej: 1/2026 o 2/2025). Se usa para filtrar estudiantes por semestre.
+                  Formato: número/año (ej: 1/2026 o 2/2025). Se usa para filtrar
+                  estudiantes por semestre.
                 </p>
               </div>
 
@@ -2813,9 +3354,12 @@ export default function TeacherDashboard() {
               <div className="bg-slate-800/40 rounded-xl p-4 border border-slate-700/40">
                 <label className="flex items-center justify-between cursor-pointer gap-4">
                   <div>
-                    <div className="text-sm font-medium text-white">Mesa Directiva</div>
+                    <div className="text-sm font-medium text-white">
+                      Mesa Directiva
+                    </div>
                     <div className="text-xs text-slate-400 mt-0.5">
-                      El participante podrá ver la asistencia de todos los estudiantes desde su cuenta.
+                      El participante podrá ver la asistencia de todos los
+                      estudiantes desde su cuenta.
                     </div>
                   </div>
                   <button
@@ -2827,7 +3371,9 @@ export default function TeacherDashboard() {
                   >
                     <span
                       className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
-                        editStudentBoardMember ? "translate-x-5" : "translate-x-0"
+                        editStudentBoardMember
+                          ? "translate-x-5"
+                          : "translate-x-0"
                       }`}
                     />
                   </button>
@@ -3132,9 +3678,14 @@ export default function TeacherDashboard() {
             className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-sm w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold text-white mb-4">Cambiar vista de semestre</h3>
+            <h3 className="text-lg font-bold text-white mb-4">
+              Cambiar vista de semestre
+            </h3>
             <p className="text-sm text-slate-400 mb-4">
-              Semestre actual: <span className="text-blue-400 font-bold">{computeCurrentSemester()}</span>
+              Semestre actual:{" "}
+              <span className="text-blue-400 font-bold">
+                {computeCurrentSemester()}
+              </span>
             </p>
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-300 mb-2">
