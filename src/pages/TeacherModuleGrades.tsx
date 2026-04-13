@@ -463,33 +463,6 @@ export default function TeacherModuleGrades() {
     return { text: "Promovido Excelente", color: "text-blue-400" };
   }
 
-  function parseErrorMessage(error: string): string {
-    // Mensajes amigables para constraints
-    if (error.includes("check_ser_range")) {
-      return "❌ Error: SER debe estar entre 0 y 10 puntos";
-    }
-    if (error.includes("check_saber_range")) {
-      return "❌ Error: SABER debe estar entre 0 y 30 puntos";
-    }
-    if (error.includes("check_hacer_proceso_range")) {
-      return "❌ Error: HACER PROCESO debe estar entre 0 y 20 puntos";
-    }
-    if (error.includes("check_hacer_producto_range")) {
-      return "❌ Error: HACER PRODUCTO debe estar entre 0 y 20 puntos";
-    }
-    if (error.includes("check_decidir_range")) {
-      return "❌ Error: DECIDIR debe estar entre 0 y 10 puntos";
-    }
-    if (error.includes("check_auto_ser_range")) {
-      return "❌ Error: AUTO SER debe estar entre 0 y 5 puntos";
-    }
-    if (error.includes("check_auto_decidir_range")) {
-      return "❌ Error: AUTO DECIDIR debe estar entre 0 y 5 puntos";
-    }
-
-    // Mensaje genérico para otros errores
-    return `❌ Error: ${error}`;
-  }
 
   // Auto-guardado silencioso (sin mensaje al docente)
   async function saveGradeQuiet(studentId: string) {
