@@ -480,30 +480,54 @@ export default function TeacherDimensionGrades() {
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg,#111 0%,#1a1a1a 50%,#0d0d0d 100%)", color: "#e4e4e7" }}>
-      {/* Header */}
-      <div style={{ background: "rgba(20,20,20,0.98)", borderBottom: "1px solid rgba(255,255,255,0.1)", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+    <div style={{ minHeight: "100vh", background: "#020617", color: "#e4e4e7" }}>
+      {/* Header — mismo estilo que TeacherModuleGrades */}
+      <div style={{ background: "linear-gradient(to right, #0f172a, #0f172a, #1e293b)", borderBottom: "1px solid rgba(30,41,59,0.5)", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.4)" }}>
         <div>
-          <button
-            onClick={() => nav(`/teacher/module/${mid}/grades`)}
-            style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}
-          >
-            ← Registro Principal
-          </button>
-          <div style={{ fontSize: 18, fontWeight: 700, color: cfg.color }}>
-            Registro {cfg.label} ({cfg.max} pts)
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <button
+              onClick={() => nav(`/teacher/module/${mid}/grades`)}
+              style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 5, padding: 0, transition: "color 0.15s" }}
+              onMouseOver={e => (e.currentTarget.style.color = "#fff")}
+              onMouseOut={e => (e.currentTarget.style.color = "#94a3b8")}
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 19l-7-7 7-7" />
+              </svg>
+              Registro Principal
+            </button>
+            <div style={{ width: 1, height: 14, background: "rgba(51,65,85,0.8)" }} />
+            <button
+              onClick={() => nav("/teacher")}
+              title="Ir al Dashboard"
+              style={{ background: "none", border: "1px solid rgba(51,65,85,0.6)", borderRadius: 6, color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", fontSize: 12, transition: "all 0.15s" }}
+              onMouseOver={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "rgba(100,116,139,0.8)"; }}
+              onMouseOut={e => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.borderColor = "rgba(51,65,85,0.6)"; }}
+            >
+              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              Inicio
+            </button>
           </div>
-          <div style={{ fontSize: 12, color: "#71717a" }}>{moduleTitle}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>
+            Registro{" "}
+            <span style={{ color: cfg.color }}>{cfg.label}</span>
+            <span style={{ color: "#64748b", fontWeight: 400, fontSize: 14, marginLeft: 6 }}>({cfg.max} pts)</span>
+          </div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{moduleTitle}</div>
         </div>
         <button
           onClick={exportPdf}
-          style={{ background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.4)", color: "#93c5fd", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13 }}
+          style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)", color: "#93c5fd", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13, transition: "background 0.15s" }}
+          onMouseOver={e => (e.currentTarget.style.background = "rgba(59,130,246,0.25)")}
+          onMouseOut={e => (e.currentTarget.style.background = "rgba(59,130,246,0.15)")}
         >
           📄 Exportar PDF
         </button>
       </div>
 
-      <div style={{ padding: "20px 24px" }}>
+      <div style={{ padding: "24px" }}>
         {msg && <div style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, color: "#fca5a5", fontSize: 13 }}>{msg}</div>}
 
         {loadingData ? (
@@ -514,7 +538,7 @@ export default function TeacherDimensionGrades() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ minWidth: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ background: "rgba(30,58,95,0.6)" }}>
+                <tr style={{ background: "rgba(15,23,42,0.9)" }}>
                   <th style={thStyle}>N°</th>
                   <th style={{ ...thStyle, textAlign: "left", minWidth: 160 }}>Estudiante</th>
                   {cols.map((c) => (

@@ -81,7 +81,7 @@ export default function App() {
           path="/teacher/content"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherContentManager />
               </RequireRole>
             </ProtectedRoute>
@@ -92,7 +92,7 @@ export default function App() {
           path="/teacher/module/:moduleId/grades"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherModuleGrades />
               </RequireRole>
             </ProtectedRoute>
@@ -103,7 +103,7 @@ export default function App() {
           path="/teacher/module/:moduleId/grades/:dimension"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherDimensionGrades />
               </RequireRole>
             </ProtectedRoute>
@@ -114,7 +114,7 @@ export default function App() {
           path="/teacher/modules"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherModules />
               </RequireRole>
             </ProtectedRoute>
@@ -125,7 +125,7 @@ export default function App() {
           path="/teacher/attendance"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherAttendancePage />
               </RequireRole>
             </ProtectedRoute>
@@ -136,7 +136,7 @@ export default function App() {
           path="/teacher/student/:studentId/grades"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherStudentGrades />
               </RequireRole>
             </ProtectedRoute>
@@ -147,7 +147,7 @@ export default function App() {
           path="/teacher"
           element={
             <ProtectedRoute>
-              <RequireRole allow={["teacher", "admin"]}>
+              <RequireRole allow={["teacher", "admin", "administrativo"]}>
                 <TeacherDashboard />
               </RequireRole>
             </ProtectedRoute>

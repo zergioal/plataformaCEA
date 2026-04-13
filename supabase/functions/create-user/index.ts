@@ -10,18 +10,19 @@ const corsHeaders = {
 };
 
 type CreateUserPayload = {
-  role: "student" | "teacher";
+  role: "student" | "teacher" | "administrativo";
   temp_password: string;
   first_names: string;
   last_name_pat?: string;
   last_name_mat?: string;
   phone: string;
   contact_email?: string;
-  career_id: number;
-  shift: "tarde" | "noche";
+  career_id?: number;
+  shift?: "tarde" | "noche";
   level_id?: number; // solo para student
   likes?: string;
   avatar_key?: string;
+  admin_type?: "director" | "secretaria"; // solo para administrativo
   // Nuevos campos para estudiantes
   rudeal_number?: string;
   carnet_number?: string;
@@ -71,14 +72,14 @@ serve(async (req) => {
 
     if (profErr)
       return json(403, { error: "No se pudo leer perfil del caller" });
-    if (!["admin", "teacher"].includes(callerProfile?.role))
-      return json(403, { error: "Solo admin o teacher pueden crear usuarios" });
+    if (!["admin", "teacher", "administrativo"].includes(callerProfile?.role))
+      return json(403, { error: "Solo admin, teacher o administrativo pueden crear usuarios" });
 
     const payload = (await req.json()) as CreateUserPayload;
 
     // Validaciones
-    if (!payload.role || !["student", "teacher"].includes(payload.role)) {
-      return json(400, { error: "role debe ser student o teacher" });
+    if (!payload.role || !["student", "teacher", "administrativo"].includes(payload.role)) {
+      return json(400, { error: "role debe ser student, teacher o administrativo" });
     }
 
     if (!payload.first_names?.trim()) {
@@ -93,12 +94,14 @@ serve(async (req) => {
       return json(400, { error: "phone es requerido" });
     }
 
-    if (!payload.career_id) {
-      return json(400, { error: "career_id es requerido" });
-    }
-
-    if (!payload.shift || !["tarde", "noche"].includes(payload.shift)) {
-      return json(400, { error: "shift debe ser tarde o noche" });
+    // career_id y shift solo requeridos para student/teacher
+    if (payload.role !== "administrativo") {
+      if (!payload.career_id) {
+        return json(400, { error: "career_id es requerido" });
+      }
+      if (!payload.shift || !["tarde", "noche"].includes(payload.shift)) {
+        return json(400, { error: "shift debe ser tarde o noche" });
+      }
     }
 
     if (payload.role === "student" && !payload.level_id) {
@@ -118,17 +121,22 @@ serve(async (req) => {
       }
     }
 
-    // Obtener prefijo de carrera
-    const { data: careerData, error: careerErr } = await sb
-      .from("careers")
-      .select("student_prefix")
-      .eq("id", payload.career_id)
-      .single();
+    // Obtener prefijo de carrera (no aplica para administrativos)
+    let prefix: string;
+    if (payload.role === "administrativo") {
+      prefix = "ADM";
+    } else {
+      const { data: careerData, error: careerErr } = await sb
+        .from("careers")
+        .select("student_prefix")
+        .eq("id", payload.career_id)
+        .single();
 
-    if (careerErr || !careerData)
-      return json(400, { error: "career_id inválido" });
+      if (careerErr || !careerData)
+        return json(400, { error: "career_id inválido" });
 
-    const prefix = careerData.student_prefix;
+      prefix = careerData.student_prefix;
+    }
 
     // Generar código único
     const { data: codeData, error: codeErr } = await sb.rpc("next_code", {
@@ -181,11 +189,18 @@ serve(async (req) => {
       last_name_mat: payload.last_name_mat?.trim() || null,
       phone: payload.phone.trim(),
       contact_email: payload.contact_email?.trim() || null,
-      career_id: payload.career_id,
-      shift: payload.shift,
       likes: payload.likes?.trim() || null,
       avatar_key: payload.avatar_key || "av1",
     };
+
+    // Campos específicos según rol
+    if (payload.role !== "administrativo") {
+      profileData.career_id = payload.career_id;
+      profileData.shift = payload.shift;
+    }
+    if (payload.role === "administrativo") {
+      profileData.admin_type = payload.admin_type || null;
+    }
 
     // Agregar campos adicionales para estudiantes
     if (payload.role === "student") {

@@ -56,7 +56,15 @@ type StudentRow = {
   progress: number;
   suggestedHP: number;
   total: number;
-  saving: boolean;
+};
+
+// Límites de cada dimensión editable
+const GRADE_LIMITS: Record<string, { min: number; max: number }> = {
+  ser:            { min: 1, max: 10 },
+  saber:          { min: 1, max: 30 },
+  hacer_proceso:  { min: 1, max: 20 },
+  hacer_producto: { min: 1, max: 20 },
+  decidir:        { min: 1, max: 10 },
 };
 
 export default function TeacherModuleGrades() {
@@ -71,6 +79,10 @@ export default function TeacherModuleGrades() {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set());
+  const [globalSaving, setGlobalSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const autoSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Estados para el reporte PDF
   const currentMonth = new Date().getMonth() + 1;
@@ -78,7 +90,7 @@ export default function TeacherModuleGrades() {
   const defaultSemester = `${currentMonth <= 6 ? 1 : 2}/${currentYear}`;
 
   const [facilitator, setFacilitator] = useState("");
-  const [director, setDirector] = useState("Lic. Germana Calle Villca");
+  const [director, setDirector] = useState("");
   const [semester, setSemester] = useState(defaultSemester);
   const [editingReport, setEditingReport] = useState(false);
   const [tempFacilitator, setTempFacilitator] = useState("");
@@ -88,6 +100,36 @@ export default function TeacherModuleGrades() {
   const isTeacherish = role === "teacher" || role === "admin";
   const mid = parseInt(moduleId ?? "", 10);
   const invalidMid = isNaN(mid) || mid <= 0;
+
+  // Cargar configuración institucional (director, semestre activo)
+  useEffect(() => {
+    (async () => {
+      try {
+        // Load active semester from site_settings
+        const { data: settingsData } = await supabase.from("site_settings").select("key,value").in("key", ["active_semester"]);
+        if (settingsData && settingsData.length > 0) {
+          const map = Object.fromEntries(settingsData.map((r) => [r.key, r.value ?? ""]));
+          if (map["active_semester"]) {
+            setSemester(map["active_semester"]);
+            setTempSemester(map["active_semester"]);
+          }
+        }
+        // Load director name from the administrativo profile
+        const { data: directorData } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("role", "administrativo")
+          .eq("admin_type", "director")
+          .single();
+        if (directorData?.full_name) {
+          setDirector(directorData.full_name);
+          setTempDirector(directorData.full_name);
+        }
+      } catch { /* usar defaults */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Ref para evitar recargas al cambiar de pestaña/ventana
   const loadedModuleRef = useRef<number | null>(null);
   useEffect(() => {
@@ -306,7 +348,6 @@ export default function TeacherModuleGrades() {
           progress,
           suggestedHP,
           total: calculateTotal(grade, suggestedHP),
-          saving: false,
         };
       });
 
@@ -364,17 +405,26 @@ export default function TeacherModuleGrades() {
     return Math.round(ser + saber + hacerProc + hacerProd + decidir + autoSer + autoDecid);
   }
 
+  function clampGradeValue(field: string, value: number): number {
+    const limits = GRADE_LIMITS[field];
+    if (!limits) return value;
+    return Math.min(limits.max, Math.max(limits.min, value));
+  }
+
   function updateGradeField(
     studentId: string,
     field: keyof ModuleGrade,
     value: string,
   ) {
-    const numValue = value.trim() === "" ? null : Number(value);
+    let numValue = value.trim() === "" ? null : Number(value);
+    // Clamp al rango permitido
+    if (numValue !== null && field in GRADE_LIMITS) {
+      numValue = clampGradeValue(field as string, numValue);
+    }
 
     setRows((prev) =>
       prev.map((row) => {
         if (row.student.id !== studentId) return row;
-
         const updatedGrade = { ...row.grade, [field]: numValue };
         return {
           ...row,
@@ -383,6 +433,16 @@ export default function TeacherModuleGrades() {
         };
       }),
     );
+
+    // Marcar como pendiente y programar auto-guardado
+    setDirtyRows((prev) => new Set(prev).add(studentId));
+    const existing = autoSaveTimers.current.get(studentId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      autoSaveTimers.current.delete(studentId);
+      void saveGradeQuiet(studentId);
+    }, 700);
+    autoSaveTimers.current.set(studentId, timer);
   }
 
   function getProgressColor(progress: number): string {
@@ -431,19 +491,49 @@ export default function TeacherModuleGrades() {
     return `❌ Error: ${error}`;
   }
 
-  async function saveGrade(studentId: string) {
-    const row = rows.find((r) => r.student.id === studentId);
-    if (!row) return;
-
-    setRows((prev) =>
-      prev.map((r) =>
-        r.student.id === studentId ? { ...r, saving: true } : r,
-      ),
-    );
-
-    try {
+  // Auto-guardado silencioso (sin mensaje al docente)
+  async function saveGradeQuiet(studentId: string) {
+    // Leer el estado actual desde la ref para evitar closure stale
+    setRows((prev) => {
+      const row = prev.find((r) => r.student.id === studentId);
+      if (!row) return prev;
       const hacerProcesoFinal = row.grade.hacer_proceso ?? row.suggestedHP;
+      supabase.from("module_grades").upsert(
+        {
+          student_id: row.student.id,
+          module_id: mid,
+          ser: row.grade.ser,
+          saber: row.grade.saber,
+          hacer_proceso: hacerProcesoFinal,
+          hacer_producto: row.grade.hacer_producto,
+          decidir: row.grade.decidir,
+          auto_ser: row.grade.auto_ser,
+          auto_decidir: row.grade.auto_decidir,
+        },
+        { onConflict: "student_id,module_id" },
+      ).then(({ error }) => {
+        if (!error) {
+          setDirtyRows((prev2) => {
+            const next = new Set(prev2);
+            next.delete(studentId);
+            return next;
+          });
+          const now = new Date();
+          setSavedAt(`${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`);
+        }
+      });
+      return prev;
+    });
+  }
 
+  // Guardado global (botón "Guardar cambios")
+  async function saveAllGrades() {
+    setGlobalSaving(true);
+    let anyError = false;
+    // Capturar snapshot actual de rows
+    const snapshot = rows;
+    for (const row of snapshot) {
+      const hacerProcesoFinal = row.grade.hacer_proceso ?? row.suggestedHP;
       const { error } = await supabase.from("module_grades").upsert(
         {
           student_id: row.student.id,
@@ -458,20 +548,18 @@ export default function TeacherModuleGrades() {
         },
         { onConflict: "student_id,module_id" },
       );
-
-      if (error) {
-        setMsg(parseErrorMessage(error.message));
-      } else {
-        setMsg("✅ Calificación guardada correctamente");
-      }
-    } catch (error) {
-      setMsg(`❌ Error: ${error}`);
-    } finally {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.student.id === studentId ? { ...r, saving: false } : r,
-        ),
-      );
+      if (error) anyError = true;
+    }
+    setGlobalSaving(false);
+    if (anyError) {
+      setMsg("❌ Algunos cambios no se pudieron guardar. Intenta de nuevo.");
+    } else {
+      setDirtyRows(new Set());
+      const now = new Date();
+      const time = `${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`;
+      setSavedAt(time);
+      setMsg(`✅ Todos los cambios guardados a las ${time}`);
+      setTimeout(() => setMsg(null), 3000);
     }
   }
 
@@ -706,25 +794,28 @@ export default function TeacherModuleGrades() {
     <div className="min-h-screen bg-slate-950">
       <header className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800/50 shadow-xl">
         <div className="max-w-[1600px] mx-auto px-6 py-6">
-          <button
-            className="flex items-center gap-2 text-slate-300 hover:text-white mb-4 transition-colors group"
-            onClick={() => nav("/teacher/modules")}
-          >
-            <svg
-              className="w-5 h-5 transition-transform group-hover:-translate-x-1"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors group text-sm"
+              onClick={() => nav("/teacher/modules")}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            <span className="font-medium">Volver a Módulos</span>
-          </button>
+              <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span className="font-medium">Volver a Módulos</span>
+            </button>
+            <div className="w-px h-4 bg-slate-700" />
+            <button
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
+              onClick={() => nav("/teacher")}
+              title="Ir al Dashboard"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="hidden sm:inline text-xs">Inicio</span>
+            </button>
+          </div>
           <div className="flex items-center gap-3 sm:gap-4">
             <img
               src={logoCea}
@@ -743,7 +834,7 @@ export default function TeacherModuleGrades() {
           <div className="text-slate-400 text-sm font-medium mb-1">
             {levelRow?.name ?? "Cargando..."}
           </div>
-          <h1 className="text-3xl font-bold text-blue-400">
+          <h1 className="text-3xl font-bold text-white">
             Calificaciones de: {moduleRow?.title ?? "Cargando módulo..."}
           </h1>
           <p className="text-slate-400 mt-1">
@@ -782,6 +873,51 @@ export default function TeacherModuleGrades() {
             </div>
           </div>
         ) : (
+          <>
+          {/* Barra de guardado */}
+          <div className="flex items-center justify-between bg-slate-900/60 border border-slate-700/50 rounded-xl px-5 py-3">
+            <span className="text-sm text-slate-400">
+              {dirtyRows.size > 0
+                ? <span className="text-amber-400 font-medium">{dirtyRows.size} cambio{dirtyRows.size > 1 ? "s" : ""} guardándose automáticamente…</span>
+                : savedAt
+                  ? <span className="text-emerald-400">✓ Guardado a las {savedAt}</span>
+                  : <span>Los cambios se guardan automáticamente</span>
+              }
+            </span>
+            <div className="flex items-center gap-3">
+              {moduleRow && levelRow && (
+                <button
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 text-sm rounded-lg font-medium transition-all duration-200"
+                  onClick={() => {
+                    try {
+                      sessionStorage.setItem("teacher_content_manager_cache", JSON.stringify({
+                        view: "lessons",
+                        selectedModule: moduleRow,
+                        selectedLevel: levelRow,
+                      }));
+                    } catch { /* ignore */ }
+                    nav("/teacher/content");
+                  }}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Actividades
+                </button>
+              )}
+              <button
+                onClick={saveAllGrades}
+                disabled={globalSaving}
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 disabled:opacity-60 text-white text-sm rounded-lg font-semibold transition-all duration-200 shadow-lg shadow-emerald-900/30"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                {globalSaving ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+
           <div className="bg-slate-900 rounded-2xl border border-slate-700/50 overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
               <table className="min-w-full">
@@ -838,9 +974,6 @@ export default function TeacherModuleGrades() {
                     <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
                       OBS
                     </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      Acciones
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
@@ -876,102 +1009,68 @@ export default function TeacherModuleGrades() {
                       </td>
 
                       {/* SER (10) */}
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
                           className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          min="0"
-                          max="10"
+                          min="1" max="10"
                           value={row.grade.ser ?? ""}
-                          onChange={(e) =>
-                            updateGradeField(
-                              row.student.id,
-                              "ser",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="0"
+                          onChange={(e) => updateGradeField(row.student.id, "ser", e.target.value)}
+                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "ser", "1"); }}
+                          placeholder="—"
                         />
                       </td>
 
                       {/* SABER (30) */}
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
                           className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          min="0"
-                          max="30"
+                          min="1" max="30"
                           value={row.grade.saber ?? ""}
-                          onChange={(e) =>
-                            updateGradeField(
-                              row.student.id,
-                              "saber",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="0"
+                          onChange={(e) => updateGradeField(row.student.id, "saber", e.target.value)}
+                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "saber", "1"); }}
+                          placeholder="—"
                         />
                       </td>
 
-                      {/* HACER Proceso (20) con sugerencia */}
-                      <td className="px-3 py-4">
-                        <div className="flex flex-col items-center gap-1">
-                          <input
-                            type="number"
-                            className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            min="0"
-                            max="20"
-                            value={row.grade.hacer_proceso ?? ""}
-                            onChange={(e) =>
-                              updateGradeField(
-                                row.student.id,
-                                "hacer_proceso",
-                                e.target.value,
-                              )
-                            }
-                            placeholder={String(row.suggestedHP)}
-                          />
-                          <span className="text-xs text-amber-400 font-medium">
-                            {row.suggestedHP}/20
-                          </span>
-                        </div>
+                      {/* HACER Proceso (20) — sugerencia como tooltip para no romper alineación */}
+                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                        <input
+                          type="number"
+                          className="w-16 px-2 py-2 bg-slate-800/50 border border-amber-500/30 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          min="1" max="20"
+                          value={row.grade.hacer_proceso ?? ""}
+                          onChange={(e) => updateGradeField(row.student.id, "hacer_proceso", e.target.value)}
+                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "hacer_proceso", "1"); }}
+                          placeholder={String(row.suggestedHP)}
+                          title={`Sugerido según avance: ${row.suggestedHP}/20`}
+                        />
                       </td>
 
                       {/* HACER Producto (20) */}
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
                           className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          min="0"
-                          max="20"
+                          min="1" max="20"
                           value={row.grade.hacer_producto ?? ""}
-                          onChange={(e) =>
-                            updateGradeField(
-                              row.student.id,
-                              "hacer_producto",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="0"
+                          onChange={(e) => updateGradeField(row.student.id, "hacer_producto", e.target.value)}
+                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "hacer_producto", "1"); }}
+                          placeholder="—"
                         />
                       </td>
 
                       {/* DECIDIR (10) */}
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
                           className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          min="0"
-                          max="10"
+                          min="1" max="10"
                           value={row.grade.decidir ?? ""}
-                          onChange={(e) =>
-                            updateGradeField(
-                              row.student.id,
-                              "decidir",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="0"
+                          onChange={(e) => updateGradeField(row.student.id, "decidir", e.target.value)}
+                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "decidir", "1"); }}
+                          placeholder="—"
                         />
                       </td>
 
@@ -1007,15 +1106,11 @@ export default function TeacherModuleGrades() {
                         </span>
                       </td>
 
-                      {/* Acciones */}
-                      <td className="px-3 py-4 text-center">
-                        <button
-                          className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                          onClick={() => saveGrade(row.student.id)}
-                          disabled={row.saving}
-                        >
-                          {row.saving ? "Guardando..." : "Guardar"}
-                        </button>
+                      {/* Indicador de guardado */}
+                      <td className="px-3 py-4 text-center" style={{ verticalAlign: "middle", width: 32 }}>
+                        {dirtyRows.has(row.student.id) && (
+                          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Guardando..." />
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1023,6 +1118,7 @@ export default function TeacherModuleGrades() {
               </table>
             </div>
           </div>
+          </>
         )}
 
         {/* Sección de Reporte PDF */}

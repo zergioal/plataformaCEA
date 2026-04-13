@@ -95,25 +95,24 @@ type QuizQuestion = {
 const styles = {
   container: {
     minHeight: "100vh",
-    background:
-      "linear-gradient(180deg, #111111 0%, #1a1a1a 50%, #0d0d0d 100%)",
+    background: "#020617",
     color: "#e4e4e7",
   },
   header: {
-    background: "rgba(20, 20, 20, 0.98)",
-    borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(10px)",
+    background: "linear-gradient(to right, #0f172a, #0f172a, #1e293b)",
+    borderBottom: "1px solid rgba(30,41,59,0.5)",
     padding: "16px 24px",
+    boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
   },
   card: {
-    background: "rgba(25, 25, 25, 0.95)",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
+    background: "rgba(15,23,42,0.95)",
+    border: "1px solid rgba(30,41,59,0.5)",
     borderRadius: "12px",
     padding: "24px",
   },
   input: {
-    background: "rgba(30, 30, 30, 0.95)",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
+    background: "rgba(15,23,42,0.95)",
+    border: "1px solid rgba(51,65,85,0.5)",
     color: "#e4e4e7",
     borderRadius: "8px",
     padding: "10px 14px",
@@ -121,8 +120,8 @@ const styles = {
     fontSize: "14px",
   },
   textarea: {
-    background: "rgba(30, 30, 30, 0.95)",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
+    background: "rgba(15,23,42,0.95)",
+    border: "1px solid rgba(51,65,85,0.5)",
     color: "#e4e4e7",
     borderRadius: "8px",
     padding: "10px 14px",
@@ -133,8 +132,8 @@ const styles = {
     fontFamily: "inherit",
   },
   select: {
-    background: "rgba(30, 30, 30, 0.95)",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
+    background: "rgba(15,23,42,0.95)",
+    border: "1px solid rgba(51,65,85,0.5)",
     color: "#e4e4e7",
     borderRadius: "8px",
     padding: "10px 14px",
@@ -152,9 +151,9 @@ const styles = {
     fontSize: "14px",
   },
   btnSecondary: {
-    background: "rgba(50, 50, 50, 0.8)",
-    color: "#d4d4d8",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
+    background: "rgba(30,41,59,0.8)",
+    color: "#cbd5e1",
+    border: "1px solid rgba(51,65,85,0.5)",
     borderRadius: "8px",
     padding: "10px 20px",
     fontWeight: "500",
@@ -189,39 +188,39 @@ const styles = {
     fontSize: "14px",
   },
   breadcrumbItem: {
-    color: "#71717a",
+    color: "#64748b",
     cursor: "pointer",
     transition: "color 0.2s",
   },
   breadcrumbActive: {
-    color: "#e4e4e7",
+    color: "#e2e8f0",
     fontWeight: "500",
   },
   levelCard: {
-    background: "rgba(40, 40, 40, 0.6)",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
+    background: "rgba(15,23,42,0.6)",
+    border: "1px solid rgba(30,41,59,0.4)",
     borderRadius: "10px",
     padding: "16px",
     cursor: "pointer",
     transition: "all 0.2s",
   },
   moduleCard: {
-    background: "rgba(35, 35, 35, 0.8)",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
+    background: "rgba(15,23,42,0.8)",
+    border: "1px solid rgba(30,41,59,0.4)",
     borderRadius: "10px",
     padding: "16px",
     marginBottom: "12px",
   },
   lessonCard: {
-    background: "rgba(45, 45, 45, 0.6)",
-    border: "1px solid rgba(255, 255, 255, 0.06)",
+    background: "rgba(15,23,42,0.5)",
+    border: "1px solid rgba(30,41,59,0.3)",
     borderRadius: "8px",
     padding: "14px",
     marginBottom: "10px",
   },
   sectionCard: {
-    background: "rgba(50, 50, 50, 0.5)",
-    border: "1px solid rgba(255, 255, 255, 0.05)",
+    background: "rgba(15,23,42,0.4)",
+    border: "1px solid rgba(30,41,59,0.25)",
     borderRadius: "8px",
     padding: "12px",
     marginBottom: "8px",
@@ -244,8 +243,8 @@ const styles = {
     padding: "20px",
   },
   modalContent: {
-    background: "rgba(20, 20, 20, 0.99)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
+    background: "rgba(15,23,42,0.99)",
+    border: "1px solid rgba(30,41,59,0.6)",
     borderRadius: "16px",
     padding: "28px",
     width: "100%",
@@ -1482,40 +1481,43 @@ export default function TeacherContentManager() {
       `}</style>
       {/* HEADER */}
       <header style={styles.header}>
-        <div
-          style={{
-            maxWidth: "1200px",
-            margin: "0 auto",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: "12px",
-                color: "#71717a",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-              }}
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <button
+              onClick={() => nav(-1)}
+              style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 5, padding: 0, transition: "color 0.15s" }}
+              onMouseOver={e => (e.currentTarget.style.color = "#fff")}
+              onMouseOut={e => (e.currentTarget.style.color = "#94a3b8")}
             >
-              Gestión de Contenido
-            </div>
-            <h1
-              style={{
-                fontSize: "22px",
-                fontWeight: "700",
-                color: "#fff",
-                margin: "4px 0 0",
-              }}
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 19l-7-7 7-7" />
+              </svg>
+              Atrás
+            </button>
+            <div style={{ width: 1, height: 14, background: "rgba(51,65,85,0.8)" }} />
+            <button
+              onClick={() => nav("/teacher")}
+              title="Ir al Dashboard"
+              style={{ background: "none", border: "1px solid rgba(51,65,85,0.6)", borderRadius: 6, color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", fontSize: 12, transition: "all 0.15s" }}
+              onMouseOver={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "rgba(100,116,139,0.8)"; }}
+              onMouseOut={e => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.borderColor = "rgba(51,65,85,0.6)"; }}
             >
-              {careerName || "Mi Carrera"}
-            </h1>
+              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              Inicio
+            </button>
           </div>
-          <button style={styles.btnSecondary} onClick={() => nav("/teacher")}>
-            ← Volver al Dashboard
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <div>
+              <div style={{ fontSize: "11px", color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>
+                Gestión de Contenido
+              </div>
+              <h1 style={{ fontSize: "22px", fontWeight: "700", color: "#fff", margin: "4px 0 0" }}>
+                {careerName || "Mi Carrera"}
+              </h1>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -1564,7 +1566,7 @@ export default function TeacherContentManager() {
           </span>
           {selectedLevel && (
             <>
-              <span style={{ color: "#52525b" }}>/</span>
+              <span style={{ color: "#334155" }}>/</span>
               <span
                 style={{
                   ...styles.breadcrumbItem,
@@ -1578,7 +1580,7 @@ export default function TeacherContentManager() {
           )}
           {selectedModule && (
             <>
-              <span style={{ color: "#52525b" }}>/</span>
+              <span style={{ color: "#334155" }}>/</span>
               <span
                 style={{
                   ...styles.breadcrumbItem,
@@ -1894,7 +1896,7 @@ export default function TeacherContentManager() {
                               {lesson.title}
                             </span>
                             <span
-                              style={{ fontSize: "12px", color: "#52525b" }}
+                              style={{ fontSize: "12px", color: "#334155" }}
                             >
                               {isExpanded ? "▼" : "▶"}
                             </span>
@@ -2005,7 +2007,7 @@ export default function TeacherContentManager() {
                           ) : lessonSects.length === 0 ? (
                             <div
                               style={{
-                                color: "#52525b",
+                                color: "#334155",
                                 fontSize: "13px",
                                 padding: "8px 0",
                                 textAlign: "center",

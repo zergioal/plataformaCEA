@@ -649,26 +649,6 @@ export default function StudentDashboard() {
             {/* Botones - en móvil se ajustan */}
             <div className="flex items-center gap-2 sm:gap-3">
               <button
-                onClick={openHistory}
-                className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 text-slate-200 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 text-sm sm:text-base"
-              >
-                <svg
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
-                <span className="hidden xs:inline sm:inline">Notas</span>
-                <span className="hidden sm:inline"> Históricas</span>
-              </button>
-              <button
                 onClick={logout}
                 className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg shadow-red-900/30 text-sm sm:text-base"
               >
@@ -746,27 +726,29 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-            {/* Botón Editar perfil */}
-            <button
-              className="self-center sm:self-start px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 text-slate-200 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 text-sm flex-shrink-0"
-              onClick={openEditProfile}
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+            {/* Botones perfil */}
+            <div className="self-center sm:self-start flex items-center gap-2 flex-shrink-0">
+              <button
+                className="px-3 py-2 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/30 text-sky-300 hover:text-sky-200 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 text-sm"
+                onClick={openHistory}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              <span className="hidden sm:inline">Editar perfil</span>
-              <span className="sm:hidden">Editar</span>
-            </button>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span className="hidden sm:inline">Notas Módulos</span>
+                <span className="sm:hidden">Notas</span>
+              </button>
+              <button
+                className="px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 text-slate-200 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 text-sm"
+                onClick={openEditProfile}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span className="hidden sm:inline">Editar perfil</span>
+                <span className="sm:hidden">Editar</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -1449,7 +1431,7 @@ export default function StudentDashboard() {
             <div className="flex items-center justify-between sticky top-0 bg-slate-950 pb-3 border-b border-slate-800 -mx-4 sm:-mx-5 px-4 sm:px-5 -mt-4 sm:-mt-5 pt-4 sm:pt-5">
               <div>
                 <div className="text-base sm:text-lg font-bold">
-                  📊 Notas Históricas
+                  📊 Notas Módulos
                 </div>
                 <div className="text-xs sm:text-sm text-slate-400">
                   Historial de calificaciones

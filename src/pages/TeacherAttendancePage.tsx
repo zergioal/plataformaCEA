@@ -824,21 +824,37 @@ export default function TeacherAttendancePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-700/50 px-4 py-4 flex items-center gap-4">
-        <button
-          className="text-slate-400 hover:text-white transition-colors"
-          onClick={() => nav("/teacher")}
-        >
-          ← Volver
-        </button>
-        <h1 className="text-xl font-bold text-white flex-1">
-          📋 Registro de Asistencia
-        </h1>
-        {saving && (
-          <span className="text-xs text-slate-400 animate-pulse">
-            Guardando...
-          </span>
-        )}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800/50 shadow-xl px-4 sm:px-6 py-4">
+        <div className="flex items-center gap-3 max-w-screen-2xl mx-auto">
+          <button
+            className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors group text-sm"
+            onClick={() => nav(-1)}
+          >
+            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>Atrás</span>
+          </button>
+          <div className="w-px h-4 bg-slate-700" />
+          <button
+            className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
+            onClick={() => nav("/teacher")}
+            title="Ir al Dashboard"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span className="hidden sm:inline text-xs">Inicio</span>
+          </button>
+          <h1 className="text-base sm:text-lg font-bold text-white flex-1 text-center sm:text-left ml-2">
+            Registro de Asistencia
+          </h1>
+          {saving && (
+            <span className="text-xs text-slate-400 animate-pulse">
+              Guardando...
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="max-w-screen-2xl mx-auto px-4 py-6 space-y-6">

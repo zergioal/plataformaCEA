@@ -62,6 +62,7 @@ CREATE POLICY "admins_read_teacher_settings" ON teacher_settings
 -- Default site settings (se pueden sobrescribir desde el admin)
 INSERT INTO site_settings (key, value) VALUES
   ('institution_name',   'CEA Madre María Oliva'),
+  ('director_name',      'Lic. Germana Calle Villca'),
   ('institution_mission','Formar técnicos medios con espíritu emprendedor y vocación de servicio, comprometidos con su desarrollo personal y el bienestar de sus comunidades.'),
   ('institution_vision', 'Consolidarnos como una institución líder en educación técnica alternativa, reconocida por su excelencia académica, formación en valores, calidad humana y compromiso con el desarrollo local.'),
   ('contact_phone',      '4502863'),

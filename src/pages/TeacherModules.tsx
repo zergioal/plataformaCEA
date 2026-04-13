@@ -116,25 +116,28 @@ export default function TeacherModules() {
       {/* Header - RESPONSIVE */}
       <header className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800/50 shadow-xl">
         <div className="px-4 sm:px-6 py-4 sm:py-6">
-          <button
-            className="flex items-center gap-2 text-slate-300 hover:text-white mb-3 sm:mb-4 transition-colors group text-sm sm:text-base"
-            onClick={() => nav("/teacher")}
-          >
-            <svg
-              className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <div className="flex items-center gap-3 mb-3 sm:mb-4">
+            <button
+              className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors group text-sm sm:text-base"
+              onClick={() => nav(-1)}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            <span className="font-medium">Volver</span>
-          </button>
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span className="font-medium">Atrás</span>
+            </button>
+            <div className="w-px h-4 bg-slate-700" />
+            <button
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
+              onClick={() => nav("/teacher")}
+              title="Ir al Dashboard"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="hidden sm:inline text-xs">Inicio</span>
+            </button>
+          </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
             <img

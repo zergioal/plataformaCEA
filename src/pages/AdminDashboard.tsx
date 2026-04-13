@@ -78,6 +78,19 @@ type ApiResponse = {
   error?: string;
 };
 
+type AdminStaffRow = {
+  id: string;
+  code: string | null;
+  full_name: string | null;
+  first_names: string | null;
+  last_name_pat: string | null;
+  last_name_mat: string | null;
+  admin_type: string | null;
+  phone: string | null;
+  contact_email: string | null;
+  avatar_key: string | null;
+};
+
 // Función para cargar logo como Base64 para PDFs
 function loadLogoBase64(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -222,8 +235,8 @@ const darkStyles = {
 };
 
 export default function AdminDashboard() {
-  const { role: authRole } = useRole();
-  const isReadOnly = authRole === "administrativo";
+  const { role: authRole, profile: adminProfile } = useRole();
+  const isReadOnly = authRole === "administrativo" && adminProfile?.admin_type === "secretaria";
 
   const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "");
   const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
@@ -340,13 +353,26 @@ export default function AdminDashboard() {
   const [loadingLocked, setLoadingLocked] = useState(false);
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
 
-  const [adminSection, setAdminSection] = useState<"home" | "carreras" | "docentes" | "estudiantes" | "config">("home");
+  const [adminSection, setAdminSection] = useState<"home" | "carreras" | "docentes" | "estudiantes" | "config" | "administrativos">("home");
 
   // ── Config section state ──────────────────────────────────
   const [configTab, setConfigTab] = useState<"institucion" | "anuncio" | "semestre" | "exportar">("institucion");
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [cfgName, setCfgName] = useState("");
+  // ========== ADMINISTRATIVOS (director / secretaria) ==========
+  const [adminStaff, setAdminStaff] = useState<AdminStaffRow[]>([]);
+  const [loadingAdminStaff, setLoadingAdminStaff] = useState(false);
+  const [showAdminStaffModal, setShowAdminStaffModal] = useState(false);
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [staffAdminType, setStaffAdminType] = useState<"director" | "secretaria">("secretaria");
+  const [staffFirstNames, setStaffFirstNames] = useState("");
+  const [staffLastPat, setStaffLastPat] = useState("");
+  const [staffLastMat, setStaffLastMat] = useState("");
+  const [staffPhone, setStaffPhone] = useState("");
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffTempPassword, setStaffTempPassword] = useState(randomPass());
+  const [creatingStaff, setCreatingStaff] = useState(false);
   const [cfgMission, setCfgMission] = useState("");
   const [cfgVision, setCfgVision] = useState("");
   const [cfgPhone, setCfgPhone] = useState("");
@@ -514,6 +540,137 @@ export default function AdminDashboard() {
     setLockedAccounts((data as LockedAccount[]) ?? []);
   }, []);
 
+  const loadAdminStaff = useCallback(async () => {
+    setLoadingAdminStaff(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,code,full_name,first_names,last_name_pat,last_name_mat,admin_type,phone,contact_email,avatar_key")
+      .eq("role", "administrativo")
+      .order("admin_type");
+    setLoadingAdminStaff(false);
+    if (!error) setAdminStaff((data as AdminStaffRow[]) ?? []);
+  }, []);
+
+  async function saveAdminStaff(e: FormEvent) {
+    e.preventDefault();
+    const fn = staffFirstNames.trim();
+    const lp = staffLastPat.trim();
+    const lm = staffLastMat.trim();
+    const ph = staffPhone.trim();
+    if (!fn || (!lp && !lm) || !ph || !staffAdminType) {
+      await showMessage("Campos incompletos", "Completa nombre, apellido y teléfono.", "error");
+      return;
+    }
+
+    setCreatingStaff(true);
+
+    if (editingStaffId) {
+      // Editar perfil existente
+      const full_name = [fn, lp, lm].filter(Boolean).join(" ");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ first_names: fn, last_name_pat: lp || null, last_name_mat: lm || null, full_name, phone: ph, contact_email: staffEmail.trim() || null, admin_type: staffAdminType })
+        .eq("id", editingStaffId);
+      setCreatingStaff(false);
+      if (error) {
+        if (error.code === "23505") {
+          await showMessage("Conflicto", `Ya existe un usuario con el tipo "${staffAdminType}". Solo puede haber uno de cada tipo.`, "error");
+        } else {
+          await showMessage("Error", error.message, "error");
+        }
+        return;
+      }
+      await showMessage("Actualizado", "Administrativo actualizado correctamente.", "success");
+    } else {
+      // Crear nuevo
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (!session) { setCreatingStaff(false); return; }
+
+      const payload = {
+        role: "administrativo",
+        temp_password: staffTempPassword,
+        first_names: fn,
+        last_name_pat: lp || undefined,
+        last_name_mat: lm || undefined,
+        phone: ph,
+        contact_email: staffEmail.trim() || undefined,
+      };
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(payload),
+      });
+
+      const raw = await res.text();
+      let out: ApiResponse = {};
+      try { out = raw ? JSON.parse(raw) : { error: "Respuesta vacía" }; } catch { out = { error: raw }; }
+
+      if (!res.ok) {
+        setCreatingStaff(false);
+        await showMessage("Error al crear", out.error ?? out.message ?? "Error desconocido", "error");
+        return;
+      }
+
+      // Set admin_type on the new profile
+      if (out.code) {
+        await supabase.from("profiles").update({ admin_type: staffAdminType }).eq("code", out.code);
+      }
+
+      setCreatingStaff(false);
+      await showMessage("Administrativo creado", `Código: ${out.code ?? "—"}\nContraseña temporal: ${out.temp_password ?? staffTempPassword}\n\nGuarda estos datos.`, "success");
+    }
+
+    setShowAdminStaffModal(false);
+    void loadAdminStaff();
+  }
+
+  function openCreateStaff(type: "director" | "secretaria") {
+    setEditingStaffId(null);
+    setStaffAdminType(type);
+    setStaffFirstNames("");
+    setStaffLastPat("");
+    setStaffLastMat("");
+    setStaffPhone("");
+    setStaffEmail("");
+    setStaffTempPassword(randomPass());
+    setShowAdminStaffModal(true);
+  }
+
+  function openEditStaff(staff: AdminStaffRow) {
+    setEditingStaffId(staff.id);
+    setStaffAdminType((staff.admin_type as "director" | "secretaria") ?? "secretaria");
+    setStaffFirstNames(staff.first_names ?? "");
+    setStaffLastPat(staff.last_name_pat ?? "");
+    setStaffLastMat(staff.last_name_mat ?? "");
+    setStaffPhone(staff.phone ?? "");
+    setStaffEmail(staff.contact_email ?? "");
+    setShowAdminStaffModal(true);
+  }
+
+  async function deleteStaff(staff: AdminStaffRow) {
+    if (!confirm(`¿Eliminar al administrativo "${staff.full_name ?? staff.code}"?`)) return;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const session = sessionData.session;
+    if (!session) return;
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/delete-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ user_id: staff.id }),
+    });
+    if (!res.ok) {
+      const raw = await res.text();
+      let out: ApiResponse = {};
+      try { out = JSON.parse(raw); } catch { out = { error: raw }; }
+      await showMessage("Error", out.error ?? "No se pudo eliminar", "error");
+      return;
+    }
+    await showMessage("Eliminado", "Administrativo eliminado correctamente.", "success");
+    void loadAdminStaff();
+  }
+
   // Desbloquear cuenta
   async function unlockAccount(userId: string, userCode: string | null) {
     if (!confirm(`¿Desbloquear la cuenta ${userCode ?? userId}?`)) return;
@@ -534,8 +691,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (adminSection === "home") return;
+    if (adminSection === "administrativos") { void loadAdminStaff(); return; }
     void loadCatalogs();
-  }, [adminSection]);
+  }, [adminSection, loadAdminStaff]);
 
   // Load site settings when entering config section
   useEffect(() => {
@@ -1782,7 +1940,29 @@ export default function AdminDashboard() {
         {/* HOME */}
         {adminSection === "home" && (
           <div>
-            <p style={{ color: "#71717a", marginBottom: "32px", fontSize: "15px" }}>Selecciona una sección para comenzar.</p>
+            {/* Profile section */}
+            <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "32px", padding: "24px", background: "rgba(15,23,42,0.5)", borderRadius: "16px", border: "1px solid rgba(30,41,59,0.5)" }}>
+              {authRole === "admin" ? (
+                <img src={logoCea} alt="CEA" style={{ width: "72px", height: "72px", borderRadius: "12px", objectFit: "contain", background: "rgba(255,255,255,0.05)", padding: "4px" }} />
+              ) : (
+                <div style={{ width: "72px", height: "72px", borderRadius: "12px", background: "rgba(30,41,59,0.8)", border: "1px solid rgba(51,65,85,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>
+                  {authRole === "admin" ? "Administrador del sistema" : adminProfile?.admin_type === "director" ? "Director(a)" : "Secretaria"}
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>
+                  {authRole === "admin" ? (adminProfile?.full_name ?? "Administrador") : (adminProfile?.full_name ?? "Sin nombre")}
+                </div>
+                {adminProfile?.contact_email && (
+                  <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>{adminProfile.contact_email}</div>
+                )}
+              </div>
+            </div>
+
+            <p style={{ color: "#71717a", marginBottom: "24px", fontSize: "15px" }}>Selecciona una sección para comenzar.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
               {/* Carreras */}
               <button
@@ -1842,6 +2022,146 @@ export default function AdminDashboard() {
                 <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Configuración</h3>
                 <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Información institucional, página pública, anuncios y ajustes generales.</p>
               </button>
+
+              {/* Administrativos — solo admin puede gestionar */}
+              {authRole === "admin" && (
+                <button
+                  onClick={() => setAdminSection("administrativos")}
+                  style={{ background: "linear-gradient(135deg, rgba(15,118,110,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(20,184,166,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(45,212,191,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(20,184,166,0.2)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(20,184,166,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+                >
+                  <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(20,184,166,0.15)", border: "1px solid rgba(20,184,166,0.3)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2dd4bf" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 11c0 3-2.3 5.2-5 6-.6.2-1 .7-1 1.4V20"/><path d="M12 11c0 3 2.3 5.2 5 6 .6.2 1 .7 1 1.4V20"/><path d="M12 11V3"/><path d="M9 3h6"/></svg>
+                  </div>
+                  <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Administrativos</h3>
+                  <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Gestión de director(a) y secretaria de la institución.</p>
+                  <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(45,212,191,0.3)" }}>→</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ADMINISTRATIVOS */}
+        {adminSection === "administrativos" && (
+          <div>
+            <button onClick={() => setAdminSection("home")} style={{ marginBottom: "24px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>← Inicio</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+              <div>
+                <h2 style={{ fontSize: "22px", fontWeight: "700", color: "#fff", margin: 0 }}>Administrativos</h2>
+                <p style={{ color: "#64748b", fontSize: "13px", marginTop: "4px" }}>Director(a) y Secretaria de la institución (máximo uno de cada tipo).</p>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                {!adminStaff.find(s => s.admin_type === "director") && (
+                  <button onClick={() => openCreateStaff("director")} style={{ ...darkStyles.btnPrimary, background: "linear-gradient(135deg, rgba(20,184,166,0.8) 0%, rgba(15,118,110,0.9) 100%)", border: "1px solid rgba(45,212,191,0.4)", fontSize: "13px", padding: "8px 16px" }}>
+                    + Añadir Director(a)
+                  </button>
+                )}
+                {!adminStaff.find(s => s.admin_type === "secretaria") && (
+                  <button onClick={() => openCreateStaff("secretaria")} style={{ ...darkStyles.btnSecondary, fontSize: "13px", padding: "8px 16px" }}>
+                    + Añadir Secretaria
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {loadingAdminStaff ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>Cargando...</div>
+            ) : adminStaff.length === 0 ? (
+              <div style={{ ...darkStyles.card, padding: "40px", textAlign: "center" }}>
+                <p style={{ color: "#64748b", fontSize: "15px" }}>No hay administrativos registrados.</p>
+                <p style={{ color: "#475569", fontSize: "13px", marginTop: "8px" }}>Usa los botones de arriba para añadir un director(a) o secretaria.</p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "16px" }}>
+                {adminStaff.map(staff => (
+                  <div key={staff.id} style={{ ...darkStyles.card, padding: "20px", display: "flex", alignItems: "center", gap: "16px" }}>
+                    <div style={{ width: "52px", height: "52px", borderRadius: "12px", background: staff.admin_type === "director" ? "rgba(20,184,166,0.15)" : "rgba(100,116,139,0.15)", border: `1px solid ${staff.admin_type === "director" ? "rgba(45,212,191,0.3)" : "rgba(100,116,139,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={staff.admin_type === "director" ? "#2dd4bf" : "#94a3b8"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "2px" }}>
+                        <span style={{ fontSize: "16px", fontWeight: "600", color: "#f1f5f9" }}>{staff.full_name || (`${staff.first_names ?? ""} ${staff.last_name_pat ?? ""}`.trim()) || "—"}</span>
+                        <span style={{ padding: "2px 10px", borderRadius: "12px", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", background: staff.admin_type === "director" ? "rgba(20,184,166,0.2)" : "rgba(100,116,139,0.2)", color: staff.admin_type === "director" ? "#2dd4bf" : "#94a3b8", border: `1px solid ${staff.admin_type === "director" ? "rgba(45,212,191,0.3)" : "rgba(100,116,139,0.3)"}` }}>
+                          {staff.admin_type === "director" ? "Director(a)" : "Secretaria"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>
+                        {staff.code && <span style={{ marginRight: "12px" }}>Código: {staff.code}</span>}
+                        {staff.phone && <span style={{ marginRight: "12px" }}>Tel: {staff.phone}</span>}
+                        {staff.contact_email && <span>{staff.contact_email}</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                      <button onClick={() => openEditStaff(staff)} style={{ ...darkStyles.btnSecondary, fontSize: "12px", padding: "6px 12px" }}>Editar</button>
+                      <button onClick={() => void deleteStaff(staff)} style={{ ...darkStyles.btnDanger, fontSize: "12px", padding: "6px 12px" }}>Eliminar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MODAL CREAR/EDITAR ADMINISTRATIVO */}
+        {showAdminStaffModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }} onClick={() => setShowAdminStaffModal(false)}>
+            <div style={{ ...darkStyles.modal, width: "100%", maxWidth: "480px", padding: "28px" }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+                <h3 style={{ fontSize: "18px", fontWeight: "700", color: "#fff", margin: 0 }}>{editingStaffId ? "Editar Administrativo" : `Nuevo ${staffAdminType === "director" ? "Director(a)" : "Secretaria"}`}</h3>
+                <button onClick={() => setShowAdminStaffModal(false)} style={{ background: "transparent", border: "none", color: "#71717a", fontSize: "24px", cursor: "pointer", padding: 0, lineHeight: 1 }}>×</button>
+              </div>
+              <form onSubmit={e => void saveAdminStaff(e)} style={{ display: "grid", gap: "14px" }}>
+                {!editingStaffId && (
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Tipo</label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      {(["director", "secretaria"] as const).map(t => (
+                        <button key={t} type="button" onClick={() => setStaffAdminType(t)}
+                          style={{ flex: 1, padding: "8px", borderRadius: "8px", border: `2px solid ${staffAdminType === t ? "rgba(45,212,191,0.6)" : "rgba(51,65,85,0.5)"}`, background: staffAdminType === t ? "rgba(20,184,166,0.15)" : "rgba(15,23,42,0.8)", color: staffAdminType === t ? "#2dd4bf" : "#94a3b8", cursor: "pointer", fontSize: "13px", fontWeight: "600", textTransform: "capitalize" }}>
+                          {t === "director" ? "Director(a)" : "Secretaria"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Nombre(s)</label>
+                  <input required value={staffFirstNames} onChange={e => setStaffFirstNames(e.target.value)} style={{ ...darkStyles.input }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Ap. Paterno</label>
+                    <input value={staffLastPat} onChange={e => setStaffLastPat(e.target.value)} style={{ ...darkStyles.input }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Ap. Materno</label>
+                    <input value={staffLastMat} onChange={e => setStaffLastMat(e.target.value)} style={{ ...darkStyles.input }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Teléfono</label>
+                  <input required value={staffPhone} onChange={e => setStaffPhone(e.target.value)} style={{ ...darkStyles.input }} />
+                </div>
+                <div>
+                  <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Correo electrónico</label>
+                  <input type="email" value={staffEmail} onChange={e => setStaffEmail(e.target.value)} style={{ ...darkStyles.input }} />
+                </div>
+                {!editingStaffId && (
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Contraseña temporal</label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <input value={staffTempPassword} onChange={e => setStaffTempPassword(e.target.value)} style={{ ...darkStyles.input }} />
+                      <button type="button" onClick={() => setStaffTempPassword(randomPass())} style={{ ...darkStyles.btnSecondary, padding: "10px 12px", fontSize: "12px", whiteSpace: "nowrap" }}>Nueva</button>
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                  <button type="submit" disabled={creatingStaff} style={{ ...darkStyles.btnPrimary, flex: 1, opacity: creatingStaff ? 0.6 : 1 }}>{creatingStaff ? "Guardando..." : editingStaffId ? "Guardar cambios" : "Crear administrativo"}</button>
+                  <button type="button" onClick={() => setShowAdminStaffModal(false)} style={{ ...darkStyles.btnSecondary }}>Cancelar</button>
+                </div>
+              </form>
             </div>
           </div>
         )}
