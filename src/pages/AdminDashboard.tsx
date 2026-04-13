@@ -39,7 +39,24 @@ type UserRow = {
   carnet_number?: string | null;
   gender?: string | null;
   birth_date?: string | null;
+  academic_degree?: string | null;
 };
+
+function degreePrefix(degree: string | null | undefined): string {
+  switch (degree) {
+    case "ts":  return "T.S.";
+    case "lic": return "Lic.";
+    case "ing": return "Ing.";
+    case "msc": return "M.Sc.";
+    case "dr":  return "Dr.";
+    default:    return "";
+  }
+}
+function withDegree(name: string | null | undefined, degree: string | null | undefined): string {
+  const p = degreePrefix(degree);
+  if (!p || !name) return name ?? "";
+  return `${p} ${name}`;
+}
 
 type StudentWithLevel = UserRow & {
   current_level_id?: number | null;
@@ -89,6 +106,7 @@ type AdminStaffRow = {
   phone: string | null;
   contact_email: string | null;
   avatar_key: string | null;
+  academic_degree: string | null;
 };
 
 // Función para cargar logo como Base64 para PDFs
@@ -371,6 +389,7 @@ export default function AdminDashboard() {
   const [staffLastMat, setStaffLastMat] = useState("");
   const [staffPhone, setStaffPhone] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
+  const [staffDegree, setStaffDegree] = useState("");
   const [staffTempPassword, setStaffTempPassword] = useState(randomPass());
   const [creatingStaff, setCreatingStaff] = useState(false);
   const [cfgMission, setCfgMission] = useState("");
@@ -458,7 +477,7 @@ export default function AdminDashboard() {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,role,phone,shift,career_id,contact_email,likes,avatar_key,created_at",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,role,phone,shift,career_id,contact_email,likes,avatar_key,created_at,academic_degree",
       )
       .eq("role", "teacher")
       .order("created_at", { ascending: false });
@@ -544,7 +563,7 @@ export default function AdminDashboard() {
     setLoadingAdminStaff(true);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id,code,full_name,first_names,last_name_pat,last_name_mat,admin_type,phone,contact_email,avatar_key")
+      .select("id,code,full_name,first_names,last_name_pat,last_name_mat,admin_type,phone,contact_email,avatar_key,academic_degree")
       .eq("role", "administrativo")
       .order("admin_type");
     setLoadingAdminStaff(false);
@@ -569,7 +588,7 @@ export default function AdminDashboard() {
       const full_name = [fn, lp, lm].filter(Boolean).join(" ");
       const { error } = await supabase
         .from("profiles")
-        .update({ first_names: fn, last_name_pat: lp || null, last_name_mat: lm || null, full_name, phone: ph, contact_email: staffEmail.trim() || null, admin_type: staffAdminType })
+        .update({ first_names: fn, last_name_pat: lp || null, last_name_mat: lm || null, full_name, phone: ph, contact_email: staffEmail.trim() || null, admin_type: staffAdminType, academic_degree: staffDegree || null })
         .eq("id", editingStaffId);
       setCreatingStaff(false);
       if (error) {
@@ -634,6 +653,7 @@ export default function AdminDashboard() {
     setStaffLastMat("");
     setStaffPhone("");
     setStaffEmail("");
+    setStaffDegree("");
     setStaffTempPassword(randomPass());
     setShowAdminStaffModal(true);
   }
@@ -646,6 +666,7 @@ export default function AdminDashboard() {
     setStaffLastMat(staff.last_name_mat ?? "");
     setStaffPhone(staff.phone ?? "");
     setStaffEmail(staff.contact_email ?? "");
+    setStaffDegree(staff.academic_degree ?? "");
     setShowAdminStaffModal(true);
   }
 
@@ -1109,13 +1130,14 @@ export default function AdminDashboard() {
         (i + 1).toString(),
         `${t.last_name_pat ?? ""} ${t.last_name_mat ?? ""}`.trim() || "-",
         t.first_names ?? "-",
+        degreePrefix(t.academic_degree) || "-",
         careers.find((c) => c.id === t.career_id)?.name ?? "-",
         t.shift === "tarde" ? "Tarde" : t.shift === "noche" ? "Noche" : "-",
       ]);
 
       autoTable(doc, {
         startY: 65,
-        head: [["N°", "Apellidos", "Nombres", "Carrera", "Turno"]],
+        head: [["N°", "Apellidos", "Nombres", "Grado", "Carrera", "Turno"]],
         body: tableData,
         theme: "grid",
         headStyles: {
@@ -1125,11 +1147,12 @@ export default function AdminDashboard() {
           halign: "center",
         },
         columnStyles: {
-          0: { halign: "center", cellWidth: 12 },
-          1: { cellWidth: 45 },
-          2: { cellWidth: 45 },
-          3: { cellWidth: 50 },
-          4: { halign: "center", cellWidth: 25 },
+          0: { halign: "center", cellWidth: 10 },
+          1: { cellWidth: 42 },
+          2: { cellWidth: 42 },
+          3: { halign: "center", cellWidth: 16 },
+          4: { cellWidth: 45 },
+          5: { halign: "center", cellWidth: 22 },
         },
         styles: { fontSize: 9, cellPadding: 3 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
@@ -2082,7 +2105,7 @@ export default function AdminDashboard() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "2px" }}>
-                        <span style={{ fontSize: "16px", fontWeight: "600", color: "#f1f5f9" }}>{staff.full_name || (`${staff.first_names ?? ""} ${staff.last_name_pat ?? ""}`.trim()) || "—"}</span>
+                        <span style={{ fontSize: "16px", fontWeight: "600", color: "#f1f5f9" }}>{withDegree(staff.full_name || (`${staff.first_names ?? ""} ${staff.last_name_pat ?? ""}`.trim()) || null, staff.academic_degree) || "—"}</span>
                         <span style={{ padding: "2px 10px", borderRadius: "12px", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", background: staff.admin_type === "director" ? "rgba(20,184,166,0.2)" : "rgba(100,116,139,0.2)", color: staff.admin_type === "director" ? "#2dd4bf" : "#94a3b8", border: `1px solid ${staff.admin_type === "director" ? "rgba(45,212,191,0.3)" : "rgba(100,116,139,0.3)"}` }}>
                           {staff.admin_type === "director" ? "Director(a)" : "Secretaria"}
                         </span>
@@ -2147,6 +2170,17 @@ export default function AdminDashboard() {
                 <div>
                   <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Correo electrónico</label>
                   <input type="email" value={staffEmail} onChange={e => setStaffEmail(e.target.value)} style={{ ...darkStyles.input }} />
+                </div>
+                <div>
+                  <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase" }}>Grado académico</label>
+                  <select value={staffDegree} onChange={e => setStaffDegree(e.target.value)} style={{ ...darkStyles.input }}>
+                    <option value="">Sin grado especificado</option>
+                    <option value="ts">Técnico Superior (T.S.)</option>
+                    <option value="lic">Licenciatura (Lic.)</option>
+                    <option value="ing">Ingeniería (Ing.)</option>
+                    <option value="msc">Maestría (M.Sc.)</option>
+                    <option value="dr">Doctorado (Dr.)</option>
+                  </select>
                 </div>
                 {!editingStaffId && (
                   <div>

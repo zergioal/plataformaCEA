@@ -8,6 +8,26 @@ import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
 import logoCea from "../assets/logo-cea.png";
 
+const DEGREE_OPTIONS = [
+  { value: "",    label: "Sin grado especificado" },
+  { value: "ts",  label: "Técnico Superior (T.S.)" },
+  { value: "lic", label: "Licenciatura (Lic.)" },
+  { value: "ing", label: "Ingeniería (Ing.)" },
+  { value: "msc", label: "Maestría (M.Sc.)" },
+  { value: "dr",  label: "Doctorado (Dr.)" },
+] as const;
+
+function degreePrefix(degree: string | null): string {
+  switch (degree) {
+    case "ts":  return "T.S.";
+    case "lic": return "Lic.";
+    case "ing": return "Ing.";
+    case "msc": return "M.Sc.";
+    case "dr":  return "Dr.";
+    default:    return "";
+  }
+}
+
 type ProfileData = {
   id: string;
   code: string | null;
@@ -21,6 +41,7 @@ type ProfileData = {
   avatar_key: string | null;
   career_id: number | null;
   shift: string | null;
+  academic_degree: string | null;
 };
 
 type Career = { id: number; name: string };
@@ -199,6 +220,7 @@ export default function TeacherDashboard() {
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editLikes, setEditLikes] = useState("");
+  const [editDegree, setEditDegree] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -387,7 +409,7 @@ export default function TeacherDashboard() {
       const { data: prof, error: profErr } = await supabase
         .from("profiles")
         .select(
-          "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift",
+          "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift,academic_degree",
         )
         .eq("id", session!.user.id)
         .single();
@@ -401,6 +423,7 @@ export default function TeacherDashboard() {
       setEditPhone(prof.phone ?? "");
       setEditEmail(prof.contact_email ?? "");
       setEditLikes(prof.likes ?? "");
+      setEditDegree(prof.academic_degree ?? "");
       setSelectedAvatar(prof.avatar_key ?? "av1");
 
       if (prof.career_id) {
@@ -444,7 +467,7 @@ export default function TeacherDashboard() {
       const { data: prof } = await supabase
         .from("profiles")
         .select(
-          "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift",
+          "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift,academic_degree",
         )
         .eq("id", session.user.id)
         .single();
@@ -453,6 +476,7 @@ export default function TeacherDashboard() {
       setEditPhone(prof.phone ?? "");
       setEditEmail(prof.contact_email ?? "");
       setEditLikes(prof.likes ?? "");
+      setEditDegree(prof.academic_degree ?? "");
       setSelectedAvatar(prof.avatar_key ?? "av1");
       if (prof.career_id) {
         const { data: car } = await supabase
@@ -768,6 +792,7 @@ export default function TeacherDashboard() {
         phone: editPhone.trim() || null,
         contact_email: editEmail.trim() || null,
         likes: editLikes.trim() || null,
+        academic_degree: editDegree || null,
       })
       .eq("id", session.user.id);
 
@@ -784,7 +809,7 @@ export default function TeacherDashboard() {
     const { data: prof } = await supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,career_id,shift,academic_degree",
       )
       .eq("id", session.user.id)
       .single();
@@ -1667,7 +1692,7 @@ export default function TeacherDashboard() {
                     {profileData?.code ?? ""}
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-display font-bold text-white mb-2 tracking-tight">
-                    {profileData?.full_name ?? "Docente"}
+                    {profileData ? (degreePrefix(profileData.academic_degree) ? `${degreePrefix(profileData.academic_degree)} ${profileData.full_name ?? ""}` : (profileData.full_name ?? "Docente")) : "Docente"}
                   </h2>
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-3 text-slate-300">
                     <span className="px-2 sm:px-3 py-1 bg-slate-800/50 rounded-lg text-xs sm:text-sm">
@@ -1724,6 +1749,23 @@ export default function TeacherDashboard() {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Grado académico
+                    </label>
+                    <select
+                      className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
+                      value={editDegree}
+                      onChange={(e) => setEditDegree(e.target.value)}
+                    >
+                      {DEGREE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value} className="bg-slate-900">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
                       Gustos (opcional)
                     </label>
                     <textarea
@@ -1754,6 +1796,12 @@ export default function TeacherDashboard() {
                     <div className="text-sm text-slate-400 mb-1">Correo</div>
                     <div className="text-white font-medium">
                       {profileData?.contact_email ?? "-"}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
+                    <div className="text-sm text-slate-400 mb-1">Grado académico</div>
+                    <div className="text-white font-medium">
+                      {DEGREE_OPTIONS.find(o => o.value === profileData?.academic_degree)?.label ?? "Sin especificar"}
                     </div>
                   </div>
                   <div className="md:col-span-2 p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">

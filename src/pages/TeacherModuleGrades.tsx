@@ -67,6 +67,22 @@ const GRADE_LIMITS: Record<string, { min: number; max: number }> = {
   decidir:        { min: 1, max: 10 },
 };
 
+function degreePrefix(degree: string | null): string {
+  switch (degree) {
+    case "ts":  return "T.S.";
+    case "lic": return "Lic.";
+    case "ing": return "Ing.";
+    case "msc": return "M.Sc.";
+    case "dr":  return "Dr.";
+    default:    return "";
+  }
+}
+function withDegree(name: string | null, degree: string | null): string {
+  const p = degreePrefix(degree);
+  if (!p || !name) return name ?? "";
+  return `${p} ${name}`;
+}
+
 export default function TeacherModuleGrades() {
   const nav = useNavigate();
   const { loading, session, role } = useRole();
@@ -82,6 +98,7 @@ export default function TeacherModuleGrades() {
   const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set());
   const [globalSaving, setGlobalSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [shakingInputs, setShakingInputs] = useState<Set<string>>(new Set());
   const autoSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Estados para el reporte PDF
@@ -117,13 +134,14 @@ export default function TeacherModuleGrades() {
         // Load director name from the administrativo profile
         const { data: directorData } = await supabase
           .from("profiles")
-          .select("full_name")
+          .select("full_name,academic_degree")
           .eq("role", "administrativo")
           .eq("admin_type", "director")
           .single();
         if (directorData?.full_name) {
-          setDirector(directorData.full_name);
-          setTempDirector(directorData.full_name);
+          const dirName = withDegree(directorData.full_name, directorData.academic_degree);
+          setDirector(dirName);
+          setTempDirector(dirName);
         }
       } catch { /* usar defaults */ }
     })();
@@ -147,7 +165,7 @@ export default function TeacherModuleGrades() {
     try {
       const { data: teacherProfile, error: profError } = await supabase
         .from("profiles")
-        .select("career_id, shift, full_name")
+        .select("career_id, shift, full_name, academic_degree")
         .eq("id", session!.user.id)
         .single();
 
@@ -160,7 +178,7 @@ export default function TeacherModuleGrades() {
       setTeacherShift(teacherProfile.shift || "");
       if (!facilitator) {
         const fullName = teacherProfile.full_name || "";
-        const facilitatorName = fullName ? `Lic. ${fullName}` : "";
+        const facilitatorName = withDegree(fullName, teacherProfile.academic_degree);
         setFacilitator(facilitatorName);
         setTempFacilitator(facilitatorName);
       }
@@ -405,10 +423,16 @@ export default function TeacherModuleGrades() {
     return Math.round(ser + saber + hacerProc + hacerProd + decidir + autoSer + autoDecid);
   }
 
-  function clampGradeValue(field: string, value: number): number {
-    const limits = GRADE_LIMITS[field];
-    if (!limits) return value;
-    return Math.min(limits.max, Math.max(limits.min, value));
+  function triggerShake(studentId: string, field: string) {
+    const key = `${studentId}-${field}`;
+    setShakingInputs((prev) => new Set(prev).add(key));
+    setTimeout(() => {
+      setShakingInputs((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }, 450);
   }
 
   function updateGradeField(
@@ -416,10 +440,15 @@ export default function TeacherModuleGrades() {
     field: keyof ModuleGrade,
     value: string,
   ) {
-    let numValue = value.trim() === "" ? null : Number(value);
-    // Clamp al rango permitido
+    const numValue = value.trim() === "" ? null : Number(value);
+
+    // Si el valor está fuera del rango: vibrar y NO actualizar
     if (numValue !== null && field in GRADE_LIMITS) {
-      numValue = clampGradeValue(field as string, numValue);
+      const limits = GRADE_LIMITS[field as string];
+      if (numValue < limits.min || numValue > limits.max) {
+        triggerShake(studentId, field as string);
+        return;
+      }
     }
 
     setRows((prev) =>
@@ -985,11 +1014,10 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-ser`) ? " shake" : ""}`}
                           min="1" max="10"
                           value={row.grade.ser ?? ""}
                           onChange={(e) => updateGradeField(row.student.id, "ser", e.target.value)}
-                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "ser", "1"); }}
                           placeholder="—"
                         />
                       </td>
@@ -998,11 +1026,10 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-saber`) ? " shake" : ""}`}
                           min="1" max="30"
                           value={row.grade.saber ?? ""}
                           onChange={(e) => updateGradeField(row.student.id, "saber", e.target.value)}
-                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "saber", "1"); }}
                           placeholder="—"
                         />
                       </td>
@@ -1011,11 +1038,10 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-amber-500/30 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-amber-500/30 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-hacer_proceso`) ? " shake" : ""}`}
                           min="1" max="20"
                           value={row.grade.hacer_proceso ?? ""}
                           onChange={(e) => updateGradeField(row.student.id, "hacer_proceso", e.target.value)}
-                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "hacer_proceso", "1"); }}
                           placeholder={String(row.suggestedHP)}
                           title={`Sugerido según avance: ${row.suggestedHP}/20`}
                         />
@@ -1025,11 +1051,10 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-hacer_producto`) ? " shake" : ""}`}
                           min="1" max="20"
                           value={row.grade.hacer_producto ?? ""}
                           onChange={(e) => updateGradeField(row.student.id, "hacer_producto", e.target.value)}
-                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "hacer_producto", "1"); }}
                           placeholder="—"
                         />
                       </td>
@@ -1038,11 +1063,10 @@ export default function TeacherModuleGrades() {
                       <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
                         <input
                           type="number"
-                          className="w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-decidir`) ? " shake" : ""}`}
                           min="1" max="10"
                           value={row.grade.decidir ?? ""}
                           onChange={(e) => updateGradeField(row.student.id, "decidir", e.target.value)}
-                          onBlur={(e) => { if (e.target.value && Number(e.target.value) < 1) updateGradeField(row.student.id, "decidir", "1"); }}
                           placeholder="—"
                         />
                       </td>
