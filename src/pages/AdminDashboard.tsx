@@ -42,6 +42,31 @@ type UserRow = {
   academic_degree?: string | null;
 };
 
+const TW_ADM = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg";
+const ADMIN_AVATARS = [
+  { key: "adm1",  label: "Ejecutivo",    url: `${TW_ADM}/1f4bc.svg` },
+  { key: "adm2",  label: "Institución",  url: `${TW_ADM}/1f3eb.svg` },
+  { key: "adm3",  label: "Graduación",   url: `${TW_ADM}/1f393.svg` },
+  { key: "adm4",  label: "Trofeo",       url: `${TW_ADM}/1f3c6.svg` },
+  { key: "adm5",  label: "Medalla",      url: `${TW_ADM}/1f3c5.svg` },
+  { key: "adm6",  label: "Documento",    url: `${TW_ADM}/1f4cb.svg` },
+  { key: "adm7",  label: "Libro",        url: `${TW_ADM}/1f4da.svg` },
+  { key: "adm8",  label: "Estrella",     url: `${TW_ADM}/2b50.svg`  },
+  { key: "adm9",  label: "Globo",        url: `${TW_ADM}/1f310.svg` },
+  { key: "adm10", label: "Oficina",      url: `${TW_ADM}/1f3e2.svg` },
+  { key: "adm11", label: "Paloma",       url: `${TW_ADM}/1fabb.svg` },
+  { key: "adm12", label: "Corona",       url: `${TW_ADM}/1f451.svg` },
+] as const;
+
+const DEGREE_OPTIONS = [
+  { value: "",    label: "Sin grado especificado" },
+  { value: "ts",  label: "Técnico Superior (T.S.)" },
+  { value: "lic", label: "Licenciatura (Lic.)" },
+  { value: "ing", label: "Ingeniería (Ing.)" },
+  { value: "msc", label: "Maestría (M.Sc.)" },
+  { value: "dr",  label: "Doctorado (Dr.)" },
+] as const;
+
 function degreePrefix(degree: string | null | undefined): string {
   switch (degree) {
     case "ts":  return "T.S.";
@@ -378,6 +403,26 @@ export default function AdminDashboard() {
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [cfgName, setCfgName] = useState("");
+  // ========== PERFIL PROPIO (administrativo) ==========
+  const [adminEditMode, setAdminEditMode] = useState(false);
+  const [adminEditPhone, setAdminEditPhone] = useState("");
+  const [adminEditEmail, setAdminEditEmail] = useState("");
+  const [adminEditDegree, setAdminEditDegree] = useState("");
+  const [adminProfileSaving, setAdminProfileSaving] = useState(false);
+  const [adminProfileMsg, setAdminProfileMsg] = useState<string | null>(null);
+  // Avatar propio (administrativo)
+  const [showAdminAvatarModal, setShowAdminAvatarModal] = useState(false);
+  const [adminSelectedAvatar, setAdminSelectedAvatar] = useState("adm1");
+  const [savingAdminAvatar, setSavingAdminAvatar] = useState(false);
+  const [localAdminAvatarKey, setLocalAdminAvatarKey] = useState<string | null>(null);
+  // Cambiar contraseña propia
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [cpCurrentPass, setCpCurrentPass] = useState("");
+  const [cpNewPass, setCpNewPass] = useState("");
+  const [cpConfirmPass, setCpConfirmPass] = useState("");
+  const [cpMsg, setCpMsg] = useState<string | null>(null);
+  const [cpSaving, setCpSaving] = useState(false);
+
   // ========== ADMINISTRATIVOS (director / secretaria) ==========
   const [adminStaff, setAdminStaff] = useState<AdminStaffRow[]>([]);
   const [loadingAdminStaff, setLoadingAdminStaff] = useState(false);
@@ -417,6 +462,8 @@ export default function AdminDashboard() {
   const [newGalleryAlt, setNewGalleryAlt] = useState("");
   const [newRequirement, setNewRequirement] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [galleryDragIdx, setGalleryDragIdx] = useState<number | null>(null);
+  const [galleryDragOverIdx, setGalleryDragOverIdx] = useState<number | null>(null);
 
   // ========== FUNCIONES HELPER ==========
   function showMessage(
@@ -569,6 +616,69 @@ export default function AdminDashboard() {
     setLoadingAdminStaff(false);
     if (!error) setAdminStaff((data as AdminStaffRow[]) ?? []);
   }, []);
+
+  async function saveAdminAvatar() {
+    if (!adminProfile) return;
+    setSavingAdminAvatar(true);
+    await supabase.from("profiles").update({ avatar_key: adminSelectedAvatar }).eq("id", adminProfile.id);
+    setSavingAdminAvatar(false);
+    setLocalAdminAvatarKey(adminSelectedAvatar);
+    setShowAdminAvatarModal(false);
+  }
+
+  async function saveAdminProfile() {
+    if (!adminProfile) return;
+    setAdminProfileSaving(true);
+    setAdminProfileMsg(null);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        phone: adminEditPhone.trim() || null,
+        contact_email: adminEditEmail.trim() || null,
+        academic_degree: adminEditDegree || null,
+      })
+      .eq("id", adminProfile.id);
+    setAdminProfileSaving(false);
+    if (error) {
+      setAdminProfileMsg("Error: " + error.message);
+    } else {
+      setAdminProfileMsg("✅ Perfil actualizado.");
+      setAdminEditMode(false);
+    }
+  }
+
+  async function changeOwnPassword() {
+    if (!cpCurrentPass.trim() || !cpNewPass.trim() || !cpConfirmPass.trim()) {
+      setCpMsg("Completa todos los campos.");
+      return;
+    }
+    if (cpNewPass !== cpConfirmPass) {
+      setCpMsg("Las contraseñas nuevas no coinciden.");
+      return;
+    }
+    if (cpNewPass.length < 6) {
+      setCpMsg("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    setCpSaving(true);
+    setCpMsg(null);
+    // Verificar contraseña actual
+    const { data: sess } = await supabase.auth.getSession();
+    const email = sess?.session?.user?.email;
+    if (!email) { setCpMsg("No se pudo verificar la sesión."); setCpSaving(false); return; }
+    const { error: verifyErr } = await supabase.auth.signInWithPassword({ email, password: cpCurrentPass });
+    if (verifyErr) { setCpMsg("Contraseña actual incorrecta."); setCpSaving(false); return; }
+    const { error } = await supabase.auth.updateUser({ password: cpNewPass });
+    setCpSaving(false);
+    if (error) {
+      setCpMsg("Error: " + error.message);
+    } else {
+      setCpMsg("✅ Contraseña actualizada correctamente.");
+      setCpCurrentPass("");
+      setCpNewPass("");
+      setCpConfirmPass("");
+    }
+  }
 
   async function saveAdminStaff(e: FormEvent) {
     e.preventDefault();
@@ -1964,26 +2074,145 @@ export default function AdminDashboard() {
         {adminSection === "home" && (
           <div>
             {/* Profile section */}
-            <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "32px", padding: "24px", background: "rgba(15,23,42,0.5)", borderRadius: "16px", border: "1px solid rgba(30,41,59,0.5)" }}>
-              {authRole === "admin" ? (
+            {authRole === "administrativo" ? (() => {
+              const effectiveAvatarKey = localAdminAvatarKey ?? adminProfile?.avatar_key ?? "adm1";
+              const avatarObj = ADMIN_AVATARS.find(a => a.key === effectiveAvatarKey) ?? ADMIN_AVATARS[0];
+              return (
+                <div style={{ marginBottom: "32px", background: "linear-gradient(135deg, rgba(15,23,42,0.8) 0%, rgba(20,30,50,0.6) 100%)", borderRadius: "20px", border: "1px solid rgba(30,41,59,0.7)", overflow: "hidden" }}>
+                  {/* Header banner */}
+                  <div style={{ height: "6px", background: adminProfile?.admin_type === "director" ? "linear-gradient(90deg, #0d9488, #14b8a6)" : "linear-gradient(90deg, #475569, #64748b)" }} />
+                  <div style={{ padding: "28px" }}>
+                    {/* Top row: avatar + info + botones */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "20px", marginBottom: "24px" }}>
+                      {/* Avatar */}
+                      <div style={{ position: "relative", flexShrink: 0 }}>
+                        <div style={{ width: "80px", height: "80px", borderRadius: "16px", background: "rgba(30,41,59,0.9)", border: "2px solid rgba(51,65,85,0.6)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                          <img src={avatarObj.url} alt={avatarObj.label} style={{ width: "52px", height: "52px", objectFit: "contain" }} />
+                        </div>
+                        <button
+                          onClick={() => { setAdminSelectedAvatar(adminProfile?.avatar_key ?? "adm1"); setShowAdminAvatarModal(true); }}
+                          style={{ position: "absolute", bottom: "-6px", right: "-6px", width: "26px", height: "26px", borderRadius: "8px", background: "linear-gradient(135deg, #0d9488, #0f766e)", border: "none", color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          title="Cambiar avatar"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "11px", color: adminProfile?.admin_type === "director" ? "#2dd4bf" : "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "4px", fontWeight: "600" }}>
+                          {adminProfile?.admin_type === "director" ? "Director(a)" : "Secretaria"}
+                        </div>
+                        <div style={{ fontSize: "22px", fontWeight: "800", color: "#f1f5f9", lineHeight: 1.2, marginBottom: "6px" }}>
+                          {withDegree(adminProfile?.full_name, adminProfile?.academic_degree) || adminProfile?.full_name || "Sin nombre"}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#475569", fontFamily: "monospace" }}>{adminProfile?.code ?? ""}</div>
+                      </div>
+                      {/* Botones acción */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
+                        <button
+                          onClick={() => {
+                            setAdminEditMode(v => !v);
+                            setShowChangePassword(false);
+                            if (!adminEditMode) { setAdminEditPhone(adminProfile?.phone ?? ""); setAdminEditEmail(adminProfile?.contact_email ?? ""); setAdminEditDegree(adminProfile?.academic_degree ?? ""); setAdminProfileMsg(null); }
+                          }}
+                          style={{ background: adminEditMode ? "rgba(51,65,85,0.8)" : "linear-gradient(135deg,rgba(37,99,235,0.7),rgba(29,78,216,0.8))", border: adminEditMode ? "1px solid rgba(71,85,105,0.5)" : "1px solid rgba(96,165,250,0.4)", color: adminEditMode ? "#94a3b8" : "#93c5fd", borderRadius: "10px", padding: "8px 14px", cursor: "pointer", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          {adminEditMode ? "Cancelar" : "Editar perfil"}
+                        </button>
+                        <button
+                          onClick={() => { setShowChangePassword(v => !v); setAdminEditMode(false); setCpMsg(null); setCpCurrentPass(""); setCpNewPass(""); setCpConfirmPass(""); }}
+                          style={{ background: showChangePassword ? "rgba(51,65,85,0.8)" : "linear-gradient(135deg,rgba(180,83,9,0.7),rgba(146,64,14,0.8))", border: showChangePassword ? "1px solid rgba(71,85,105,0.5)" : "1px solid rgba(251,191,36,0.3)", color: showChangePassword ? "#94a3b8" : "#fcd34d", borderRadius: "10px", padding: "8px 14px", cursor: "pointer", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                          {showChangePassword ? "Cancelar" : "Cambiar contraseña"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Info cells */}
+                    {!adminEditMode && !showChangePassword && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                        <div style={{ background: "rgba(15,23,42,0.5)", borderRadius: "10px", padding: "12px 14px", border: "1px solid rgba(30,41,59,0.6)" }}>
+                          <div style={{ fontSize: "11px", color: "#475569", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Celular</div>
+                          <div style={{ fontSize: "14px", color: "#e2e8f0", fontWeight: "500" }}>{adminProfile?.phone || "—"}</div>
+                        </div>
+                        <div style={{ background: "rgba(15,23,42,0.5)", borderRadius: "10px", padding: "12px 14px", border: "1px solid rgba(30,41,59,0.6)" }}>
+                          <div style={{ fontSize: "11px", color: "#475569", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Correo</div>
+                          <div style={{ fontSize: "14px", color: "#e2e8f0", fontWeight: "500", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adminProfile?.contact_email || "—"}</div>
+                        </div>
+                        <div style={{ background: "rgba(15,23,42,0.5)", borderRadius: "10px", padding: "12px 14px", border: "1px solid rgba(30,41,59,0.6)" }}>
+                          <div style={{ fontSize: "11px", color: "#475569", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Grado</div>
+                          <div style={{ fontSize: "14px", color: "#e2e8f0", fontWeight: "500" }}>{DEGREE_OPTIONS.find(o => o.value === adminProfile?.academic_degree)?.label?.split(" (")[0] || "—"}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Edit form */}
+                    {adminEditMode && (
+                      <div style={{ borderTop: "1px solid rgba(51,65,85,0.4)", paddingTop: "20px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+                          <div>
+                            <label style={{ display: "block", fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Celular</label>
+                            <input style={{ ...darkStyles.input }} value={adminEditPhone} onChange={e => setAdminEditPhone(e.target.value)} placeholder="Número de celular" />
+                          </div>
+                          <div>
+                            <label style={{ display: "block", fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Correo (opcional)</label>
+                            <input style={{ ...darkStyles.input }} value={adminEditEmail} onChange={e => setAdminEditEmail(e.target.value)} placeholder="Correo electrónico" />
+                          </div>
+                          <div>
+                            <label style={{ display: "block", fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Grado académico</label>
+                            <select style={{ ...darkStyles.input }} value={adminEditDegree} onChange={e => setAdminEditDegree(e.target.value)}>
+                              {DEGREE_OPTIONS.map(o => <option key={o.value} value={o.value} style={{ background: "#1a1a1a" }}>{o.label}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        {adminProfileMsg && <p style={{ fontSize: "13px", color: adminProfileMsg.startsWith("✅") ? "#86efac" : "#fca5a5", marginBottom: "10px" }}>{adminProfileMsg}</p>}
+                        <button onClick={saveAdminProfile} disabled={adminProfileSaving} style={{ ...darkStyles.btnSuccess, padding: "9px 20px", fontSize: "13px" }}>
+                          {adminProfileSaving ? "Guardando..." : "Guardar cambios"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Cambiar contraseña colapsable */}
+                    {showChangePassword && (
+                      <div style={{ borderTop: "1px solid rgba(51,65,85,0.4)", paddingTop: "20px" }}>
+                        <div style={{ display: "grid", gap: "12px", marginBottom: "14px" }}>
+                          <div>
+                            <label style={{ display: "block", fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Contraseña actual</label>
+                            <input type="password" style={{ ...darkStyles.input }} value={cpCurrentPass} onChange={e => setCpCurrentPass(e.target.value)} placeholder="Tu contraseña actual" autoComplete="current-password" />
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                            <div>
+                              <label style={{ display: "block", fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Nueva contraseña</label>
+                              <input type="password" style={{ ...darkStyles.input }} value={cpNewPass} onChange={e => setCpNewPass(e.target.value)} placeholder="Mínimo 6 caracteres" autoComplete="new-password" />
+                            </div>
+                            <div>
+                              <label style={{ display: "block", fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Confirmar contraseña</label>
+                              <input type="password" style={{ ...darkStyles.input }} value={cpConfirmPass} onChange={e => setCpConfirmPass(e.target.value)} placeholder="Repite la nueva contraseña" autoComplete="new-password" />
+                            </div>
+                          </div>
+                        </div>
+                        {cpMsg && <p style={{ fontSize: "13px", color: cpMsg.startsWith("✅") ? "#86efac" : "#fca5a5", marginBottom: "10px" }}>{cpMsg}</p>}
+                        <button onClick={changeOwnPassword} disabled={cpSaving} style={{ ...darkStyles.btnPrimary, fontSize: "13px", padding: "9px 20px" }}>
+                          {cpSaving ? "Verificando..." : "Actualizar contraseña"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })() : (
+              /* Admin del sistema — tarjeta simple */
+              <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "32px", padding: "24px", background: "rgba(15,23,42,0.5)", borderRadius: "16px", border: "1px solid rgba(30,41,59,0.5)" }}>
                 <img src={logoCea} alt="CEA" style={{ width: "72px", height: "72px", borderRadius: "12px", objectFit: "contain", background: "rgba(255,255,255,0.05)", padding: "4px" }} />
-              ) : (
-                <div style={{ width: "72px", height: "72px", borderRadius: "12px", background: "rgba(30,41,59,0.8)", border: "1px solid rgba(51,65,85,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <div>
+                  <div style={{ fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>Administrador del sistema</div>
+                  <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>{adminProfile?.full_name ?? "Administrador"}</div>
+                  {adminProfile?.contact_email && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>{adminProfile.contact_email}</div>}
                 </div>
-              )}
-              <div>
-                <div style={{ fontSize: "11px", color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>
-                  {authRole === "admin" ? "Administrador del sistema" : adminProfile?.admin_type === "director" ? "Director(a)" : "Secretaria"}
-                </div>
-                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>
-                  {authRole === "admin" ? (adminProfile?.full_name ?? "Administrador") : (adminProfile?.full_name ?? "Sin nombre")}
-                </div>
-                {adminProfile?.contact_email && (
-                  <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>{adminProfile.contact_email}</div>
-                )}
               </div>
-            </div>
+            )}
 
             <p style={{ color: "#71717a", marginBottom: "24px", fontSize: "15px" }}>Selecciona una sección para comenzar.</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
@@ -2129,8 +2358,8 @@ export default function AdminDashboard() {
 
         {/* MODAL CREAR/EDITAR ADMINISTRATIVO */}
         {showAdminStaffModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }} onClick={() => setShowAdminStaffModal(false)}>
-            <div style={{ ...darkStyles.modal, width: "100%", maxWidth: "480px", padding: "28px" }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001, padding: "20px" }}>
+            <div style={{ ...darkStyles.modal, width: "100%", maxWidth: "480px", padding: "28px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                 <h3 style={{ fontSize: "18px", fontWeight: "700", color: "#fff", margin: 0 }}>{editingStaffId ? "Editar Administrativo" : `Nuevo ${staffAdminType === "director" ? "Director(a)" : "Secretaria"}`}</h3>
                 <button onClick={() => setShowAdminStaffModal(false)} style={{ background: "transparent", border: "none", color: "#71717a", fontSize: "24px", cursor: "pointer", padding: 0, lineHeight: 1 }}>×</button>
@@ -3579,13 +3808,60 @@ export default function AdminDashboard() {
                 <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>Imágenes del Carrusel</h3>
                 <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Fotos que aparecen en la galería de la página pública. Puedes subir un archivo o pegar una URL.</p>
 
-                {/* Lista actual */}
-                <div style={{ display: "grid", gap: "10px", marginBottom: "16px" }}>
+                {/* Lista actual — drag & drop para reordenar */}
+                {cfgGallery.length > 1 && (
+                  <p style={{ color: "#475569", fontSize: "12px", marginBottom: "8px" }}>
+                    Arrastra las filas para cambiar el orden del carrusel.
+                  </p>
+                )}
+                <div style={{ display: "grid", gap: "8px", marginBottom: "16px" }}>
                   {cfgGallery.map((img, i) => (
-                    <div key={i} style={{ display: "flex", gap: "10px", alignItems: "center", background: "rgba(30,41,59,0.5)", borderRadius: "10px", padding: "8px 12px" }}>
+                    <div
+                      key={i}
+                      draggable
+                      onDragStart={() => setGalleryDragIdx(i)}
+                      onDragOver={e => { e.preventDefault(); setGalleryDragOverIdx(i); }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        if (galleryDragIdx === null || galleryDragIdx === i) return;
+                        const next = [...cfgGallery];
+                        const [moved] = next.splice(galleryDragIdx, 1);
+                        next.splice(i, 0, moved);
+                        setCfgGallery(next);
+                        setGalleryDragIdx(null);
+                        setGalleryDragOverIdx(null);
+                      }}
+                      onDragEnd={() => { setGalleryDragIdx(null); setGalleryDragOverIdx(null); }}
+                      style={{
+                        display: "flex", gap: "10px", alignItems: "center",
+                        background: galleryDragOverIdx === i && galleryDragIdx !== i
+                          ? "rgba(59,130,246,0.15)"
+                          : "rgba(30,41,59,0.5)",
+                        border: galleryDragOverIdx === i && galleryDragIdx !== i
+                          ? "1px dashed rgba(96,165,250,0.6)"
+                          : "1px solid transparent",
+                        borderRadius: "10px", padding: "8px 12px",
+                        opacity: galleryDragIdx === i ? 0.4 : 1,
+                        cursor: "grab", transition: "background 0.15s, border 0.15s, opacity 0.15s",
+                      }}
+                    >
+                      {/* Handle */}
+                      <svg width="14" height="20" viewBox="0 0 10 16" fill="#475569" style={{ flexShrink: 0, cursor: "grab" }}>
+                        <circle cx="3" cy="3" r="1.5"/><circle cx="7" cy="3" r="1.5"/>
+                        <circle cx="3" cy="8" r="1.5"/><circle cx="7" cy="8" r="1.5"/>
+                        <circle cx="3" cy="13" r="1.5"/><circle cx="7" cy="13" r="1.5"/>
+                      </svg>
+                      {/* Número de posición */}
+                      <span style={{ color: "#475569", fontSize: "11px", fontWeight: "600", width: "16px", textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
                       <img src={img.src} alt={img.alt} style={{ width: "56px", height: "40px", objectFit: "cover", borderRadius: "6px", background: "#1e293b", flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      <input value={img.alt} onChange={e => setCfgGallery(prev => prev.map((x,j) => j===i ? {...x,alt:e.target.value} : x))} placeholder="Descripción de la imagen" style={{ ...darkStyles.input, flex: 1, fontSize: "13px" }} />
-                      <span style={{ color: "#475569", fontSize: "11px", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{img.src}</span>
+                      <input
+                        value={img.alt}
+                        onChange={e => setCfgGallery(prev => prev.map((x,j) => j===i ? {...x,alt:e.target.value} : x))}
+                        placeholder="Descripción de la imagen"
+                        style={{ ...darkStyles.input, flex: 1, fontSize: "13px" }}
+                        onMouseDown={e => e.stopPropagation()}
+                      />
+                      <span style={{ color: "#475569", fontSize: "11px", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{img.src}</span>
                       <button onClick={() => setCfgGallery(prev => prev.filter((_,j) => j!==i))} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "16px", padding: "2px 6px", flexShrink: 0 }}>✕</button>
                     </div>
                   ))}
@@ -5135,6 +5411,38 @@ export default function AdminDashboard() {
               >
                 {resetting ? "Guardando..." : "Guardar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AVATAR ADMINISTRATIVO */}
+      {showAdminAvatarModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
+          <div style={{ ...darkStyles.modal, padding: "28px", width: "100%", maxWidth: "480px" }}>
+            <h3 style={{ fontSize: "18px", fontWeight: "700", color: "#f1f5f9", marginBottom: "6px" }}>Elegir avatar</h3>
+            <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "20px" }}>Selecciona un ícono para tu perfil.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px", marginBottom: "24px" }}>
+              {ADMIN_AVATARS.map(av => (
+                <button
+                  key={av.key}
+                  onClick={() => setAdminSelectedAvatar(av.key)}
+                  title={av.label}
+                  style={{
+                    background: adminSelectedAvatar === av.key ? "rgba(20,184,166,0.2)" : "rgba(30,41,59,0.6)",
+                    border: adminSelectedAvatar === av.key ? "2px solid #14b8a6" : "2px solid rgba(51,65,85,0.4)",
+                    borderRadius: "12px", padding: "10px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s",
+                  }}
+                >
+                  <img src={av.url} alt={av.label} style={{ width: "36px", height: "36px", objectFit: "contain" }} />
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={saveAdminAvatar} disabled={savingAdminAvatar} style={{ ...darkStyles.btnSuccess, flex: 1 }}>
+                {savingAdminAvatar ? "Guardando..." : "Guardar avatar"}
+              </button>
+              <button onClick={() => setShowAdminAvatarModal(false)} style={{ ...darkStyles.btnSecondary }}>Cancelar</button>
             </div>
           </div>
         </div>

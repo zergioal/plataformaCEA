@@ -276,6 +276,14 @@ export default function TeacherDashboard() {
   const [resetPasswordStudentName, setResetPasswordStudentName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+
+  // ── Cambiar contraseña propia ──────────────────────────────
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [cpCurrentPass, setCpCurrentPass] = useState("");
+  const [cpNewPass, setCpNewPass] = useState("");
+  const [cpConfirmPass, setCpConfirmPass] = useState("");
+  const [cpMsg, setCpMsg] = useState<string | null>(null);
+  const [cpSaving, setCpSaving] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [dashView, setDashView] = useState<"home" | "filiacion" | "config">(
     "home",
@@ -815,6 +823,39 @@ export default function TeacherDashboard() {
       .single();
 
     if (prof) setProfileData(prof as ProfileData);
+  }
+
+  async function changeOwnPassword() {
+    if (!cpCurrentPass.trim() || !cpNewPass.trim() || !cpConfirmPass.trim()) {
+      setCpMsg("Completa todos los campos.");
+      return;
+    }
+    if (cpNewPass !== cpConfirmPass) {
+      setCpMsg("Las contraseñas nuevas no coinciden.");
+      return;
+    }
+    if (cpNewPass.length < 6) {
+      setCpMsg("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    setCpSaving(true);
+    setCpMsg(null);
+    // Verificar contraseña actual
+    const { data: sess } = await supabase.auth.getSession();
+    const email = sess?.session?.user?.email;
+    if (!email) { setCpMsg("No se pudo verificar la sesión."); setCpSaving(false); return; }
+    const { error: verifyErr } = await supabase.auth.signInWithPassword({ email, password: cpCurrentPass });
+    if (verifyErr) { setCpMsg("Contraseña actual incorrecta."); setCpSaving(false); return; }
+    const { error } = await supabase.auth.updateUser({ password: cpNewPass });
+    setCpSaving(false);
+    if (error) {
+      setCpMsg("Error: " + error.message);
+    } else {
+      setCpMsg("✅ Contraseña actualizada correctamente.");
+      setCpCurrentPass("");
+      setCpNewPass("");
+      setCpConfirmPass("");
+    }
   }
 
   async function saveAvatar() {
@@ -1707,16 +1748,19 @@ export default function TeacherDashboard() {
                 <div className="flex flex-wrap justify-center sm:justify-end gap-2 sm:gap-3">
                   <button
                     className="px-3 sm:px-5 py-2 sm:py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all duration-200 border border-slate-700/50 text-sm sm:text-base"
-                    onClick={() => setEditMode(!editMode)}
+                    onClick={() => { setEditMode(!editMode); setShowChangePassword(false); }}
                   >
-                    {editMode ? (
-                      "Cancelar"
-                    ) : (
-                      <>
-                        <span className="sm:hidden">Editar</span>
-                        <span className="hidden sm:inline">Editar Perfil</span>
-                      </>
-                    )}
+                    {editMode ? "Cancelar" : <><span className="sm:hidden">Editar</span><span className="hidden sm:inline">Editar Perfil</span></>}
+                  </button>
+                  <button
+                    className={`px-3 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base flex items-center gap-2 border ${showChangePassword ? "bg-slate-800 hover:bg-slate-700 text-white border-slate-700/50" : "bg-gradient-to-r from-amber-700/70 to-amber-800/70 hover:from-amber-700 hover:to-amber-800 text-amber-200 border-amber-600/40"}`}
+                    onClick={() => { setShowChangePassword(v => !v); setEditMode(false); setCpMsg(null); setCpCurrentPass(""); setCpNewPass(""); setCpConfirmPass(""); }}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    <span className="sm:hidden">{showChangePassword ? "Cancelar" : "Contraseña"}</span>
+                    <span className="hidden sm:inline">{showChangePassword ? "Cancelar" : "Cambiar contraseña"}</span>
                   </button>
                 </div>
               </div>
@@ -1810,6 +1854,65 @@ export default function TeacherDashboard() {
                       {profileData?.likes ?? "-"}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Cambiar contraseña — colapsable */}
+              {showChangePassword && (
+                <div className="mt-5 pt-5 border-t border-slate-700/50">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    Cambiar contraseña
+                  </h4>
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-2">Contraseña actual</label>
+                      <input
+                        type="password"
+                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all"
+                        value={cpCurrentPass}
+                        onChange={e => setCpCurrentPass(e.target.value)}
+                        placeholder="Tu contraseña actual"
+                        autoComplete="current-password"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Nueva contraseña</label>
+                        <input
+                          type="password"
+                          className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all"
+                          value={cpNewPass}
+                          onChange={e => setCpNewPass(e.target.value)}
+                          placeholder="Mínimo 6 caracteres"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">Confirmar contraseña</label>
+                        <input
+                          type="password"
+                          className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all"
+                          value={cpConfirmPass}
+                          onChange={e => setCpConfirmPass(e.target.value)}
+                          placeholder="Repite la nueva contraseña"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {cpMsg && (
+                    <p className={`text-sm mb-3 ${cpMsg.startsWith("✅") ? "text-emerald-400" : "text-red-400"}`}>{cpMsg}</p>
+                  )}
+                  <button
+                    onClick={changeOwnPassword}
+                    disabled={cpSaving}
+                    className="px-6 py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl font-medium transition-all duration-200 shadow-lg disabled:opacity-50"
+                  >
+                    {cpSaving ? "Verificando..." : "Actualizar contraseña"}
+                  </button>
                 </div>
               )}
             </div>
@@ -2345,6 +2448,7 @@ export default function TeacherDashboard() {
                 </div>
               </div>
             )}
+
           </div>
         )}
 
