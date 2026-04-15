@@ -113,6 +113,7 @@ export default function TeacherModuleGrades() {
   const [tempFacilitator, setTempFacilitator] = useState("");
   const [tempDirector, setTempDirector] = useState(director);
   const [tempSemester, setTempSemester] = useState(semester);
+  const [extraPdfLoading, setExtraPdfLoading] = useState<string | null>(null);
 
   const isTeacherish = role === "teacher" || role === "admin";
   const mid = parseInt(moduleId ?? "", 10);
@@ -782,6 +783,414 @@ export default function TeacherModuleGrades() {
     doc.save(fileName);
   }
 
+  // ─── PDFs adicionales ────────────────────────────────────────────────────────
+
+  // Mismo enfoque que generatePDF (que funciona): y en fondo de celda, align:"left"
+  function drawDimLabel(
+    doc: jsPDF,
+    cell: { x: number; y: number; width: number; height: number },
+    text: string,
+  ) {
+    const cx = cell.x + cell.width / 2;
+    const y = cell.y + cell.height - 2;
+    const ptPerMm = doc.internal.scaleFactor;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5);
+    doc.setTextColor(0, 0, 0);
+    const lines = doc.splitTextToSize(text, cell.height - 4) as string[];
+    if (lines.length === 1) {
+      doc.text(lines[0], cx, y, { angle: 90, align: "left" });
+    } else {
+      const lh = (5 * 1.2) / ptPerMm;
+      lines.forEach((line: string, i: number) => {
+        doc.text(line, cx + (i - (lines.length - 1) / 2) * lh, y, { angle: 90, align: "left" });
+      });
+    }
+  }
+
+  async function loadLogoBase64(): Promise<string | null> {
+    try {
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const ctx = c.getContext("2d");
+          if (!ctx) { reject("no ctx"); return; }
+          ctx.drawImage(img, 0, 0);
+          resolve(c.toDataURL("image/png"));
+        };
+        img.onerror = () => reject("error");
+        img.src = logoCea;
+      });
+    } catch { return null; }
+  }
+
+  async function exportDimsPdf() {
+    setExtraPdfLoading("dims");
+    try {
+      const logo = await loadLogoBase64();
+      const doc = new jsPDF({ orientation: "landscape" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const marginX = 10;
+      const usableWidth = pageWidth - marginX * 2;
+      const studentList = rows.map((r) => r.student);
+      const studentIds = studentList.map((s) => s.id);
+
+      // Cargar asistencia para SER/DECIDIR
+      const { data: attendRows } = await supabase
+        .from("attendance").select("student_id, status").in("student_id", studentIds);
+      const attendMap = new Map<string, { total: number; present: number }>();
+      for (const sid of studentIds) attendMap.set(sid, { total: 0, present: 0 });
+      for (const a of attendRows ?? []) {
+        const cur = attendMap.get(a.student_id) ?? { total: 0, present: 0 };
+        cur.total++;
+        if (a.status === "P") cur.present++;
+        attendMap.set(a.student_id, cur);
+      }
+      const getPct = (sid: string) => {
+        const att = attendMap.get(sid) ?? { total: 0, present: 0 };
+        return att.total > 0 ? Math.round((att.present / att.total) * 100) : 0;
+      };
+
+      const { data: lessons } = await supabase
+        .from("lessons").select("id, sort_order").eq("module_id", mid).order("sort_order");
+      const lessonIds = (lessons ?? []).map((l: { id: number }) => l.id);
+      const lessonOrder = new Map(
+        (lessons ?? []).map((l: { id: number; sort_order: number }) => [l.id, l.sort_order]),
+      );
+
+      // Indicadores fijos de SER/DECIDIR
+      const FIXED_COLS = {
+        ser: [
+          { title: "Asiste y trabaja con responsabilidad (Asistencia %)", isAuto: true },
+          { title: "Respeta las normas del aula/taller", isAuto: false },
+        ],
+        decidir: [
+          { title: "Participa en aula (Asistencia %)", isAuto: true },
+          { title: "Corrige errores y mejora su trabajo", isAuto: false },
+        ],
+      };
+
+      type DimSpec = { key: string; label: string; max: number; min: number; fixed?: boolean };
+      const DIMS: DimSpec[] = [
+        { key: "ser",            label: "SER",            max: 10, min: 2, fixed: true },
+        { key: "saber",          label: "SABER",          max: 30, min: 6 },
+        { key: "hacer_proceso",  label: "HACER Proceso",  max: 20, min: 4 },
+        { key: "hacer_producto", label: "HACER Producto", max: 20, min: 4 },
+        { key: "decidir",        label: "DECIDIR",        max: 10, min: 2, fixed: true },
+      ];
+
+      for (let di = 0; di < DIMS.length; di++) {
+        const { key: dk, label, max, min, fixed } = DIMS[di];
+
+        if (di > 0) doc.addPage();
+        if (logo) doc.addImage(logo, "PNG", 10, 6, 20, 20);
+        doc.setFontSize(11); doc.setFont("helvetica", "bold");
+        doc.text("C.E.A. Madre María Oliva", pageWidth / 2, 12, { align: "center" });
+        doc.setFontSize(9); doc.setFont("helvetica", "normal");
+        doc.text(`Registro ${label} (${max} pts) — ${moduleRow?.title ?? ""}`, pageWidth / 2, 18, { align: "center" });
+        doc.text(`${careerName} | ${levelRow?.name ?? ""} | Facilitador/a: ${facilitator}`, pageWidth / 2, 23, { align: "center" });
+
+        if (fixed) {
+          // ── SER / DECIDIR: indicadores fijos con asistencia ──
+          const fixedCols = dk === "ser" ? FIXED_COLS.ser : FIXED_COLS.decidir;
+          const totalColIdx = fixedCols.length + 2;
+          const nw = 10, sw = 110, gw = 22, tw = 20;
+          const tblW = nw + sw + fixedCols.length * gw + tw;
+          const tblX = marginX + Math.max(0, (usableWidth - tblW) / 2);
+          const gradeField = dk === "ser" ? "ser" : "decidir";
+
+          const colStyles: Record<number, object> = {
+            0: { cellWidth: nw, halign: "center" },
+            1: { cellWidth: sw, halign: "left", overflow: "hidden" },
+            [totalColIdx]: { cellWidth: tw, halign: "center" },
+          };
+          fixedCols.forEach((_, i) => { colStyles[i + 2] = { cellWidth: gw, halign: "center" }; });
+
+          autoTable(doc, {
+            head: [["N°", "Estudiante", ...fixedCols.map((c) => c.title), `TOTAL (${max})`]],
+            body: studentList.map((s, idx) => {
+              const pct = getPct(s.id);
+              const autoNote = Math.round((pct / 100) * max);
+              const total = rows.find((r) => r.student.id === s.id)?.grade[gradeField as "ser" | "decidir"] ?? min;
+              return [
+                String(idx + 1), formatName(s),
+                ...fixedCols.map((c) => (c.isAuto ? String(autoNote) : "")),
+                String(total),
+              ];
+            }),
+            startY: 30,
+            margin: { left: tblX, right: tblX },
+            tableWidth: tblW,
+            theme: "grid",
+            styles: { fontSize: 8, textColor: [0, 0, 0], cellPadding: 1.6, lineColor: [180, 180, 180], lineWidth: 0.2, halign: "center", valign: "middle", overflow: "linebreak" },
+            headStyles: { fillColor: [235, 235, 235], fontSize: 6, textColor: [0, 0, 0], minCellHeight: 36, cellPadding: 1, fontStyle: "bold", halign: "center", valign: "middle" },
+            bodyStyles: { halign: "center", valign: "middle" },
+            columnStyles: colStyles,
+            willDrawCell: (data) => {
+              if (data.section === "head" && data.column.index >= 2 && data.column.index < 2 + fixedCols.length)
+                (data.cell as { text: string[] }).text = [];
+            },
+            didDrawCell: (data) => {
+              if (data.section === "head" && data.column.index >= 2 && data.column.index < 2 + fixedCols.length)
+                drawDimLabel(doc, data.cell, fixedCols[data.column.index - 2]?.title ?? "");
+            },
+          });
+        } else {
+          // ── SABER / HACER PROCESO / HACER PRODUCTO: desde dimension_grades ──
+          let dimCols: { section_id: number; title: string }[] = [];
+          const dimCells = new Map<string, number | null>();
+
+          if (lessonIds.length > 0) {
+            const { data: sections } = await supabase
+              .from("lesson_sections").select("id, title, lesson_id, sort_order")
+              .in("lesson_id", lessonIds).eq("dimension", dk).eq("is_active", true);
+
+            dimCols = ((sections ?? []) as { id: number; title: string; lesson_id: number; sort_order: number }[])
+              .sort((a, b) => {
+                const lo = (lessonOrder.get(a.lesson_id) ?? 0) - (lessonOrder.get(b.lesson_id) ?? 0);
+                return lo !== 0 ? lo : a.sort_order - b.sort_order;
+              })
+              .map((s) => ({ section_id: s.id, title: s.title }));
+
+            if (dimCols.length > 0) {
+              const { data: dg } = await supabase
+                .from("dimension_grades").select("student_id, section_id, score")
+                .in("section_id", dimCols.map((c) => c.section_id)).in("student_id", studentIds);
+              for (const g of dg ?? []) dimCells.set(`${g.student_id}_${g.section_id}`, g.score);
+            }
+          }
+
+          const dimAvgs = new Map<string, number>();
+          for (const s of studentList) {
+            const scores = dimCols.map((c) => dimCells.get(`${s.id}_${c.section_id}`) ?? null);
+            const valid = scores.filter((v) => v !== null) as number[];
+            const avg = valid.length === 0 ? min
+              : Math.min(Math.max(Math.round(valid.reduce((a, b) => a + b, 0) / valid.length), min), max);
+            dimAvgs.set(s.id, avg);
+          }
+
+          // Anchos adaptativos: reducir gw y sw para que todo quepa en una hoja
+          const actCount = dimCols.length;
+          const NW = 10, TW = 18;
+          let sw = 90, gw = 16;
+          if (actCount > 0 && NW + sw + actCount * gw + TW > usableWidth) {
+            gw = Math.max(7, Math.floor((usableWidth - NW - sw - TW) / actCount));
+            if (NW + sw + actCount * gw + TW > usableWidth)
+              sw = Math.max(55, usableWidth - NW - actCount * gw - TW);
+          }
+          const tblW = Math.min(NW + sw + actCount * gw + TW, usableWidth);
+          const tblX = marginX + Math.max(0, (usableWidth - tblW) / 2);
+          const totalColIdx = actCount + 2;
+          const headFs = gw <= 9 ? 5 : 6;
+          const bodyFs = gw <= 9 ? 7 : 8;
+
+          const colStyles: Record<number, object> = {
+            0: { cellWidth: NW, halign: "center" },
+            1: { cellWidth: sw, halign: "left", overflow: "hidden" },
+            [totalColIdx]: { cellWidth: TW, halign: "center" },
+          };
+          for (let i = 0; i < actCount; i++) colStyles[i + 2] = { cellWidth: gw, halign: "center" };
+
+          autoTable(doc, {
+            head: [["N°", "Estudiante", ...dimCols.map((c) => c.title), `TOTAL (${max})`]],
+            body: studentList.map((s, idx) => [
+              String(idx + 1), formatName(s),
+              ...dimCols.map((c) => {
+                const v = dimCells.get(`${s.id}_${c.section_id}`);
+                return v !== null && v !== undefined ? String(Math.round(Number(v))) : "-";
+              }),
+              String(dimAvgs.get(s.id) ?? min),
+            ]),
+            startY: 30,
+            margin: { left: tblX, right: tblX },
+            tableWidth: tblW,
+            theme: "grid",
+            styles: { fontSize: bodyFs, textColor: [0, 0, 0], cellPadding: 1.4, lineColor: [180, 180, 180], lineWidth: 0.2, halign: "center", valign: "middle", overflow: "linebreak" },
+            headStyles: { fillColor: [235, 235, 235], fontSize: headFs, textColor: [0, 0, 0], minCellHeight: 36, cellPadding: 1, fontStyle: "bold", halign: "center", valign: "middle" },
+            bodyStyles: { halign: "center", valign: "middle" },
+            columnStyles: colStyles,
+            willDrawCell: (data) => {
+              if (data.section === "head" && data.column.index >= 2 && data.column.index < 2 + actCount)
+                (data.cell as { text: string[] }).text = [];
+            },
+            didDrawCell: (data) => {
+              if (data.section === "head" && data.column.index >= 2 && data.column.index < 2 + actCount)
+                drawDimLabel(doc, data.cell, dimCols[data.column.index - 2]?.title ?? "");
+            },
+          });
+        }
+      }
+
+      doc.save(`registro_dimensiones_modulo${mid}.pdf`);
+    } finally { setExtraPdfLoading(null); }
+  }
+
+  async function exportAutoEvalTemplatePdf() {
+    setExtraPdfLoading("autoeval");
+    try {
+      const { data: acts } = await supabase
+        .from("auto_eval_activities").select("id, dimension, indicators").eq("module_id", mid);
+
+      if (!acts || acts.length === 0) {
+        alert("No hay actividades de autoevaluación para este módulo.");
+        return;
+      }
+
+      const logo = await loadLogoBase64();
+      const doc = new jsPDF({ orientation: "portrait" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const marginX = 15;
+
+      (acts as { id: number; dimension: string; indicators: unknown }[]).forEach((act, ai) => {
+        const indicators = Array.isArray(act.indicators) ? (act.indicators as string[]) : [];
+        const dimLabel = act.dimension === "auto_ser" ? "SER" : "DECIDIR";
+
+        if (ai > 0) doc.addPage();
+        if (logo) doc.addImage(logo, "PNG", 10, 6, 18, 18);
+        doc.setFontSize(12); doc.setFont("helvetica", "bold");
+        doc.text("C.E.A. Madre María Oliva", pageWidth / 2, 14, { align: "center" });
+        doc.setFontSize(10);
+        doc.text(`Autoevaluación — Dimensión ${dimLabel}`, pageWidth / 2, 21, { align: "center" });
+        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+        doc.text(`${moduleRow?.title ?? ""} | ${levelRow?.name ?? ""} | ${careerName}`, pageWidth / 2, 27, { align: "center" });
+
+        // Línea nombre del estudiante
+        doc.setFontSize(10); doc.setFont("helvetica", "normal");
+        doc.text("Estudiante: _____________________________________________", marginX, 35);
+        doc.text("Fecha: ___________________", pageWidth - marginX - 55, 35);
+
+        // Instrucción
+        doc.setFontSize(8);
+        doc.text("Instrucciones: Marca con una X el valor que mejor describe tu desempeño (1=Inicio · 2=Proceso · 3=Logro · 4=Logro destacado · 5=Excelente)", marginX, 41, {
+          maxWidth: pageWidth - marginX * 2,
+        });
+
+        // Tabla de indicadores
+        autoTable(doc, {
+          startY: 47,
+          margin: { left: marginX, right: marginX },
+          head: [["N°", "Indicador", "1", "2", "3", "4", "5"]],
+          body: indicators.map((ind, i) => [String(i + 1), ind, "", "", "", "", ""]),
+          theme: "grid",
+          styles: { fontSize: 9, textColor: [0, 0, 0], cellPadding: 3, lineColor: [160, 160, 160], lineWidth: 0.2 },
+          headStyles: { fillColor: [235, 235, 235], fontStyle: "bold", halign: "center", fontSize: 9 },
+          columnStyles: {
+            0: { cellWidth: 10, halign: "center" },
+            1: { cellWidth: pageWidth - marginX * 2 - 10 - 30, halign: "left" },
+            2: { cellWidth: 6, halign: "center" },
+            3: { cellWidth: 6, halign: "center" },
+            4: { cellWidth: 6, halign: "center" },
+            5: { cellWidth: 6, halign: "center" },
+            6: { cellWidth: 6, halign: "center" },
+          },
+          bodyStyles: { minCellHeight: 12 },
+        });
+
+        // Pie: puntuación y firma
+        const lastY = ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 200) + 10;
+        doc.setFontSize(9); doc.setFont("helvetica", "bold");
+        doc.text("Puntuación total (sobre 5 pts): _______", marginX, lastY);
+        doc.setFont("helvetica", "normal");
+        doc.text("Firma del estudiante: ___________________________", marginX, lastY + 12);
+      });
+
+      doc.save(`autoevaluacion_modelo_modulo${mid}.pdf`);
+    } finally { setExtraPdfLoading(null); }
+  }
+
+  async function exportQuizTemplatePdf() {
+    setExtraPdfLoading("quiz");
+    try {
+      const { data: lessons } = await supabase
+        .from("lessons").select("id, title, sort_order").eq("module_id", mid).order("sort_order");
+      const lessonIds = (lessons ?? []).map((l: { id: number }) => l.id);
+      const lessonTitleMap = new Map(
+        (lessons ?? []).map((l: { id: number; title: string }) => [l.id, l.title]),
+      );
+
+      if (lessonIds.length === 0) { alert("No hay lecciones en este módulo."); return; }
+
+      const { data: quizSections } = await supabase
+        .from("lesson_sections").select("id, title, lesson_id, sort_order")
+        .in("lesson_id", lessonIds).eq("kind", "quiz").eq("is_active", true)
+        .order("sort_order");
+
+      if (!quizSections || quizSections.length === 0) {
+        alert("No hay quizzes en este módulo."); return;
+      }
+
+      const logo = await loadLogoBase64();
+      const doc = new jsPDF({ orientation: "portrait" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const marginX = 15;
+      let isFirstPage = true;
+
+      for (const qs of quizSections as { id: number; title: string; lesson_id: number }[]) {
+        const { data: quiz } = await supabase
+          .from("eval_quizzes").select("id").eq("section_id", qs.id).maybeSingle();
+        if (!quiz) continue;
+
+        const { data: questions } = await supabase
+          .from("eval_quiz_questions")
+          .select("id, question, sort_order, eval_quiz_options(id, option_text)")
+          .eq("quiz_id", quiz.id).order("sort_order");
+
+        if (!questions || questions.length === 0) continue;
+
+        if (!isFirstPage) doc.addPage();
+        isFirstPage = false;
+
+        if (logo) doc.addImage(logo, "PNG", 10, 6, 18, 18);
+        doc.setFontSize(12); doc.setFont("helvetica", "bold");
+        doc.text("C.E.A. Madre María Oliva", pageWidth / 2, 14, { align: "center" });
+        doc.setFontSize(10);
+        doc.text(`Quiz: ${qs.title}`, pageWidth / 2, 21, { align: "center" });
+        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+        doc.text(`Lección: ${lessonTitleMap.get(qs.lesson_id) ?? ""} | ${moduleRow?.title ?? ""}`, pageWidth / 2, 27, { align: "center" });
+        doc.text(`${careerName} | ${levelRow?.name ?? ""}`, pageWidth / 2, 32, { align: "center" });
+
+        doc.setFontSize(10);
+        doc.text("Estudiante: _____________________________________________", marginX, 40);
+        doc.text("Fecha: ___________________", pageWidth - marginX - 55, 40);
+
+        let curY = 48;
+        const OPTS = ["A", "B", "C", "D", "E"];
+
+        (questions as {
+          id: number;
+          question: string;
+          sort_order: number;
+          eval_quiz_options: { id: number; option_text: string }[];
+        }[]).forEach((q, qi) => {
+          // Espacio suficiente para la pregunta
+          if (curY > 250) { doc.addPage(); curY = 20; }
+
+          doc.setFontSize(9); doc.setFont("helvetica", "bold");
+          const qLines = doc.splitTextToSize(`${qi + 1}. ${q.question}`, pageWidth - marginX * 2) as string[];
+          doc.text(qLines, marginX, curY);
+          curY += qLines.length * 5 + 2;
+
+          doc.setFont("helvetica", "normal");
+          (q.eval_quiz_options ?? []).forEach((opt, oi) => {
+            const optLines = doc.splitTextToSize(`${OPTS[oi] ?? String(oi + 1)}) ${opt.option_text}`, pageWidth - marginX * 2 - 6) as string[];
+            doc.text(optLines, marginX + 6, curY);
+            curY += optLines.length * 4.5 + 1;
+          });
+          curY += 4; // espacio entre preguntas
+        });
+
+        // Pie
+        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+        doc.text("Firma del estudiante: ___________________________", marginX, curY + 6);
+      }
+
+      doc.save(`quizzes_modelo_modulo${mid}.pdf`);
+    } finally { setExtraPdfLoading(null); }
+  }
+
   if (loading)
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -1256,15 +1665,44 @@ export default function TeacherModuleGrades() {
                 onClick={generatePDF}
                 className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-red-900/30 flex items-center gap-2"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
                   <path d="M12 18l4-4h-3v-4h-2v4H8l4 4z" />
                 </svg>
                 Descargar PDF
+              </button>
+
+              <button
+                onClick={exportDimsPdf}
+                disabled={extraPdfLoading !== null}
+                className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-indigo-900/30 flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11zM8 15h8v2H8zm0-4h8v2H8zm0-4h5v2H8z" />
+                </svg>
+                {extraPdfLoading === "dims" ? "Generando..." : "📚 PDF Dimensiones"}
+              </button>
+
+              <button
+                onClick={exportAutoEvalTemplatePdf}
+                disabled={extraPdfLoading !== null}
+                className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-emerald-900/30 flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {extraPdfLoading === "autoeval" ? "Generando..." : "✅ Modelo Autoevaluación"}
+              </button>
+
+              <button
+                onClick={exportQuizTemplatePdf}
+                disabled={extraPdfLoading !== null}
+                className="px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-amber-900/30 flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {extraPdfLoading === "quiz" ? "Generando..." : "📋 Modelo Quiz"}
               </button>
             </div>
           </div>

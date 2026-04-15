@@ -540,9 +540,9 @@ export default function TeacherAttendancePage() {
       const estado =
         pct === null
           ? "Sin datos"
-          : pct >= 80
+          : pct >= 60
             ? "Efectivo"
-            : pct >= 60
+            : pct >= 20
               ? "En riesgo"
               : "Abandono";
       return [
@@ -673,9 +673,9 @@ export default function TeacherAttendancePage() {
     const estado =
       totPct === null
         ? "Sin datos"
-        : totPct >= 80
+        : totPct >= 60
           ? "Efectivo"
-          : totPct >= 60
+          : totPct >= 20
             ? "En riesgo"
             : "Abandono";
 
