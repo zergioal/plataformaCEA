@@ -377,6 +377,12 @@ export default function TeacherContentManager() {
   const [loadingAccordion, setLoadingAccordion] = useState<Set<number>>(
     new Set(),
   );
+
+  // ===== VISTA PREVIA =====
+  const [previewMode, setPreviewMode] = useState(false);
+  const [previewSectionId, setPreviewSectionId] = useState<number | null>(null);
+  const [previewOpenLessons, setPreviewOpenLessons] = useState<Set<number>>(new Set());
+  const [loadingPreview, setLoadingPreview] = useState(false);
   function triggerShake() {
     setSaveBtnShake(true);
     setTimeout(() => setSaveBtnShake(false), 600);
@@ -1397,6 +1403,101 @@ export default function TeacherContentManager() {
     setLessonSectionsMap((prev) => new Map(prev).set(lessonId, data));
   }
 
+  async function activatePreview() {
+    setLoadingPreview(true);
+    const lessonIds = lessons.map((l) => l.id);
+    if (lessonIds.length === 0) { setLoadingPreview(false); setPreviewMode(true); return; }
+
+    const missing = lessonIds.filter((id) => !lessonSectionsMap.has(id));
+    if (missing.length > 0) {
+      const { data } = await supabase
+        .from("lesson_sections")
+        .select("id, lesson_id, title, kind, content_json, sort_order, is_active, dimension")
+        .in("lesson_id", missing)
+        .eq("is_active", true)
+        .order("sort_order");
+      const rows = (data as Section[]) ?? [];
+      setLessonSectionsMap((prev) => {
+        const next = new Map(prev);
+        for (const id of missing) {
+          next.set(id, rows.filter((s) => s.lesson_id === id));
+        }
+        return next;
+      });
+    }
+
+    // Set initial preview state: open first lesson, select its first section
+    const firstLesson = lessons[0];
+    const firstSects = lessonSectionsMap.get(firstLesson?.id ?? -1) ?? [];
+    setPreviewOpenLessons(new Set([firstLesson?.id ?? -1]));
+    setPreviewSectionId(firstSects[0]?.id ?? null);
+    setLoadingPreview(false);
+    setPreviewMode(true);
+  }
+
+  function renderPreviewContent(section: Section) {
+    const obj = section.content_json as Record<string, unknown>;
+    const str = (key: string) => { const v = obj[key]; return typeof v === "string" ? v : ""; };
+
+    if (section.kind === "text") {
+      return (
+        <div style={{ color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontSize: "15px" }}>
+          {str("text") || "(sin contenido)"}
+        </div>
+      );
+    }
+    if (section.kind === "video") {
+      const url = str("url");
+      return url ? (
+        <div style={{ aspectRatio: "16/9", width: "100%", borderRadius: "12px", overflow: "hidden", background: "#000", border: "1px solid rgba(30,41,59,0.6)" }}>
+          <iframe style={{ width: "100%", height: "100%", border: "none" }} src={url.replace("watch?v=", "embed/")} title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        </div>
+      ) : <div style={{ color: "#64748b" }}>(falta url)</div>;
+    }
+    if (section.kind === "image") {
+      const url = str("url");
+      return url ? <img src={url} alt={section.title} style={{ maxWidth: "100%", borderRadius: "12px", border: "1px solid rgba(30,41,59,0.6)" }} /> : <div style={{ color: "#64748b" }}>(falta url)</div>;
+    }
+    if (section.kind === "link") {
+      const url = str("url");
+      const label = str("label") || url;
+      return url ? <a href={url} target="_blank" rel="noreferrer" style={{ color: "#38bdf8", textDecoration: "underline", fontSize: "15px" }}>{label}</a> : <div style={{ color: "#64748b" }}>(falta url)</div>;
+    }
+    if (section.kind === "html") {
+      const html = str("html");
+      return (
+        <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid rgba(30,41,59,0.6)" }}>
+          <iframe srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:sans-serif;}</style></head><body>${html}</body></html>`} style={{ width: "100%", minHeight: "300px", border: "none", background: "#fff" }} title="HTML preview" />
+        </div>
+      );
+    }
+    if (section.kind === "drive") {
+      const driveId = str("driveId") || (() => { const u = str("originalUrl"); const m = u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/); return m?.[1] ?? ""; })();
+      return driveId ? (
+        <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid rgba(30,41,59,0.6)", height: "600px" }}>
+          <iframe src={`https://drive.google.com/file/d/${driveId}/preview`} style={{ width: "100%", height: "100%", border: "none" }} title={section.title} allowFullScreen />
+        </div>
+      ) : <div style={{ color: "#ef4444" }}>No se pudo obtener el ID de Google Drive</div>;
+    }
+    if (section.kind === "quiz") {
+      return (
+        <div style={{ background: "rgba(20,184,166,0.06)", border: "1px solid rgba(20,184,166,0.2)", borderRadius: "12px", padding: "20px" }}>
+          <div style={{ fontSize: "13px", color: "#5eead4", fontWeight: "600", marginBottom: "12px" }}>📋 Quiz — Dimensión Saber (vista previa)</div>
+          <div style={{ fontSize: "13px", color: "#64748b", fontStyle: "italic" }}>Los estudiantes verán aquí las preguntas del quiz y podrán responderlas.</div>
+        </div>
+      );
+    }
+    if (section.kind === "autoevaluacion") {
+      return (
+        <div style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.2)", borderRadius: "12px", padding: "20px" }}>
+          <div style={{ fontSize: "13px", color: "#d8b4fe", fontWeight: "600", marginBottom: "8px" }}>📝 Autoevaluación (vista previa)</div>
+          <div style={{ fontSize: "13px", color: "#64748b", fontStyle: "italic" }}>Los estudiantes completarán aquí su autoevaluación.</div>
+        </div>
+      );
+    }
+    return <div style={{ color: "#64748b" }}>(tipo: {section.kind})</div>;
+  }
+
   function openCreateSectionForLesson(lesson: Lesson) {
     setSelectedLesson(lesson);
     setSections(lessonSectionsMap.get(lesson.id) ?? []);
@@ -1517,6 +1618,30 @@ export default function TeacherContentManager() {
                 {careerName || "Mi Carrera"}
               </h1>
             </div>
+            {view === "lessons" && selectedModule && (
+              <button
+                onClick={() => previewMode ? setPreviewMode(false) : activatePreview()}
+                disabled={loadingPreview}
+                style={{
+                  display: "flex", alignItems: "center", gap: "8px",
+                  padding: "9px 18px", borderRadius: "10px", fontWeight: "600", fontSize: "14px",
+                  cursor: loadingPreview ? "wait" : "pointer", transition: "all 0.2s",
+                  background: previewMode
+                    ? "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)"
+                    : "rgba(30,41,59,0.8)",
+                  color: previewMode ? "#ccfbf1" : "#94a3b8",
+                  border: previewMode
+                    ? "1px solid rgba(20,184,166,0.5)"
+                    : "1px solid rgba(51,65,85,0.6)",
+                  boxShadow: previewMode ? "0 0 16px rgba(20,184,166,0.2)" : "none",
+                }}
+              >
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                </svg>
+                {loadingPreview ? "Cargando..." : previewMode ? "Cerrar vista previa" : "Vista previa"}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1786,8 +1911,96 @@ export default function TeacherContentManager() {
           </section>
         )}
 
+        {/* VISTA PREVIA DEL ESTUDIANTE */}
+        {previewMode && view === "lessons" && selectedModule && (
+          <div style={{ display: "flex", gap: "16px", minHeight: "calc(100vh - 200px)" }}>
+            {/* Banner */}
+            <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 999, background: "linear-gradient(90deg,#0f766e,#0d9488)", padding: "8px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#ccfbf1", fontSize: "13px", fontWeight: "600" }}>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Vista previa — así ven los estudiantes el módulo "{selectedModule.title}"
+              </div>
+              <button onClick={() => setPreviewMode(false)} style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "8px", color: "#ccfbf1", padding: "4px 14px", fontSize: "13px", cursor: "pointer", fontWeight: "600" }}>
+                ✕ Cerrar
+              </button>
+            </div>
+            <div style={{ marginTop: "44px", display: "flex", gap: "16px", width: "100%" }}>
+              {/* Sidebar */}
+              <aside style={{ width: "280px", flexShrink: 0, background: "rgba(2,6,23,0.95)", border: "1px solid rgba(30,41,59,0.6)", borderRadius: "16px", padding: "16px", alignSelf: "flex-start", position: "sticky", top: "60px", maxHeight: "calc(100vh - 80px)", overflowY: "auto" }}>
+                <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "12px" }}>Contenido</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {lessons.map((lesson) => {
+                    const sects = lessonSectionsMap.get(lesson.id) ?? [];
+                    const isOpen = previewOpenLessons.has(lesson.id);
+                    return (
+                      <div key={lesson.id} style={{ borderRadius: "10px", overflow: "hidden" }}>
+                        <button
+                          onClick={() => setPreviewOpenLessons((prev) => { const n = new Set(prev); if (n.has(lesson.id)) { n.delete(lesson.id); } else { n.add(lesson.id); } return n; })}
+                          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: isOpen ? "rgba(30,41,59,0.5)" : "transparent", border: "none", color: "#e2e8f0", cursor: "pointer", textAlign: "left", fontSize: "13px", fontWeight: "500", borderRadius: "8px" }}
+                        >
+                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lesson.title}</span>
+                          <svg style={{ width: "14px", height: "14px", flexShrink: 0, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", color: "#64748b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        {isOpen && (
+                          <div style={{ paddingBottom: "4px" }}>
+                            {sects.length === 0 ? (
+                              <div style={{ padding: "8px 12px", fontSize: "12px", color: "#334155" }}>Sin contenidos</div>
+                            ) : sects.map((s) => {
+                              const active = s.id === previewSectionId;
+                              return (
+                                <button
+                                  key={s.id}
+                                  onClick={() => setPreviewSectionId(s.id)}
+                                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: active ? "rgba(56,189,248,0.1)" : "transparent", border: "none", borderLeft: active ? "2px solid #38bdf8" : "2px solid transparent", color: active ? "#38bdf8" : "#94a3b8", cursor: "pointer", textAlign: "left", fontSize: "13px" }}
+                                >
+                                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: active ? "#38bdf8" : "#334155", flexShrink: 0 }} />
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </aside>
+
+              {/* Contenido principal */}
+              <section style={{ flex: 1, minWidth: 0, background: "rgba(2,6,23,0.95)", border: "1px solid rgba(30,41,59,0.6)", borderRadius: "16px", padding: "28px" }}>
+                {(() => {
+                  const sec = previewSectionId
+                    ? Object.values(Object.fromEntries(lessonSectionsMap)).flat().find((s) => s.id === previewSectionId)
+                    : null;
+                  if (!sec) return (
+                    <div style={{ textAlign: "center", padding: "60px 20px", color: "#334155" }}>
+                      <div style={{ fontSize: "48px", marginBottom: "16px" }}>👈</div>
+                      <div style={{ fontSize: "16px" }}>Selecciona una actividad del panel izquierdo</div>
+                    </div>
+                  );
+                  return (
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9", marginBottom: "20px" }}>{sec.title}</h2>
+                      {renderPreviewContent(sec)}
+                      <div style={{ marginTop: "32px", paddingTop: "20px", borderTop: "1px solid rgba(30,41,59,0.5)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: "12px", color: "#334155", background: "rgba(30,41,59,0.4)", border: "1px solid rgba(51,65,85,0.4)", borderRadius: "20px", padding: "6px 14px" }}>
+                          ○ Marcar como completado
+                        </div>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <div style={{ padding: "8px 16px", background: "rgba(30,41,59,0.5)", border: "1px solid rgba(51,65,85,0.4)", borderRadius: "8px", color: "#64748b", fontSize: "13px" }}>← Anterior</div>
+                          <div style={{ padding: "8px 16px", background: "rgba(30,41,59,0.5)", border: "1px solid rgba(51,65,85,0.4)", borderRadius: "8px", color: "#64748b", fontSize: "13px" }}>Siguiente →</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </section>
+            </div>
+          </div>
+        )}
+
         {/* VISTA: LECCIONES */}
-        {view === "lessons" && selectedModule && (
+        {!previewMode && view === "lessons" && selectedModule && (
           <section style={styles.card}>
             <div
               style={{
