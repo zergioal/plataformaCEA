@@ -280,6 +280,8 @@ const darkStyles = {
 export default function AdminDashboard() {
   const { role: authRole, profile: adminProfile } = useRole();
   const isReadOnly = authRole === "administrativo" && adminProfile?.admin_type === "secretaria";
+  // Director y secretaria pueden gestionar estudiantes
+  const canManageStudents = authRole === "admin" || authRole === "administrativo";
 
   const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "");
   const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "");
@@ -372,6 +374,12 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [resetting, setResetting] = useState(false);
 
+  // Modal de confirmación de eliminación
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteCode, setPendingDeleteCode] = useState<string>("");
+  const [deleting, setDeleting] = useState(false);
+
   // Modal de mensajes
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [messageTitle, setMessageTitle] = useState("");
@@ -396,7 +404,7 @@ export default function AdminDashboard() {
   const [loadingLocked, setLoadingLocked] = useState(false);
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
 
-  const [adminSection, setAdminSection] = useState<"home" | "carreras" | "docentes" | "estudiantes" | "config" | "administrativos">("home");
+  const [adminSection, setAdminSection] = useState<"home" | "carreras" | "docentes" | "estudiantes" | "config" | "administrativos" | "academico">("home");
 
   // ── Config section state ──────────────────────────────────
   const [configTab, setConfigTab] = useState<"institucion" | "anuncio" | "semestre" | "exportar">("institucion");
@@ -422,6 +430,16 @@ export default function AdminDashboard() {
   const [cpConfirmPass, setCpConfirmPass] = useState("");
   const [cpMsg, setCpMsg] = useState<string | null>(null);
   const [cpSaving, setCpSaving] = useState(false);
+
+  // ========== ACADÉMICO ==========
+  const [acadTab, setAcadTab] = useState<"centralizador" | "modulo">("centralizador");
+  const [acadCareer, setAcadCareer] = useState<number | "">("");
+  const [acadLevel, setAcadLevel] = useState<number | "">("");
+  const [acadModule, setAcadModule] = useState<number | "">("");
+  const [acadModulesList, setAcadModulesList] = useState<{ id: number; title: string; sort_order: number }[]>([]);
+  const [acadGrades, setAcadGrades] = useState<(GradeHistoryRow & { student_id: string })[]>([]);
+  const [loadingAcad, setLoadingAcad] = useState(false);
+  const [generatingAcadPdf, setGeneratingAcadPdf] = useState(false);
 
   // ========== ADMINISTRATIVOS (director / secretaria) ==========
   const [adminStaff, setAdminStaff] = useState<AdminStaffRow[]>([]);
@@ -1819,13 +1837,22 @@ export default function AdminDashboard() {
     await loadStudents();
   }
 
-  async function deleteUser(userId: string, code: string) {
-    if (!confirm(`¿Eliminar usuario ${code}?`)) return;
+  function deleteUser(userId: string, code: string) {
+    setPendingDeleteId(userId);
+    setPendingDeleteCode(code);
+    setShowConfirmDelete(true);
+  }
+
+  async function confirmDeleteUser() {
+    if (!pendingDeleteId) return;
+    setDeleting(true);
 
     const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData.session;
     if (!session) {
-      setMsg("No hay sesión activa.");
+      setDeleting(false);
+      setShowConfirmDelete(false);
+      void showMessage("Error", "No hay sesión activa.", "error");
       return;
     }
 
@@ -1836,7 +1863,7 @@ export default function AdminDashboard() {
         apikey: anonKey,
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: pendingDeleteId }),
     });
 
     const raw = await res.text();
@@ -1847,12 +1874,18 @@ export default function AdminDashboard() {
       out = { error: raw };
     }
 
+    const deletedCode = pendingDeleteCode;
+    setDeleting(false);
+    setShowConfirmDelete(false);
+    setPendingDeleteId(null);
+    setPendingDeleteCode("");
+
     if (!res.ok) {
-      setMsg(`Error ${res.status}: ${out.error ?? raw}`);
+      void showMessage("Error al eliminar", out.error ?? `Error ${res.status}`, "error");
       return;
     }
 
-    setMsg("✅ Usuario eliminado correctamente");
+    void showMessage("Usuario eliminado", `El participante ${deletedCode || ""} ha sido eliminado correctamente.`, "success");
     await loadTeachers();
     await loadStudents();
   }
@@ -1906,6 +1939,237 @@ export default function AdminDashboard() {
 
     setMsg(`✅ Contraseña actualizada para ${resetUserCode}: ${newPassword}`);
     setShowResetModal(false);
+  }
+
+  // ========== FUNCIONES ACADÉMICO ==========
+  async function loadAcadModules(levelId: number) {
+    const { data } = await supabase
+      .from("modules")
+      .select("id, title, sort_order")
+      .eq("level_id", levelId)
+      .order("sort_order");
+    setAcadModulesList((data as { id: number; title: string; sort_order: number }[]) ?? []);
+    setAcadModule("");
+  }
+
+  async function loadAcadGrades(levelId: number) {
+    setLoadingAcad(true);
+    const { data, error } = await supabase
+      .from("v_student_grade_history")
+      .select("student_id, module_id, module_name, module_order, level_id, level_name, ser, saber, hacer_proceso, hacer_producto, decidir, auto_ser, auto_decidir, total, observation")
+      .eq("level_id", levelId)
+      .order("module_order");
+    setLoadingAcad(false);
+    if (!error) setAcadGrades((data as (GradeHistoryRow & { student_id: string })[]) ?? []);
+  }
+
+  function getAcadStudents() {
+    return students.filter(s =>
+      (!acadCareer || s.career_id === acadCareer) &&
+      (!acadLevel || s.current_level_id === acadLevel)
+    ).sort((a, b) => {
+      const ap = (a.last_name_pat ?? "").toLowerCase();
+      const bp = (b.last_name_pat ?? "").toLowerCase();
+      if (ap !== bp) return ap.localeCompare(bp);
+      return ((a.first_names ?? "").toLowerCase()).localeCompare((b.first_names ?? "").toLowerCase());
+    });
+  }
+
+  async function generateCentralizadorPdf() {
+    if (!acadCareer || !acadLevel) return;
+    setGeneratingAcadPdf(true);
+    try {
+      const careerObj = careers.find(c => c.id === acadCareer);
+      const levelObj = levels.find(l => l.id === acadLevel);
+      const acadStudents = getAcadStudents();
+
+      // Cargar módulos directamente si el estado aún no los tiene
+      let modules = [...acadModulesList].sort((a, b) => a.sort_order - b.sort_order);
+      if (modules.length === 0 && acadLevel) {
+        const { data: modData } = await supabase
+          .from("modules")
+          .select("id, title, sort_order")
+          .eq("level_id", acadLevel)
+          .order("sort_order");
+        modules = (modData as { id: number; title: string; sort_order: number }[]) ?? [];
+        setAcadModulesList(modules);
+      }
+      // Fallback: derivar módulos de los datos de notas ya cargados
+      if (modules.length === 0 && acadGrades.length > 0) {
+        const modMap = new Map<number, { id: number; title: string; sort_order: number }>();
+        for (const g of acadGrades) {
+          if (!modMap.has(g.module_id)) {
+            modMap.set(g.module_id, { id: g.module_id, title: g.module_name, sort_order: g.module_order });
+          }
+        }
+        modules = [...modMap.values()].sort((a, b) => a.sort_order - b.sort_order);
+      }
+
+      // Cargar notas si el estado no las tiene
+      let grades = acadGrades;
+      if (grades.length === 0 && acadLevel) {
+        const { data: gradeData } = await supabase
+          .from("v_student_grade_history")
+          .select("student_id, module_id, module_name, module_order, level_id, level_name, ser, saber, hacer_proceso, hacer_producto, decidir, auto_ser, auto_decidir, total, observation")
+          .eq("level_id", acadLevel)
+          .order("module_order");
+        grades = (gradeData as (GradeHistoryRow & { student_id: string })[]) ?? [];
+        setAcadGrades(grades);
+      }
+
+      const doc = new jsPDF({ orientation: "landscape" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      await addPdfHeader(doc, pageWidth);
+
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text("CENTRALIZADOR DE NOTAS SEMESTRAL", pageWidth / 2, 48, { align: "center" });
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Carrera: ${careerObj?.name ?? "-"}   |   Nivel: ${levelObj?.name ?? "-"}   |   Fecha: ${new Date().toLocaleDateString("es-BO")}`, pageWidth / 2, 56, { align: "center" });
+
+      // Cabeceras con nombres reales de módulo
+      const modHeaders = modules.map(m => `Módulo ${m.sort_order}\n${m.title.length > 28 ? m.title.substring(0, 26) + ".." : m.title}`);
+      const head = [["N°", "Código", "Ap. Paterno", "Ap. Materno", "Nombres", ...modHeaders, "Promedio\nSemestral"]];
+
+      const body = acadStudents.map((s, idx) => {
+        const studentGrades = grades.filter(g => g.student_id === s.id);
+        const modTotals = modules.map(m => {
+          const g = studentGrades.find(g => g.module_id === m.id);
+          return g?.total != null ? String(Math.round(g.total)) : "-";
+        });
+        const nums = modTotals.filter(t => t !== "-").map(Number);
+        const prom = nums.length > 0 ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : "-";
+        return [String(idx + 1), s.code ?? "-", s.last_name_pat ?? "-", s.last_name_mat ?? "-", s.first_names ?? "-", ...modTotals, prom];
+      });
+
+      autoTable(doc, {
+        head, body,
+        startY: 62,
+        styles: { fontSize: 7, cellPadding: 2, valign: "middle" },
+        headStyles: { fillColor: [30, 58, 95], fontSize: 6.5, halign: "center", valign: "middle" },
+        columnStyles: {
+          0: { cellWidth: 8, halign: "center" },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 28 },
+          4: { cellWidth: 28 },
+          [5 + modules.length]: { halign: "center", fontStyle: "bold" },
+        },
+        didParseCell: (data) => {
+          // Centrar columnas de notas (módulos y promedio)
+          if (data.column.index >= 5) {
+            data.cell.styles.halign = "center";
+          }
+        },
+      });
+
+      doc.save(`centralizador_${careerObj?.name ?? "carrera"}_${levelObj?.name ?? "nivel"}.pdf`);
+    } finally {
+      setGeneratingAcadPdf(false);
+    }
+  }
+
+  async function generateModuloPdf() {
+    if (!acadCareer || !acadLevel || !acadModule) return;
+    setGeneratingAcadPdf(true);
+    try {
+      const careerObj = careers.find(c => c.id === acadCareer);
+      const levelObj = levels.find(l => l.id === acadLevel);
+      const acadStudents = getAcadStudents();
+
+      // Cargar módulos si aún no están en estado
+      let modList = [...acadModulesList];
+      if (modList.length === 0 && acadLevel) {
+        const { data: modData } = await supabase
+          .from("modules")
+          .select("id, title, sort_order")
+          .eq("level_id", acadLevel)
+          .order("sort_order");
+        modList = (modData as { id: number; title: string; sort_order: number }[]) ?? [];
+        setAcadModulesList(modList);
+      }
+      const moduleObj = modList.find(m => m.id === acadModule);
+
+      // Cargar notas si aún no están en estado
+      let grades = acadGrades;
+      if (grades.length === 0 && acadLevel) {
+        const { data: gradeData } = await supabase
+          .from("v_student_grade_history")
+          .select("student_id, module_id, module_name, module_order, level_id, level_name, ser, saber, hacer_proceso, hacer_producto, decidir, auto_ser, auto_decidir, total, observation")
+          .eq("level_id", acadLevel)
+          .order("module_order");
+        grades = (gradeData as (GradeHistoryRow & { student_id: string })[]) ?? [];
+        setAcadGrades(grades);
+      }
+      const moduleGrades = grades.filter(g => g.module_id === acadModule);
+
+      const doc = new jsPDF({ orientation: "landscape" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      await addPdfHeader(doc, pageWidth);
+
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text("REGISTRO DE NOTAS — MÓDULO", pageWidth / 2, 44, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.text(moduleObj?.title ?? grades.find(g => g.module_id === acadModule)?.module_name ?? "-", pageWidth / 2, 52, { align: "center" });
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Carrera: ${careerObj?.name ?? "-"}   |   Nivel: ${levelObj?.name ?? "-"}   |   Fecha: ${new Date().toLocaleDateString("es-BO")}`,
+        pageWidth / 2, 59, { align: "center" }
+      );
+
+      // Hacer = proceso + producto (40 pts), Autoeva = auto_ser + auto_decidir (10 pts)
+      const head = [[
+        "N°", "Código", "Ap. Paterno", "Ap. Materno", "Nombres",
+        "Ser\n(10)", "Saber\n(30)", "Hacer\n(40)", "Decidir\n(10)", "Autoeva.\n(10)", "Total\n(100)", "Resultado"
+      ]];
+      const body = acadStudents.map((s, idx) => {
+        const g = moduleGrades.find(g => g.student_id === s.id);
+        const tieneHacer = g?.hacer_proceso != null || g?.hacer_producto != null;
+        const tieneAutoeva = g?.auto_ser != null || g?.auto_decidir != null;
+        const hacer = tieneHacer ? String(Math.round((g?.hacer_proceso ?? 0) + (g?.hacer_producto ?? 0))) : "-";
+        const autoeva = tieneAutoeva ? String(Math.round((g?.auto_ser ?? 0) + (g?.auto_decidir ?? 0))) : "-";
+        return [
+          String(idx + 1), s.code ?? "-", s.last_name_pat ?? "-", s.last_name_mat ?? "-", s.first_names ?? "-",
+          g?.ser != null ? String(Math.round(g.ser)) : "-",
+          g?.saber != null ? String(Math.round(g.saber)) : "-",
+          hacer,
+          g?.decidir != null ? String(Math.round(g.decidir)) : "-",
+          autoeva,
+          g?.total != null ? String(Math.round(g.total)) : "-",
+          g?.observation ?? "-",
+        ];
+      });
+
+      autoTable(doc, {
+        head, body,
+        startY: 64,
+        styles: { fontSize: 7, cellPadding: 2, valign: "middle" },
+        headStyles: { fillColor: [30, 58, 95], fontSize: 7, halign: "center", valign: "middle" },
+        columnStyles: {
+          0: { cellWidth: 8, halign: "center" },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 32 },
+          5: { halign: "center", cellWidth: 14 },
+          6: { halign: "center", cellWidth: 14 },
+          7: { halign: "center", cellWidth: 14 },
+          8: { halign: "center", cellWidth: 14 },
+          9: { halign: "center", cellWidth: 14 },
+          10: { halign: "center", cellWidth: 14, fontStyle: "bold" },
+        },
+      });
+
+      doc.save(`notas_modulo${moduleObj?.sort_order ?? ""}_${levelObj?.name ?? "nivel"}_${careerObj?.name ?? "carrera"}.pdf`);
+    } finally {
+      setGeneratingAcadPdf(false);
+    }
   }
 
   function toggleTeacherSort(column: keyof UserRow) {
@@ -2291,6 +2555,21 @@ export default function AdminDashboard() {
                   <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(45,212,191,0.3)" }}>→</span>
                 </button>
               )}
+
+              {/* Académico — admin y administrativo */}
+              <button
+                onClick={() => setAdminSection("academico")}
+                style={{ background: "linear-gradient(135deg, rgba(30,58,95,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(56,189,248,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(56,189,248,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(56,189,248,0.15)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(56,189,248,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </div>
+                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Académico</h3>
+                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Centralizador de notas y reportes académicos por carrera y nivel.</p>
+                <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(56,189,248,0.3)" }}>→</span>
+              </button>
             </div>
           </div>
         )}
@@ -2347,6 +2626,7 @@ export default function AdminDashboard() {
                     </div>
                     <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
                       <button onClick={() => openEditStaff(staff)} style={{ ...darkStyles.btnSecondary, fontSize: "12px", padding: "6px 12px" }}>Editar</button>
+                      <button onClick={() => openResetPassword(staff.id, staff.code ?? staff.id)} style={{ ...darkStyles.btnSecondary, fontSize: "12px", padding: "6px 12px", color: "#fcd34d", borderColor: "rgba(251,191,36,0.3)" }}>Contraseña</button>
                       <button onClick={() => void deleteStaff(staff)} style={{ ...darkStyles.btnDanger, fontSize: "12px", padding: "6px 12px" }}>Eliminar</button>
                     </div>
                   </div>
@@ -2548,7 +2828,7 @@ export default function AdminDashboard() {
                               })
                             : "—"}
                         </td>
-                        {!isReadOnly && (
+                        {canManageStudents && (
                         <td style={{ padding: "12px", textAlign: "center" }}>
                           <button
                             style={{
@@ -2943,7 +3223,7 @@ export default function AdminDashboard() {
                               })
                             : "—"}
                         </td>
-                        {!isReadOnly && (
+                        {canManageStudents && (
                         <td style={{ padding: "12px", textAlign: "center" }}>
                           <button
                             style={{
@@ -3294,7 +3574,7 @@ export default function AdminDashboard() {
                               })
                             : "—"}
                         </td>
-                        {!isReadOnly && (
+                        {canManageStudents && (
                         <td style={{ padding: "12px", textAlign: "center" }}>
                           <button
                             style={{
@@ -3363,7 +3643,7 @@ export default function AdminDashboard() {
               <button style={darkStyles.btnSecondary} onClick={loadStudents}>
                 {loadingStudents ? "..." : "🔄"}
               </button>
-              {!isReadOnly && (
+              {canManageStudents && (
                 <button
                   style={darkStyles.btnPrimary}
                   onClick={() => {
@@ -3671,7 +3951,7 @@ export default function AdminDashboard() {
                         >
                           Notas
                         </button>
-                        {!isReadOnly && (
+                        {canManageStudents && (
                           <>
                             <button
                               style={{
@@ -3731,6 +4011,243 @@ export default function AdminDashboard() {
         </section>
           </div>
         )}
+        {/* ─── ACADÉMICO ─── */}
+        {adminSection === "academico" && (
+          <div>
+            <button onClick={() => setAdminSection("home")} style={{ marginBottom: "24px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>← Inicio</button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+              <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <div>
+                <h2 style={{ fontSize: "22px", fontWeight: "700", color: "#fff", margin: 0 }}>Académico</h2>
+                <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>Reportes de calificaciones por carrera y nivel.</p>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: "8px", marginBottom: "24px" }}>
+              {(["centralizador", "modulo"] as const).map(t => {
+                const labels = { centralizador: "Centralizador Semestral", modulo: "Notas por Módulo" };
+                return (
+                  <button key={t} onClick={() => setAcadTab(t)} style={{ padding: "9px 20px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer", transition: "all 0.2s", background: acadTab === t ? "rgba(56,189,248,0.15)" : "rgba(30,30,40,0.8)", border: acadTab === t ? "1px solid rgba(56,189,248,0.5)" : "1px solid rgba(71,85,105,0.4)", color: acadTab === t ? "#38bdf8" : "#94a3b8" }}>
+                    {labels[t]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Filtros comunes */}
+            <div style={{ ...darkStyles.card, padding: "20px", marginBottom: "20px" }}>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Carrera</label>
+                  <select
+                    style={{ ...darkStyles.input, width: "200px" }}
+                    value={acadCareer}
+                    onChange={e => {
+                      const v = e.target.value ? Number(e.target.value) : "";
+                      setAcadCareer(v);
+                      setAcadLevel("");
+                      setAcadModule("");
+                      setAcadModulesList([]);
+                      setAcadGrades([]);
+                    }}
+                  >
+                    <option value="">Seleccionar carrera</option>
+                    {careers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Nivel</label>
+                  <select
+                    style={{ ...darkStyles.input, width: "200px" }}
+                    value={acadLevel}
+                    disabled={!acadCareer}
+                    onChange={e => {
+                      const v = e.target.value ? Number(e.target.value) : "";
+                      setAcadLevel(v);
+                      setAcadModule("");
+                      setAcadGrades([]);
+                      if (v) {
+                        void loadAcadModules(v);
+                        void loadAcadGrades(v);
+                      } else {
+                        setAcadModulesList([]);
+                      }
+                    }}
+                  >
+                    <option value="">Seleccionar nivel</option>
+                    {levels.filter(l => l.career_id === acadCareer).sort((a,b) => a.sort_order - b.sort_order).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+                {acadTab === "modulo" && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Módulo</label>
+                    <select
+                      style={{ ...darkStyles.input, width: "220px" }}
+                      value={acadModule}
+                      disabled={!acadLevel}
+                      onChange={e => setAcadModule(e.target.value ? Number(e.target.value) : "")}
+                    >
+                      <option value="">Seleccionar módulo</option>
+                      {acadModulesList.map(m => <option key={m.id} value={m.id}>{m.sort_order}. {m.title}</option>)}
+                    </select>
+                  </div>
+                )}
+                {loadingAcad && <span style={{ fontSize: "13px", color: "#64748b", alignSelf: "center", paddingBottom: "2px" }}>Cargando datos...</span>}
+              </div>
+            </div>
+
+            {/* Tab: CENTRALIZADOR */}
+            {acadTab === "centralizador" && (
+              <div style={{ ...darkStyles.card, padding: "24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#fff", margin: 0 }}>Centralizador de Notas Semestral</h3>
+                  {acadCareer && acadLevel && (
+                    <button
+                      onClick={() => void generateCentralizadorPdf()}
+                      disabled={generatingAcadPdf || getAcadStudents().length === 0}
+                      style={{ ...darkStyles.btnPrimary, background: "linear-gradient(135deg, rgba(30,58,95,0.9), rgba(56,189,248,0.3))", border: "1px solid rgba(56,189,248,0.4)", color: "#e0f2fe", fontSize: "13px", padding: "8px 18px" }}
+                    >
+                      {generatingAcadPdf ? "Generando..." : "📄 Exportar PDF"}
+                    </button>
+                  )}
+                </div>
+                {!acadCareer || !acadLevel ? (
+                  <p style={{ color: "#475569", textAlign: "center", padding: "32px 0", fontSize: "14px" }}>Selecciona una carrera y nivel para ver el centralizador.</p>
+                ) : loadingAcad ? (
+                  <p style={{ color: "#475569", textAlign: "center", padding: "32px 0" }}>Cargando notas...</p>
+                ) : (() => {
+                  const acadStudents = getAcadStudents();
+                  const modules = [...acadModulesList].sort((a, b) => a.sort_order - b.sort_order);
+                  return (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                        <thead>
+                          <tr style={darkStyles.tableHeader}>
+                            <th style={{ padding: "10px 8px", textAlign: "left", whiteSpace: "nowrap" }}>N°</th>
+                            <th style={{ padding: "10px 8px", textAlign: "left", whiteSpace: "nowrap" }}>Código</th>
+                            <th style={{ padding: "10px 8px", textAlign: "left", whiteSpace: "nowrap" }}>Apellidos</th>
+                            <th style={{ padding: "10px 8px", textAlign: "left", whiteSpace: "nowrap" }}>Nombres</th>
+                            {modules.map(m => (
+                              <th key={m.id} title={m.title} style={{ padding: "10px 8px", textAlign: "center", maxWidth: "100px", fontSize: "11px" }}>
+                                <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "98px" }}>M{m.sort_order}: {m.title}</div>
+                              </th>
+                            ))}
+                            <th style={{ padding: "10px 8px", textAlign: "center", whiteSpace: "nowrap", color: "#38bdf8" }}>Promedio</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {acadStudents.length === 0 ? (
+                            <tr><td colSpan={5 + modules.length + 1} style={{ padding: "32px", textAlign: "center", color: "#475569" }}>No hay estudiantes en este nivel.</td></tr>
+                          ) : acadStudents.map((s, idx) => {
+                            const sg = acadGrades.filter(g => g.student_id === s.id);
+                            const totals = modules.map(m => sg.find(g => g.module_id === m.id)?.total ?? null);
+                            const nums = totals.filter((t): t is number => t !== null);
+                            const prom = nums.length > 0 ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : "-";
+                            return (
+                              <tr key={s.id} style={darkStyles.tableRow}>
+                                <td style={{ padding: "9px 8px", color: "#71717a" }}>{idx + 1}</td>
+                                <td style={{ padding: "9px 8px", fontFamily: "monospace", color: "#e4e4e7", fontSize: "11px" }}>{s.code ?? "-"}</td>
+                                <td style={{ padding: "9px 8px", color: "#e4e4e7" }}>{[s.last_name_pat, s.last_name_mat].filter(Boolean).join(" ") || "-"}</td>
+                                <td style={{ padding: "9px 8px", color: "#e4e4e7" }}>{s.first_names ?? "-"}</td>
+                                {totals.map((t, i) => (
+                                  <td key={i} style={{ padding: "9px 8px", textAlign: "center", color: t == null ? "#475569" : t >= 76 ? "#86efac" : t >= 51 ? "#fde68a" : "#fca5a5", fontWeight: t != null ? "600" : "400" }}>
+                                    {t != null ? Math.round(t) : "-"}
+                                  </td>
+                                ))}
+                                <td style={{ padding: "9px 8px", textAlign: "center", color: "#38bdf8", fontWeight: "700" }}>{prom}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Tab: NOTAS POR MÓDULO */}
+            {acadTab === "modulo" && (
+              <div style={{ ...darkStyles.card, padding: "24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#fff", margin: 0 }}>Registro de Notas por Módulo</h3>
+                  {acadCareer && acadLevel && acadModule && (
+                    <button
+                      onClick={() => void generateModuloPdf()}
+                      disabled={generatingAcadPdf || getAcadStudents().length === 0}
+                      style={{ ...darkStyles.btnPrimary, background: "linear-gradient(135deg, rgba(30,58,95,0.9), rgba(56,189,248,0.3))", border: "1px solid rgba(56,189,248,0.4)", color: "#e0f2fe", fontSize: "13px", padding: "8px 18px" }}
+                    >
+                      {generatingAcadPdf ? "Generando..." : "📄 Exportar PDF"}
+                    </button>
+                  )}
+                </div>
+                {!acadCareer || !acadLevel ? (
+                  <p style={{ color: "#475569", textAlign: "center", padding: "32px 0", fontSize: "14px" }}>Selecciona una carrera y nivel para continuar.</p>
+                ) : !acadModule ? (
+                  <p style={{ color: "#475569", textAlign: "center", padding: "32px 0", fontSize: "14px" }}>Selecciona un módulo para ver las calificaciones.</p>
+                ) : loadingAcad ? (
+                  <p style={{ color: "#475569", textAlign: "center", padding: "32px 0" }}>Cargando notas...</p>
+                ) : (() => {
+                  const acadStudents = getAcadStudents();
+                  const moduleGrades = acadGrades.filter(g => g.module_id === acadModule);
+                  return (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                        <thead>
+                          <tr style={darkStyles.tableHeader}>
+                            <th style={{ padding: "9px 6px", textAlign: "left", whiteSpace: "nowrap" }}>N°</th>
+                            <th style={{ padding: "9px 6px", textAlign: "left", whiteSpace: "nowrap" }}>Código</th>
+                            <th style={{ padding: "9px 6px", textAlign: "left", whiteSpace: "nowrap" }}>Apellidos</th>
+                            <th style={{ padding: "9px 6px", textAlign: "left", whiteSpace: "nowrap" }}>Nombres</th>
+                            <th style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }} title="Ser (10 pts)">Ser (10)</th>
+                            <th style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }} title="Saber (30 pts)">Saber (30)</th>
+                            <th style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }} title="Hacer Proceso+Producto (40 pts)">Hacer (40)</th>
+                            <th style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }} title="Decidir (10 pts)">Decidir (10)</th>
+                            <th style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }} title="Autoevaluación: Auto-Ser + Auto-Decidir (10 pts)">Autoeva. (10)</th>
+                            <th style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Total (100)</th>
+                            <th style={{ padding: "9px 6px", textAlign: "left", whiteSpace: "nowrap" }}>Resultado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {acadStudents.length === 0 ? (
+                            <tr><td colSpan={11} style={{ padding: "32px", textAlign: "center", color: "#475569" }}>No hay estudiantes en este nivel.</td></tr>
+                          ) : acadStudents.map((s, idx) => {
+                            const g = moduleGrades.find(g => g.student_id === s.id);
+                            const totalColor = g?.total == null ? "#475569" : g.total >= 76 ? "#86efac" : g.total >= 51 ? "#fde68a" : "#fca5a5";
+                            const tieneHacer = g?.hacer_proceso != null || g?.hacer_producto != null;
+                            const tieneAutoeva = g?.auto_ser != null || g?.auto_decidir != null;
+                            const hacer = tieneHacer ? (g?.hacer_proceso ?? 0) + (g?.hacer_producto ?? 0) : null;
+                            const autoeva = tieneAutoeva ? (g?.auto_ser ?? 0) + (g?.auto_decidir ?? 0) : null;
+                            return (
+                              <tr key={s.id} style={darkStyles.tableRow}>
+                                <td style={{ padding: "8px 6px", color: "#71717a" }}>{idx + 1}</td>
+                                <td style={{ padding: "8px 6px", fontFamily: "monospace", color: "#e4e4e7", fontSize: "11px" }}>{s.code ?? "-"}</td>
+                                <td style={{ padding: "8px 6px", color: "#e4e4e7" }}>{[s.last_name_pat, s.last_name_mat].filter(Boolean).join(" ") || "-"}</td>
+                                <td style={{ padding: "8px 6px", color: "#e4e4e7" }}>{s.first_names ?? "-"}</td>
+                                <td style={{ padding: "8px 6px", textAlign: "center", color: "#e4e4e7" }}>{g?.ser != null ? Math.round(g.ser) : "-"}</td>
+                                <td style={{ padding: "8px 6px", textAlign: "center", color: "#e4e4e7" }}>{g?.saber != null ? Math.round(g.saber) : "-"}</td>
+                                <td style={{ padding: "8px 6px", textAlign: "center", color: "#e4e4e7" }}>{hacer != null ? Math.round(hacer) : "-"}</td>
+                                <td style={{ padding: "8px 6px", textAlign: "center", color: "#e4e4e7" }}>{g?.decidir != null ? Math.round(g.decidir) : "-"}</td>
+                                <td style={{ padding: "8px 6px", textAlign: "center", color: "#a1a1aa" }}>{autoeva != null ? Math.round(autoeva) : "-"}</td>
+                                <td style={{ padding: "8px 6px", textAlign: "center", color: totalColor, fontWeight: "700" }}>{g?.total != null ? Math.round(g.total) : "-"}</td>
+                                <td style={{ padding: "8px 6px", color: totalColor, fontSize: "11px" }}>{g?.observation ?? "-"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ─── CONFIGURACIÓN ─── */}
         {adminSection === "config" && (
           <div>
@@ -4559,7 +5076,7 @@ export default function AdminDashboard() {
       )}
 
       {/* MODAL EDITAR USUARIO */}
-      {!isReadOnly && showEditModal && editingUser && (
+      {showEditModal && editingUser && (
         <div
           style={{
             position: "fixed",
@@ -4927,7 +5444,7 @@ export default function AdminDashboard() {
       )}
 
       {/* MODAL CREAR ESTUDIANTE/DOCENTE */}
-      {!isReadOnly && showCreateModal && (
+      {showCreateModal && (
         <div
           style={{
             position: "fixed",
@@ -5327,7 +5844,7 @@ export default function AdminDashboard() {
       )}
 
       {/* MODAL RESET PASSWORD */}
-      {!isReadOnly && showResetModal && (
+      {showResetModal && (
         <div
           style={{
             position: "fixed",
@@ -5443,6 +5960,68 @@ export default function AdminDashboard() {
                 {savingAdminAvatar ? "Guardando..." : "Guardar avatar"}
               </button>
               <button onClick={() => setShowAdminAvatarModal(false)} style={{ ...darkStyles.btnSecondary }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMACIÓN ELIMINAR */}
+      {showConfirmDelete && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1001,
+            padding: "20px",
+          }}
+          onClick={() => { if (!deleting) setShowConfirmDelete(false); }}
+        >
+          <div
+            style={{ ...darkStyles.modal, width: "100%", maxWidth: "440px", padding: "32px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ textAlign: "center", marginBottom: "24px" }}>
+              <div style={{
+                width: "56px", height: "56px", borderRadius: "50%",
+                background: "rgba(239,68,68,0.15)", border: "2px solid rgba(239,68,68,0.4)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                margin: "0 auto 16px",
+              }}>
+                <span style={{ fontSize: "28px" }}>🗑️</span>
+              </div>
+              <h3 style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9", margin: "0 0 10px" }}>
+                ¿Eliminar participante?
+              </h3>
+              <p style={{ fontSize: "14px", color: "#94a3b8", lineHeight: "1.6", margin: 0 }}>
+                Estás a punto de eliminar al participante{" "}
+                <span style={{ color: "#f1f5f9", fontWeight: "600" }}>{pendingDeleteCode}</span>.
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => setShowConfirmDelete(false)}
+                disabled={deleting}
+                style={{ ...darkStyles.btnSecondary, flex: 1 }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                disabled={deleting}
+                style={{
+                  ...darkStyles.btnPrimary,
+                  flex: 1,
+                  background: deleting ? "#6b7280" : "#ef4444",
+                  borderColor: "#ef4444",
+                }}
+              >
+                {deleting ? "Eliminando..." : "Sí, eliminar"}
+              </button>
             </div>
           </div>
         </div>

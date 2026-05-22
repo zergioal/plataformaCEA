@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verificar que sea admin o teacher
+    // Verificar que sea admin, teacher o administrativo
     const { data: profile } = await anonClient
       .from("profiles")
       .select("role")
@@ -54,9 +54,9 @@ Deno.serve(async (req) => {
       .single();
 
     const callerRole = profile?.role;
-    if (!["admin", "teacher"].includes(callerRole)) {
+    if (!["admin", "teacher", "administrativo"].includes(callerRole)) {
       return new Response(
-        JSON.stringify({ error: "Only admin or teacher can delete users" }),
+        JSON.stringify({ error: "Only admin, teacher or administrativo can delete users" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -108,10 +108,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Teachers solo pueden eliminar estudiantes
-    if (callerRole === "teacher" && targetProfile?.role !== "student") {
+    // Teachers y administrativos solo pueden eliminar estudiantes
+    if (["teacher", "administrativo"].includes(callerRole) && targetProfile?.role !== "student") {
       return new Response(
-        JSON.stringify({ error: "Teachers can only delete students" }),
+        JSON.stringify({ error: "Teachers and administrativos can only delete students" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
