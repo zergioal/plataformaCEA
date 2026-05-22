@@ -2525,20 +2525,6 @@ export default function AdminDashboard() {
                 <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(192,132,252,0.3)" }}>→</span>
               </button>
 
-              {/* Configuración */}
-              <button
-                onClick={() => setAdminSection("config")}
-                style={{ background: "linear-gradient(135deg, rgba(120,53,15,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(251,146,60,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(251,146,60,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(251,146,60,0.15)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(251,146,60,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
-              >
-                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(251,146,60,0.1)", border: "1px solid rgba(251,146,60,0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                </div>
-                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Configuración</h3>
-                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Información institucional, página pública, anuncios y ajustes generales.</p>
-              </button>
-
               {/* Administrativos — solo admin puede gestionar */}
               {authRole === "admin" && (
                 <button
@@ -2569,6 +2555,20 @@ export default function AdminDashboard() {
                 <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Académico</h3>
                 <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Centralizador de notas y reportes académicos por carrera y nivel.</p>
                 <span style={{ position: "absolute", bottom: "20px", right: "24px", fontSize: "24px", color: "rgba(56,189,248,0.3)" }}>→</span>
+              </button>
+
+              {/* Configuración */}
+              <button
+                onClick={() => setAdminSection("config")}
+                style={{ background: "linear-gradient(135deg, rgba(120,53,15,0.6) 0%, rgba(20,20,30,0.9) 100%)", border: "1px solid rgba(251,146,60,0.3)", borderRadius: "20px", padding: "36px 28px", textAlign: "left", cursor: "pointer", color: "#fff", transition: "all 0.25s", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(251,146,60,0.6)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 16px 40px rgba(251,146,60,0.15)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.border = "1px solid rgba(251,146,60,0.3)"; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              >
+                <div style={{ width: "56px", height: "56px", borderRadius: "14px", background: "rgba(251,146,60,0.1)", border: "1px solid rgba(251,146,60,0.2)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </div>
+                <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Configuración</h3>
+                <p style={{ color: "#94a3b8", fontSize: "14px", lineHeight: 1.5 }}>Información institucional, página pública, anuncios y ajustes generales.</p>
               </button>
             </div>
           </div>
