@@ -1,12 +1,13 @@
 // cea-plataforma/web/src/pages/TeacherAttendancePage.tsx
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
 import logoCea from "../assets/logo-cea.png";
 import type { default as jsPDFType } from "jspdf";
 
-type Level = { id: number; name: string; sort_order: number };
+type Career = { id: number; name: string };
+type Level = { id: number; name: string; sort_order: number; career_id?: number };
 type StudentRow = {
   id: string;
   code: string | null;
@@ -124,12 +125,16 @@ async function addPdfHeader(doc: jsPDFType, pageWidth: number) {
 
 export default function TeacherAttendancePage() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialLevelParam = useRef(searchParams.get("level"));
   const { session, role } = useRole();
   const initDone = useRef(false);
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [careers, setCareers] = useState<Career[]>([]);
+  const [selectedCareer, setSelectedCareer] = useState<number | null>(null);
   const [levels, setLevels] = useState<Level[]>([]);
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -155,48 +160,77 @@ export default function TeacherAttendancePage() {
       : bMat.localeCompare(aMat);
   });
 
-  // Cargar perfil + niveles — solo una vez aunque session cambie de referencia
+  const filteredLevels = useMemo(
+    () => (selectedCareer ? levels.filter((l) => l.career_id === selectedCareer) : levels),
+    [levels, selectedCareer],
+  );
+
+  // Cargar perfil + niveles — solo una vez, espera que role esté disponible
   useEffect(() => {
-    if (!session || initDone.current) return;
+    if (!session || !role || initDone.current) return;
     initDone.current = true;
+
+    const paramLevelId = initialLevelParam.current ? Number(initialLevelParam.current) : null;
 
     async function init() {
       setLoading(true);
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("career_id,shift")
-        .eq("id", session!.user.id)
-        .single();
 
-      if (!prof?.career_id) {
-        setLoading(false);
-        return;
+      if (role === "teacher") {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("career_id,shift")
+          .eq("id", session!.user.id)
+          .single();
+
+        if (!prof?.career_id) { setLoading(false); return; }
+
+        const { data: lvls } = await supabase
+          .from("levels")
+          .select("id,name,sort_order,career_id")
+          .eq("career_id", prof.career_id)
+          .order("sort_order");
+
+        const loadedLevels = (lvls ?? []) as Level[];
+        setLevels(loadedLevels);
+        if (loadedLevels.length > 0) {
+          const preselect = paramLevelId && loadedLevels.find((l) => l.id === paramLevelId);
+          setSelectedLevel(preselect ? preselect.id : loadedLevels[0].id);
+        }
+      } else {
+        // admin / administrativo: cargar todas las carreras y todos los niveles
+        const [{ data: crs }, { data: lvls }] = await Promise.all([
+          supabase.from("careers").select("id,name").order("name"),
+          supabase.from("levels").select("id,name,sort_order,career_id").order("sort_order"),
+        ]);
+
+        const loadedCareers = (crs ?? []) as Career[];
+        const loadedLevels = (lvls ?? []) as Level[];
+        setCareers(loadedCareers);
+        setLevels(loadedLevels);
+
+        if (paramLevelId) {
+          const targetLevel = loadedLevels.find((l) => l.id === paramLevelId);
+          if (targetLevel?.career_id) {
+            setSelectedCareer(targetLevel.career_id);
+            setSelectedLevel(paramLevelId);
+          }
+        } else if (loadedCareers.length > 0) {
+          const firstCareer = loadedCareers[0];
+          setSelectedCareer(firstCareer.id);
+          const firstLevel = loadedLevels.find((l) => l.career_id === firstCareer.id);
+          if (firstLevel) setSelectedLevel(firstLevel.id);
+        }
       }
 
-      const { data: lvls } = await supabase
-        .from("levels")
-        .select("id,name,sort_order")
-        .eq("career_id", prof.career_id)
-        .order("sort_order");
-
-      const loadedLevels = (lvls ?? []) as Level[];
-      setLevels(loadedLevels);
-      if (loadedLevels.length > 0) setSelectedLevel(loadedLevels[0].id);
       setLoading(false);
     }
     init();
-  }, [session]);
+  }, [session, role]);
 
   // Cargar estudiantes del nivel seleccionado
   const loadStudentsForLevel = useCallback(
     async (levelId: number) => {
       if (!session) return;
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("career_id,shift")
-        .eq("id", session.user.id)
-        .single();
-      if (!prof?.career_id) return;
 
       const { data: enrolls } = await supabase
         .from("enrollments")
@@ -209,18 +243,26 @@ export default function TeacherAttendancePage() {
         return;
       }
 
-      const { data: studs } = await supabase
+      let studsQuery = supabase
         .from("profiles")
         .select("id,code,full_name,last_name_pat,last_name_mat,first_names")
         .in("id", studentIds)
-        .eq("career_id", prof.career_id)
-        .eq("shift", prof.shift)
-        .eq("role", "student")
-        .order("code");
+        .eq("role", "student");
 
+      if (role === "teacher") {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("career_id,shift")
+          .eq("id", session.user.id)
+          .single();
+        if (prof?.career_id) studsQuery = studsQuery.eq("career_id", prof.career_id);
+        if (prof?.shift) studsQuery = studsQuery.eq("shift", prof.shift);
+      }
+
+      const { data: studs } = await studsQuery.order("code");
       setStudents((studs ?? []) as StudentRow[]);
     },
-    [session],
+    [session, role],
   );
 
   useEffect(() => {
@@ -819,7 +861,7 @@ export default function TeacherAttendancePage() {
     );
   }
 
-  if (!session || (role !== "teacher" && role !== "admin")) return null;
+  if (!session || (role !== "teacher" && role !== "admin" && role !== "administrativo")) return null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -838,7 +880,7 @@ export default function TeacherAttendancePage() {
           <div className="w-px h-4 bg-slate-700" />
           <button
             className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
-            onClick={() => nav("/teacher")}
+            onClick={() => nav(role === "teacher" ? "/teacher" : "/admin")}
             title="Ir al Dashboard"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -860,6 +902,23 @@ export default function TeacherAttendancePage() {
       <div className="max-w-screen-2xl mx-auto px-4 py-6 space-y-6">
         {/* Controles */}
         <div className="flex flex-wrap gap-3 items-center">
+          {(role === "admin" || role === "administrativo") && (
+            <select
+              className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              value={selectedCareer ?? ""}
+              onChange={(e) => {
+                const careerId = Number(e.target.value);
+                setSelectedCareer(careerId);
+                const first = levels.find((l) => l.career_id === careerId);
+                setSelectedLevel(first?.id ?? null);
+              }}
+            >
+              <option value="" disabled>Carrera</option>
+              {careers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
           <select
             className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             value={selectedLevel ?? ""}
@@ -867,7 +926,7 @@ export default function TeacherAttendancePage() {
               setSelectedLevel(e.target.value ? Number(e.target.value) : null)
             }
           >
-            {levels.map((l) => (
+            {filteredLevels.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
               </option>

@@ -694,3 +694,20 @@
            font-medium px-4 py-3 rounded-lg hover:bg-white/10 transition-all;
   }
 }
+
+/* ─── Admin Dashboard Responsive ─── */
+.adm-main { box-sizing: border-box; }
+
+@media (max-width: 640px) {
+  .adm-main          { padding: 10px !important; }
+  .adm-header        { padding: 10px 12px !important; }
+  .adm-header-inner  { flex-wrap: wrap !important; gap: 6px !important; }
+  .adm-logo          { height: 48px !important; width: 48px !important; border-radius: 8px !important; }
+  .adm-header-subtitle { display: none !important; }
+  .adm-header-title  { font-size: 15px !important; margin: 0 !important; }
+  .adm-section-card  { padding: 12px !important; border-radius: 12px !important; }
+  .adm-controls      { width: 100% !important; }
+  .adm-controls > select,
+  .adm-controls > input  { flex: 1 1 120px !important; min-width: 0 !important; }
+  .adm-back-btn      { font-size: 13px !important; margin-bottom: 12px !important; }
+}

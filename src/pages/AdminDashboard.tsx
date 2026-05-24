@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactElement } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
 import jsPDF from "jspdf";
@@ -161,123 +162,149 @@ function randomPass(len = 10) {
   return out;
 }
 
-// Estilos inline para modo oscuro NEGRO/GRIS
+// Estilos inline para modo oscuro
 const darkStyles = {
   container: {
     minHeight: "100vh",
-    background:
-      "linear-gradient(180deg, #111111 0%, #1a1a1a 50%, #0d0d0d 100%)",
-    color: "#e4e4e7",
+    background: "linear-gradient(160deg, #080d18 0%, #0a1020 60%, #060b14 100%)",
+    color: "#e2e8f0",
   },
   header: {
-    background: "rgba(20, 20, 20, 0.98)",
-    borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(10px)",
+    background: "rgba(8, 13, 26, 0.98)",
+    borderBottom: "1px solid rgba(148, 163, 184, 0.08)",
+    backdropFilter: "blur(12px)",
   },
   card: {
-    background: "rgba(25, 25, 25, 0.95)",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
-    borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4)",
+    background: "rgba(13, 20, 36, 0.9)",
+    border: "1px solid rgba(148, 163, 184, 0.08)",
+    borderRadius: "16px",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
   },
   input: {
-    background: "rgba(30, 30, 30, 0.95)",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
-    color: "#e4e4e7",
-    borderRadius: "8px",
+    background: "rgba(10, 16, 30, 0.9)",
+    border: "1px solid rgba(148, 163, 184, 0.14)",
+    color: "#e2e8f0",
+    borderRadius: "10px",
     padding: "10px 14px",
     width: "100%",
   },
   tableHeader: {
-    background: "rgba(40, 40, 40, 0.9)",
-    color: "#a1a1aa",
-    fontWeight: "600",
+    background: "rgba(6, 10, 20, 0.95)",
+    color: "#475569",
+    fontWeight: "700" as const,
+    fontSize: "11px",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.07em",
+    borderBottom: "1px solid rgba(148,163,184,0.07)",
   },
   tableRow: {
-    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+    borderBottom: "1px solid rgba(148, 163, 184, 0.04)",
+    background: "transparent",
+    transition: "background 0.15s",
+  },
+  tableRowAlt: {
+    borderBottom: "1px solid rgba(148, 163, 184, 0.04)",
+    background: "rgba(148,163,184,0.025)",
+    transition: "background 0.15s",
   },
   btnPrimary: {
-    background: "linear-gradient(135deg, #3b3b3b 0%, #4a4a4a 100%)",
+    background: "linear-gradient(135deg, #4338ca 0%, #6366f1 100%)",
     color: "white",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    borderRadius: "8px",
+    border: "1px solid rgba(99,102,241,0.45)",
+    borderRadius: "10px",
     padding: "10px 20px",
     fontWeight: "600",
     cursor: "pointer",
-    transition: "all 0.3s ease",
+    transition: "all 0.2s ease",
+    boxShadow: "0 2px 12px rgba(99,102,241,0.25)",
   },
   btnSecondary: {
-    background: "rgba(50, 50, 50, 0.8)",
-    color: "#d4d4d8",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: "8px",
+    background: "rgba(20, 30, 50, 0.8)",
+    color: "#94a3b8",
+    border: "1px solid rgba(148,163,184,0.12)",
+    borderRadius: "10px",
     padding: "10px 20px",
     fontWeight: "500",
     cursor: "pointer",
-    transition: "all 0.3s ease",
+    transition: "all 0.2s ease",
   },
   btnDanger: {
-    background: "linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%)",
-    color: "#fecaca",
-    border: "1px solid rgba(239, 68, 68, 0.3)",
-    borderRadius: "8px",
+    background: "rgba(80, 10, 10, 0.6)",
+    color: "#fca5a5",
+    border: "1px solid rgba(239,68,68,0.22)",
+    borderRadius: "10px",
     padding: "8px 16px",
     fontWeight: "500",
     cursor: "pointer",
+    transition: "all 0.2s ease",
   },
   btnSuccess: {
-    background: "linear-gradient(135deg, #14532d 0%, #166534 100%)",
-    color: "#bbf7d0",
-    border: "1px solid rgba(34, 197, 94, 0.3)",
-    borderRadius: "8px",
+    background: "rgba(6, 40, 20, 0.8)",
+    color: "#86efac",
+    border: "1px solid rgba(34,197,94,0.2)",
+    borderRadius: "10px",
     padding: "8px 16px",
     fontWeight: "500",
     cursor: "pointer",
+    transition: "all 0.2s ease",
   },
   modal: {
-    background: "rgba(20, 20, 20, 0.99)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: "16px",
-    boxShadow: "0 25px 50px rgba(0, 0, 0, 0.6)",
+    background: "rgba(8, 13, 26, 0.99)",
+    border: "1px solid rgba(148,163,184,0.1)",
+    borderRadius: "18px",
+    boxShadow: "0 30px 60px rgba(0,0,0,0.7)",
   },
   badge: {
-    background: "rgba(60, 60, 60, 0.8)",
-    color: "#d4d4d8",
-    padding: "4px 12px",
+    background: "rgba(20, 32, 55, 0.9)",
+    color: "#94a3b8",
+    padding: "3px 10px",
     borderRadius: "20px",
     fontSize: "12px",
     fontWeight: "500",
+    border: "1px solid rgba(148,163,184,0.1)",
+  },
+  badgeLevel: {
+    background: "rgba(55, 48, 163, 0.25)",
+    color: "#a5b4fc",
+    padding: "3px 10px",
+    borderRadius: "20px",
+    fontSize: "11px",
+    fontWeight: "600",
+    border: "1px solid rgba(99,102,241,0.25)",
   },
   badgeTarde: {
-    background: "rgba(251, 191, 36, 0.2)",
+    background: "rgba(120, 53, 15, 0.3)",
     color: "#fbbf24",
-    padding: "4px 12px",
+    padding: "3px 10px",
     borderRadius: "20px",
     fontSize: "12px",
-    fontWeight: "500",
+    fontWeight: "600",
+    border: "1px solid rgba(251,191,36,0.2)",
   },
   badgeNoche: {
-    background: "rgba(171, 171, 189, 0.2)",
-    color: "#c0c2c9",
-    padding: "4px 12px",
+    background: "rgba(30, 41, 60, 0.5)",
+    color: "#94a3b8",
+    padding: "3px 10px",
     borderRadius: "20px",
     fontSize: "12px",
-    fontWeight: "500",
+    fontWeight: "600",
+    border: "1px solid rgba(100,116,139,0.18)",
   },
   shiftButtonSelected: {
-    background: "linear-gradient(135deg, #404040 0%, #525252 100%)",
-    border: "2px solid #fff",
+    background: "linear-gradient(135deg, #4338ca 0%, #6366f1 100%)",
+    border: "2px solid rgba(99,102,241,0.6)",
     color: "white",
-    boxShadow: "0 0 20px rgba(255, 255, 255, 0.2)",
+    boxShadow: "0 0 20px rgba(99,102,241,0.3)",
   },
   shiftButtonUnselected: {
-    background: "rgba(30, 30, 30, 0.8)",
-    border: "2px solid rgba(255, 255, 255, 0.1)",
-    color: "#a1a1aa",
+    background: "rgba(12, 20, 36, 0.8)",
+    border: "2px solid rgba(148,163,184,0.1)",
+    color: "#475569",
   },
 };
 
 export default function AdminDashboard() {
+  const nav = useNavigate();
   const { role: authRole, profile: adminProfile } = useRole();
   const isReadOnly = authRole === "administrativo" && adminProfile?.admin_type === "secretaria";
   // Director y secretaria pueden gestionar estudiantes
@@ -355,6 +382,7 @@ export default function AdminDashboard() {
   const [teacherSearch, setTeacherSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [filterCareer, setFilterCareer] = useState<number | "">("");
+  const [filterLevel, setFilterLevel] = useState<number | "">("");
 
   // Ordenamiento
   const [teacherSort, setTeacherSort] = useState<{
@@ -378,6 +406,7 @@ export default function AdminDashboard() {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingDeleteCode, setPendingDeleteCode] = useState<string>("");
+  const [pendingDeleteRole, setPendingDeleteRole] = useState<"teacher" | "student">("student");
   const [deleting, setDeleting] = useState(false);
 
   // Modal de mensajes
@@ -929,16 +958,31 @@ export default function AdminDashboard() {
 
     setSavingCareer(true);
 
-    if (editingCareerId) {
+    // administrativo no tiene permisos RLS directos → usa edge function
+    if (authRole === "administrativo") {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch(`${supabaseUrl}/functions/v1/manage-career`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${token}` },
+        body: JSON.stringify(editingCareerId
+          ? { action: "update", id: editingCareerId, name, student_prefix: prefix }
+          : { action: "create", name, student_prefix: prefix }),
+      });
+      const out = await res.json();
+      setSavingCareer(false);
+      if (!res.ok) {
+        setMsg(out.code === "23505" ? "Error: Ya existe una carrera con ese nombre o prefijo" : "Error: " + (out.error ?? "Desconocido"));
+        return;
+      }
+      setMsg(editingCareerId ? "✅ Carrera actualizada correctamente" : "✅ Carrera creada correctamente");
+    } else if (editingCareerId) {
       const { error } = await supabase
         .from("careers")
         .update({ name, student_prefix: prefix })
         .eq("id", editingCareerId);
       setSavingCareer(false);
-      if (error) {
-        setMsg("Error actualizando carrera: " + error.message);
-        return;
-      }
+      if (error) { setMsg("Error actualizando carrera: " + error.message); return; }
       setMsg("✅ Carrera actualizada correctamente");
     } else {
       const { error } = await supabase
@@ -946,11 +990,7 @@ export default function AdminDashboard() {
         .insert({ name, student_prefix: prefix });
       setSavingCareer(false);
       if (error) {
-        setMsg(
-          error.code === "23505"
-            ? "Error: Ya existe una carrera con ese nombre o prefijo"
-            : "Error creando carrera: " + error.message,
-        );
+        setMsg(error.code === "23505" ? "Error: Ya existe una carrera con ese nombre o prefijo" : "Error creando carrera: " + error.message);
         return;
       }
       setMsg("✅ Carrera creada correctamente");
@@ -970,14 +1010,21 @@ export default function AdminDashboard() {
     }
     if (!confirm(`¿Eliminar la carrera "${career.name}"?`)) return;
 
-    const { error } = await supabase
-      .from("careers")
-      .delete()
-      .eq("id", career.id);
-    if (error) {
-      setMsg("Error eliminando carrera: " + error.message);
-      return;
+    if (authRole === "administrativo") {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch(`${supabaseUrl}/functions/v1/manage-career`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "delete", id: career.id }),
+      });
+      const out = await res.json();
+      if (!res.ok) { setMsg("Error: " + (out.error ?? "Desconocido")); return; }
+    } else {
+      const { error } = await supabase.from("careers").delete().eq("id", career.id);
+      if (error) { setMsg("Error eliminando carrera: " + error.message); return; }
     }
+
     setMsg("✅ Carrera eliminada correctamente");
     await loadCatalogs();
   }
@@ -1394,8 +1441,8 @@ export default function AdminDashboard() {
       for (const [levelName, grades] of gradesByLevel) {
         tableData.push([
           {
-            content: `📚 ${levelName}`,
-            colSpan: 7,
+            content: levelName,
+            colSpan: 8,
             styles: {
               fillColor: [60, 60, 60],
               textColor: 255,
@@ -1405,21 +1452,26 @@ export default function AdminDashboard() {
         ]);
 
         for (const g of grades) {
+          const autoeva =
+            g.auto_ser != null || g.auto_decidir != null
+              ? String(Math.round((g.auto_ser ?? 0) + (g.auto_decidir ?? 0)))
+              : "-";
           tableData.push([
             g.module_name ?? "-",
-            g.ser?.toString() ?? "-",
-            g.saber?.toString() ?? "-",
-            g.hacer_proceso?.toString() ?? "-",
-            g.hacer_producto?.toString() ?? "-",
-            g.decidir?.toString() ?? "-",
-            g.total?.toString() ?? "-",
+            g.ser != null ? String(Math.round(g.ser)) : "-",
+            g.saber != null ? String(Math.round(g.saber)) : "-",
+            g.hacer_proceso != null ? String(Math.round(g.hacer_proceso)) : "-",
+            g.hacer_producto != null ? String(Math.round(g.hacer_producto)) : "-",
+            g.decidir != null ? String(Math.round(g.decidir)) : "-",
+            autoeva,
+            g.total != null ? String(Math.round(g.total)) : "-",
           ]);
         }
       }
 
       autoTable(doc, {
         startY: infoY + 20,
-        head: [["Módulo", "SER", "SABER", "HAC.P", "HAC.PR", "DEC.", "TOTAL"]],
+        head: [["Módulo", "SER", "SABER", "HAC.P", "HAC.PR", "DEC.", "AUTOEVA", "TOTAL"]],
         body: tableData,
         theme: "grid",
         headStyles: {
@@ -1429,13 +1481,14 @@ export default function AdminDashboard() {
           halign: "center",
         },
         columnStyles: {
-          0: { cellWidth: 55 },
-          1: { halign: "center", cellWidth: 18 },
-          2: { halign: "center", cellWidth: 18 },
-          3: { halign: "center", cellWidth: 18 },
-          4: { halign: "center", cellWidth: 18 },
-          5: { halign: "center", cellWidth: 18 },
-          6: { halign: "center", cellWidth: 20, fontStyle: "bold" },
+          0: { cellWidth: 52 },
+          1: { halign: "center", cellWidth: 16 },
+          2: { halign: "center", cellWidth: 16 },
+          3: { halign: "center", cellWidth: 16 },
+          4: { halign: "center", cellWidth: 16 },
+          5: { halign: "center", cellWidth: 16 },
+          6: { halign: "center", cellWidth: 16 },
+          7: { halign: "center", cellWidth: 20, fontStyle: "bold" },
         },
         styles: { fontSize: 8, cellPadding: 2 },
         alternateRowStyles: { fillColor: [245, 245, 245] },
@@ -1507,6 +1560,9 @@ export default function AdminDashboard() {
     if (filterCareer) {
       result = result.filter((st) => st.career_id === filterCareer);
     }
+    if (filterLevel) {
+      result = result.filter((st) => (st as StudentWithLevel).current_level_id === filterLevel);
+    }
     result = result.slice().sort((a, b) => {
       let aVal: string | number = "";
       let bVal: string | number = "";
@@ -1522,7 +1578,7 @@ export default function AdminDashboard() {
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [students, studentSearch, filterCareer, studentSort]);
+  }, [students, studentSearch, filterCareer, filterLevel, studentSort]);
 
   function resetForm() {
     setShowEditModal(false);
@@ -1837,9 +1893,10 @@ export default function AdminDashboard() {
     await loadStudents();
   }
 
-  function deleteUser(userId: string, code: string) {
+  function deleteUser(userId: string, code: string, targetRole: "teacher" | "student" = "student") {
     setPendingDeleteId(userId);
     setPendingDeleteCode(code);
+    setPendingDeleteRole(targetRole);
     setShowConfirmDelete(true);
   }
 
@@ -2269,8 +2326,9 @@ export default function AdminDashboard() {
   return (
     <div style={darkStyles.container}>
       {/* HEADER */}
-      <header style={{ ...darkStyles.header, padding: "16px 24px" }}>
+      <header className="adm-header" style={{ ...darkStyles.header, padding: "16px 24px" }}>
         <div
+          className="adm-header-inner"
           style={{
             maxWidth: "1400px",
             margin: "0 auto",
@@ -2283,6 +2341,7 @@ export default function AdminDashboard() {
             <img
               src={logoCea}
               alt="CEA Logo"
+              className="adm-logo"
               style={{
                 height: "128px",
                 width: "128px",
@@ -2294,6 +2353,7 @@ export default function AdminDashboard() {
             />
             <div>
               <div
+                className="adm-header-subtitle"
                 style={{
                   fontSize: "12px",
                   color: "#71717a",
@@ -2304,6 +2364,7 @@ export default function AdminDashboard() {
                 CEA Madre María Oliva
               </div>
               <h1
+                className="adm-header-title"
                 style={{
                   fontSize: "24px",
                   fontWeight: "700",
@@ -2326,7 +2387,7 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
+      <main className="adm-main" style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
         {/* Message */}
         {msg && (
           <div style={{ padding: "16px 20px", borderRadius: "12px", marginBottom: "20px", background: msg.includes("✅") ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", border: `1px solid ${msg.includes("✅") ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`, color: msg.includes("✅") ? "#86efac" : "#fca5a5" }}>
@@ -2581,19 +2642,15 @@ export default function AdminDashboard() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
               <div>
                 <h2 style={{ fontSize: "22px", fontWeight: "700", color: "#fff", margin: 0 }}>Administrativos</h2>
-                <p style={{ color: "#64748b", fontSize: "13px", marginTop: "4px" }}>Director(a) y Secretaria de la institución (máximo uno de cada tipo).</p>
+                <p style={{ color: "#64748b", fontSize: "13px", marginTop: "4px" }}>Director(a) y Secretaria de la institución.</p>
               </div>
               <div style={{ display: "flex", gap: "10px" }}>
-                {!adminStaff.find(s => s.admin_type === "director") && (
-                  <button onClick={() => openCreateStaff("director")} style={{ ...darkStyles.btnPrimary, background: "linear-gradient(135deg, rgba(20,184,166,0.8) 0%, rgba(15,118,110,0.9) 100%)", border: "1px solid rgba(45,212,191,0.4)", fontSize: "13px", padding: "8px 16px" }}>
-                    + Añadir Director(a)
-                  </button>
-                )}
-                {!adminStaff.find(s => s.admin_type === "secretaria") && (
-                  <button onClick={() => openCreateStaff("secretaria")} style={{ ...darkStyles.btnSecondary, fontSize: "13px", padding: "8px 16px" }}>
-                    + Añadir Secretaria
-                  </button>
-                )}
+                <button onClick={() => openCreateStaff("director")} style={{ ...darkStyles.btnPrimary, background: "linear-gradient(135deg, rgba(20,184,166,0.8) 0%, rgba(15,118,110,0.9) 100%)", border: "1px solid rgba(45,212,191,0.4)", fontSize: "13px", padding: "8px 16px" }}>
+                  + Añadir Director(a)
+                </button>
+                <button onClick={() => openCreateStaff("secretaria")} style={{ ...darkStyles.btnSecondary, fontSize: "13px", padding: "8px 16px" }}>
+                  + Añadir Secretaria
+                </button>
               </div>
             </div>
 
@@ -2859,6 +2916,7 @@ export default function AdminDashboard() {
 
         {/* SECCIÓN CARRERAS */}
         <section
+          className="adm-section-card"
           style={{ ...darkStyles.card, padding: "24px", marginBottom: "24px" }}
         >
           <div
@@ -2871,20 +2929,16 @@ export default function AdminDashboard() {
               gap: "12px",
             }}
           >
-            <h2
-              style={{
-                fontSize: "18px",
-                fontWeight: "600",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
-              Carreras
-            </h2>
-            <div style={{ display: "flex", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+              </div>
+              <div>
+                <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#f1f5f9", margin: 0, lineHeight: 1.2 }}>Carreras</h2>
+                <p style={{ fontSize: "12px", color: "#475569", margin: 0 }}>{filteredCareers.length} {filteredCareers.length === 1 ? "carrera" : "carreras"}</p>
+              </div>
+            </div>
+            <div className="adm-controls" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <input
                 style={{ ...darkStyles.input, width: "250px" }}
                 placeholder="Buscar carrera..."
@@ -3013,71 +3067,34 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filteredCareers.map((c) => {
+                {filteredCareers.map((c, idx) => {
                   const count = studentsPerCareer.get(c.id) ?? 0;
                   return (
-                    <tr key={c.id} style={darkStyles.tableRow}>
-                      <td
-                        style={{
-                          padding: "12px 16px",
-                          fontFamily: "monospace",
-                          color: "#e4e4e7",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {c.student_prefix}
+                    <tr key={c.id} style={idx % 2 === 0 ? darkStyles.tableRow : darkStyles.tableRowAlt}>
+                      <td style={{ padding: "12px 16px" }}>
+                        <span style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.2)", borderRadius: "6px", padding: "3px 9px", fontSize: "12px", fontWeight: "700", fontFamily: "monospace", letterSpacing: "0.04em" }}>
+                          {c.student_prefix}
+                        </span>
                       </td>
-                      <td style={{ padding: "12px 16px", color: "#e4e4e7" }}>
+                      <td style={{ padding: "12px 16px", color: "#e2e8f0", fontWeight: "500" }}>
                         {c.name}
                       </td>
                       <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                        <span style={darkStyles.badge}>{count}</span>
+                        <span style={{ ...darkStyles.badge, background: count > 0 ? "rgba(96,165,250,0.12)" : undefined, color: count > 0 ? "#93c5fd" : undefined, border: count > 0 ? "1px solid rgba(96,165,250,0.18)" : undefined }}>{count} {count === 1 ? "est." : "est."}</span>
                       </td>
-                      <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <button
-                            style={{
-                              ...darkStyles.btnSecondary,
-                              padding: "6px 12px",
-                              fontSize: "12px",
-                            }}
-                            onClick={() => openPdfModal(c)}
-                          >
-                            📄 PDF
+                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
+                          <button title="Ver PDF" style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }} onClick={() => openPdfModal(c)}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                           </button>
-                          {!isReadOnly && (
-                          <>
-                          <button
-                            style={{
-                              ...darkStyles.btnSecondary,
-                              padding: "6px 12px",
-                              fontSize: "12px",
-                            }}
-                            onClick={() => openEditCareer(c)}
-                          >
-                            Editar
+                          {!isReadOnly && (<>
+                          <button title="Editar carrera" style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }} onClick={() => openEditCareer(c)}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           </button>
-                          <button
-                            style={{
-                              ...darkStyles.btnDanger,
-                              padding: "6px 12px",
-                              fontSize: "12px",
-                              opacity: count > 0 ? 0.5 : 1,
-                              cursor: count > 0 ? "not-allowed" : "pointer",
-                            }}
-                            onClick={() => count === 0 && deleteCareer(c)}
-                            disabled={count > 0}
-                          >
-                            Eliminar
+                          <button title={count > 0 ? "Tiene estudiantes" : "Eliminar carrera"} style={{ ...darkStyles.btnDanger, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: count > 0 ? 0.35 : 1, cursor: count > 0 ? "not-allowed" : "pointer" }} onClick={() => count === 0 && deleteCareer(c)} disabled={count > 0}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                           </button>
-                          </>
-                          )}
+                          </>)}
                         </div>
                       </td>
                     </tr>
@@ -3254,6 +3271,7 @@ export default function AdminDashboard() {
 
         {/* SECCIÓN DOCENTES */}
         <section
+          className="adm-section-card"
           style={{ ...darkStyles.card, padding: "24px", marginBottom: "24px" }}
         >
           <div
@@ -3266,11 +3284,16 @@ export default function AdminDashboard() {
               gap: "12px",
             }}
           >
-            <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#fff" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Docentes
-            </h2>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.22)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <div>
+                <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#f1f5f9", margin: 0, lineHeight: 1.2 }}>Docentes</h2>
+                <p style={{ fontSize: "12px", color: "#475569", margin: 0 }}>{filteredTeachers.length} {filteredTeachers.length === 1 ? "docente" : "docentes"}</p>
+              </div>
+            </div>
+            <div className="adm-controls" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <input
                 style={{ ...darkStyles.input, width: "220px" }}
                 placeholder="Buscar docente..."
@@ -3344,19 +3367,20 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTeachers.map((t) => (
-                  <tr key={t.id} style={darkStyles.tableRow}>
-                    <td
-                      style={{
-                        padding: "12px 16px",
-                        fontFamily: "monospace",
-                        color: "#e4e4e7",
-                      }}
-                    >
-                      {t.code ?? "-"}
+                {filteredTeachers.map((t, idx) => (
+                  <tr key={t.id} style={idx % 2 === 0 ? darkStyles.tableRow : darkStyles.tableRowAlt}>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: "12px", color: "#64748b", background: "rgba(20,30,50,0.7)", border: "1px solid rgba(148,163,184,0.08)", borderRadius: "6px", padding: "2px 8px" }}>
+                        {t.code ?? "-"}
+                      </span>
                     </td>
-                    <td style={{ padding: "12px 16px", color: "#e4e4e7" }}>
-                      {t.full_name ?? "-"}
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, rgba(74,222,128,0.2) 0%, rgba(34,197,94,0.12) 100%)", border: "1px solid rgba(74,222,128,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "12px", fontWeight: "700", color: "#4ade80" }}>
+                          {(t.first_names ?? t.full_name ?? "?").charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ color: "#e2e8f0", fontWeight: "500", fontSize: "14px" }}>{t.full_name ?? "-"}</span>
+                      </div>
                     </td>
                     <td
                       style={{
@@ -3387,47 +3411,29 @@ export default function AdminDashboard() {
                     >
                       {t.phone ?? "-"}
                     </td>
-                    <td style={{ padding: "12px 16px" }}>
+                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
                       {!isReadOnly && (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "6px",
-                            justifyContent: "center",
-                            flexWrap: "wrap",
-                          }}
-                        >
+                        <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
                           <button
-                            style={{
-                              ...darkStyles.btnSecondary,
-                              padding: "5px 10px",
-                              fontSize: "11px",
-                            }}
+                            title="Editar docente"
+                            style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                             onClick={() => openEdit(t)}
                           >
-                            Editar
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           </button>
                           <button
-                            style={{
-                              ...darkStyles.btnSecondary,
-                              padding: "5px 10px",
-                              fontSize: "11px",
-                            }}
-                            onClick={() =>
-                              openResetPassword(t.id, t.code ?? t.id)
-                            }
+                            title="Cambiar contraseña"
+                            style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                            onClick={() => openResetPassword(t.id, t.code ?? t.id)}
                           >
-                            Contraseña
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                           </button>
                           <button
-                            style={{
-                              ...darkStyles.btnDanger,
-                              padding: "5px 10px",
-                              fontSize: "11px",
-                            }}
-                            onClick={() => deleteUser(t.id, t.code ?? t.id)}
+                            title="Eliminar docente"
+                            style={{ ...darkStyles.btnDanger, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                            onClick={() => deleteUser(t.id, t.code ?? t.id, "teacher")}
                           >
-                            Eliminar
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                           </button>
                         </div>
                       )}
@@ -3604,7 +3610,7 @@ export default function AdminDashboard() {
         )}
 
         {/* SECCIÓN ESTUDIANTES */}
-        <section style={{ ...darkStyles.card, padding: "24px" }}>
+        <section className="adm-section-card" style={{ ...darkStyles.card, padding: "24px" }}>
           <div
             style={{
               display: "flex",
@@ -3615,17 +3621,23 @@ export default function AdminDashboard() {
               gap: "12px",
             }}
           >
-            <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#fff" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Estudiantes
-            </h2>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(192,132,252,0.1)", border: "1px solid rgba(192,132,252,0.22)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div>
+                <h2 style={{ fontSize: "17px", fontWeight: "700", color: "#f1f5f9", margin: 0, lineHeight: 1.2 }}>Estudiantes</h2>
+                <p style={{ fontSize: "12px", color: "#475569", margin: 0 }}>{filteredStudents.length} {filteredStudents.length === 1 ? "participante" : "participantes"}</p>
+              </div>
+            </div>
+            <div className="adm-controls" style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               <select
                 style={{ ...darkStyles.input, width: "180px" }}
                 value={filterCareer}
-                onChange={(e) =>
-                  setFilterCareer(e.target.value ? Number(e.target.value) : "")
-                }
+                onChange={(e) => {
+                  setFilterCareer(e.target.value ? Number(e.target.value) : "");
+                  setFilterLevel("");
+                }}
               >
                 <option value="">Todas las carreras</option>
                 {careers.map((c) => (
@@ -3633,6 +3645,21 @@ export default function AdminDashboard() {
                     {c.name}
                   </option>
                 ))}
+              </select>
+              <select
+                style={{ ...darkStyles.input, width: "160px" }}
+                value={filterLevel}
+                onChange={(e) => setFilterLevel(e.target.value ? Number(e.target.value) : "")}
+                disabled={!filterCareer}
+              >
+                <option value="">Todos los niveles</option>
+                {levels
+                  .filter((l) => !filterCareer || l.career_id === filterCareer)
+                  .map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
               </select>
               <input
                 style={{ ...darkStyles.input, width: "220px" }}
@@ -3642,6 +3669,12 @@ export default function AdminDashboard() {
               />
               <button style={darkStyles.btnSecondary} onClick={loadStudents}>
                 {loadingStudents ? "..." : "🔄"}
+              </button>
+              <button
+                style={{ ...darkStyles.btnSecondary, display: "flex", alignItems: "center", gap: "6px" }}
+                onClick={() => nav(filterLevel ? `/teacher/attendance?level=${filterLevel}` : "/teacher/attendance")}
+              >
+                📋 Asistencia
               </button>
               {canManageStudents && (
                 <button
@@ -3814,72 +3847,43 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((s) => (
-                  <tr key={s.id} style={darkStyles.tableRow}>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        fontFamily: "monospace",
-                        color: "#e4e4e7",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {s.code ?? "-"}
+                {filteredStudents.map((s, idx) => (
+                  <tr key={s.id} style={idx % 2 === 0 ? darkStyles.tableRow : darkStyles.tableRowAlt}>
+                    <td style={{ padding: "10px 8px" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: "11px", color: "#64748b", background: "rgba(20,30,50,0.7)", border: "1px solid rgba(148,163,184,0.08)", borderRadius: "5px", padding: "2px 7px" }}>
+                        {s.code ?? "-"}
+                      </span>
                     </td>
                     <td
                       style={{
                         padding: "10px 8px",
-                        color: "#e4e4e7",
+                        color: "#94a3b8",
                         fontSize: "12px",
                       }}
                     >
                       {s.rudeal_number ?? "-"}
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        color: "#e4e4e7",
-                        fontSize: "12px",
-                      }}
-                    >
+                    <td style={{ padding: "10px 8px", color: "#e2e8f0", fontSize: "12px", fontWeight: "500" }}>
                       {s.last_name_pat ?? "-"}
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        color: "#e4e4e7",
-                        fontSize: "12px",
-                      }}
-                    >
+                    <td style={{ padding: "10px 8px", color: "#e2e8f0", fontSize: "12px" }}>
                       {s.last_name_mat ?? "-"}
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        color: "#e4e4e7",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {s.first_names ?? "-"}
+                    <td style={{ padding: "10px 8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "linear-gradient(135deg, rgba(192,132,252,0.2) 0%, rgba(167,139,250,0.12) 100%)", border: "1px solid rgba(192,132,252,0.18)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "10px", fontWeight: "700", color: "#c084fc" }}>
+                          {(s.first_names ?? s.full_name ?? "?").charAt(0).toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: "12px", color: "#cbd5e1" }}>{s.first_names ?? "-"}</span>
+                      </div>
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        color: "#e4e4e7",
-                        fontSize: "12px",
-                      }}
-                    >
+                    <td style={{ padding: "10px 8px", color: "#94a3b8", fontSize: "12px" }}>
                       {s.carnet_number ?? "-"}
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 8px",
-                        textAlign: "center",
-                        color: "#e4e4e7",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {s.gender === "F" ? "F" : s.gender === "M" ? "M" : "-"}
+                    <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                      <span style={{ display: "inline-block", width: "22px", height: "22px", borderRadius: "50%", lineHeight: "22px", textAlign: "center", fontSize: "11px", fontWeight: "700", background: s.gender === "F" ? "rgba(236,72,153,0.15)" : s.gender === "M" ? "rgba(59,130,246,0.15)" : "rgba(100,116,139,0.1)", color: s.gender === "F" ? "#f472b6" : s.gender === "M" ? "#60a5fa" : "#64748b", border: `1px solid ${s.gender === "F" ? "rgba(244,114,182,0.25)" : s.gender === "M" ? "rgba(96,165,250,0.25)" : "rgba(100,116,139,0.15)"}` }}>
+                        {s.gender ?? "—"}
+                      </span>
                     </td>
                     <td
                       style={{
@@ -3906,8 +3910,8 @@ export default function AdminDashboard() {
                       {careers.find((c) => c.id === s.career_id)?.name ?? "-"}
                     </td>
                     <td style={{ padding: "10px 8px", textAlign: "center" }}>
-                      <span style={{ ...darkStyles.badge, fontSize: "11px" }}>
-                        {s.current_level_name ?? "Sin nivel"}
+                      <span style={darkStyles.badgeLevel}>
+                        {s.current_level_name ?? "—"}
                       </span>
                     </td>
                     <td style={{ padding: "10px 8px", textAlign: "center" }}>
@@ -3932,58 +3936,44 @@ export default function AdminDashboard() {
                     >
                       {s.phone ?? "-"}
                     </td>
-                    <td style={{ padding: "10px 8px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "6px",
-                          justifyContent: "center",
-                          flexWrap: "wrap",
-                        }}
-                      >
+                    <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
                         <button
-                          style={{
-                            ...darkStyles.btnSuccess,
-                            padding: "5px 10px",
-                            fontSize: "11px",
-                          }}
+                          title="Ver notas"
+                          style={{ ...darkStyles.btnSuccess, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                           onClick={() => openGradesModal(s)}
                         >
-                          Notas
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        </button>
+                        <button
+                          title="Ver asistencia"
+                          style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                          onClick={() => nav((s as StudentWithLevel).current_level_id ? `/teacher/attendance?level=${(s as StudentWithLevel).current_level_id}` : "/teacher/attendance")}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>
                         </button>
                         {canManageStudents && (
                           <>
                             <button
-                              style={{
-                                ...darkStyles.btnSecondary,
-                                padding: "5px 10px",
-                                fontSize: "11px",
-                              }}
+                              title="Editar estudiante"
+                              style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                               onClick={() => openEdit(s)}
                             >
-                              Editar
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
                             <button
-                              style={{
-                                ...darkStyles.btnSecondary,
-                                padding: "5px 10px",
-                                fontSize: "11px",
-                              }}
-                              onClick={() =>
-                                openResetPassword(s.id, s.code ?? s.id)
-                              }
+                              title="Cambiar contraseña"
+                              style={{ ...darkStyles.btnSecondary, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                              onClick={() => openResetPassword(s.id, s.code ?? s.id)}
                             >
-                              Contraseña
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             </button>
                             <button
-                              style={{
-                                ...darkStyles.btnDanger,
-                                padding: "5px 10px",
-                                fontSize: "11px",
-                              }}
+                              title="Eliminar estudiante"
+                              style={{ ...darkStyles.btnDanger, padding: "5px", width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                               onClick={() => deleteUser(s.id, s.code ?? s.id)}
                             >
-                              Eliminar
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                             </button>
                           </>
                         )}
@@ -4935,6 +4925,11 @@ export default function AdminDashboard() {
                         <th
                           style={{ padding: "10px 12px", textAlign: "center" }}
                         >
+                          AUTOEVA
+                        </th>
+                        <th
+                          style={{ padding: "10px 12px", textAlign: "center" }}
+                        >
                           TOTAL
                         </th>
                       </tr>
@@ -4957,7 +4952,7 @@ export default function AdminDashboard() {
                           rows.push(
                             <tr key={`level-${levelName}`}>
                               <td
-                                colSpan={7}
+                                colSpan={8}
                                 style={{
                                   padding: "12px",
                                   background: "rgba(60, 60, 60, 0.8)",
@@ -4965,11 +4960,15 @@ export default function AdminDashboard() {
                                   fontWeight: "600",
                                 }}
                               >
-                                📚 {levelName}
+                                {levelName}
                               </td>
                             </tr>,
                           );
                           for (const g of grades) {
+                            const autoeva =
+                              g.auto_ser != null || g.auto_decidir != null
+                                ? Math.round((g.auto_ser ?? 0) + (g.auto_decidir ?? 0))
+                                : null;
                             rows.push(
                               <tr
                                 key={`${g.level_id}-${g.module_id}`}
@@ -4990,7 +4989,7 @@ export default function AdminDashboard() {
                                     color: "#a1a1aa",
                                   }}
                                 >
-                                  {g.ser ?? "-"}
+                                  {g.ser != null ? Math.round(g.ser) : "-"}
                                 </td>
                                 <td
                                   style={{
@@ -4999,7 +4998,7 @@ export default function AdminDashboard() {
                                     color: "#a1a1aa",
                                   }}
                                 >
-                                  {g.saber ?? "-"}
+                                  {g.saber != null ? Math.round(g.saber) : "-"}
                                 </td>
                                 <td
                                   style={{
@@ -5008,7 +5007,7 @@ export default function AdminDashboard() {
                                     color: "#a1a1aa",
                                   }}
                                 >
-                                  {g.hacer_proceso ?? "-"}
+                                  {g.hacer_proceso != null ? Math.round(g.hacer_proceso) : "-"}
                                 </td>
                                 <td
                                   style={{
@@ -5017,7 +5016,7 @@ export default function AdminDashboard() {
                                     color: "#a1a1aa",
                                   }}
                                 >
-                                  {g.hacer_producto ?? "-"}
+                                  {g.hacer_producto != null ? Math.round(g.hacer_producto) : "-"}
                                 </td>
                                 <td
                                   style={{
@@ -5026,7 +5025,16 @@ export default function AdminDashboard() {
                                     color: "#a1a1aa",
                                   }}
                                 >
-                                  {g.decidir ?? "-"}
+                                  {g.decidir != null ? Math.round(g.decidir) : "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: "10px 12px",
+                                    textAlign: "center",
+                                    color: "#a1a1aa",
+                                  }}
+                                >
+                                  {autoeva ?? "-"}
                                 </td>
                                 <td
                                   style={{
@@ -5036,7 +5044,7 @@ export default function AdminDashboard() {
                                     color: "#fff",
                                   }}
                                 >
-                                  {g.total ?? "-"}
+                                  {g.total != null ? Math.round(g.total) : "-"}
                                 </td>
                               </tr>,
                             );
@@ -5994,10 +6002,10 @@ export default function AdminDashboard() {
                 <span style={{ fontSize: "28px" }}>🗑️</span>
               </div>
               <h3 style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9", margin: "0 0 10px" }}>
-                ¿Eliminar participante?
+                {pendingDeleteRole === "teacher" ? "¿Eliminar docente?" : "¿Eliminar participante?"}
               </h3>
               <p style={{ fontSize: "14px", color: "#94a3b8", lineHeight: "1.6", margin: 0 }}>
-                Estás a punto de eliminar al participante{" "}
+                Estás a punto de eliminar {pendingDeleteRole === "teacher" ? "al docente" : "al participante"}{" "}
                 <span style={{ color: "#f1f5f9", fontWeight: "600" }}>{pendingDeleteCode}</span>.
                 Esta acción no se puede deshacer.
               </p>

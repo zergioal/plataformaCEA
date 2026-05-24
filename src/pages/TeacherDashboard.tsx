@@ -318,6 +318,9 @@ export default function TeacherDashboard() {
     Map<string, { total: number; faltas: number }>
   >(new Map());
 
+  // Anuncio global
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+
   // Estado para sistema de semestres
   function computeCurrentSemester(): string {
     const now = new Date();
@@ -467,6 +470,21 @@ export default function TeacherDashboard() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, isTeacherish, initialLoadDone, dashView]);
+
+  // Anuncio global (se carga una vez al montar)
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("key,value")
+      .in("key", ["announcement_text", "announcement_active"])
+      .then(({ data }) => {
+        if (!data) return;
+        const map = Object.fromEntries(data.map((r: { key: string; value: string | null }) => [r.key, r.value ?? ""]));
+        if (map["announcement_active"] === "true" && map["announcement_text"]) {
+          setAnnouncement(map["announcement_text"]);
+        }
+      });
+  }, []);
 
   // Cargar perfil inmediatamente al entrar (independiente de dashView)
   useEffect(() => {
@@ -1690,6 +1708,14 @@ export default function TeacherDashboard() {
             }`}
           >
             {msg}
+          </div>
+        )}
+
+        {/* Anuncio global */}
+        {announcement && (
+          <div className="w-full max-w-5xl mx-auto bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+            <p className="text-amber-200 text-sm leading-relaxed">{announcement}</p>
           </div>
         )}
 

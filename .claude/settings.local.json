@@ -10,7 +10,10 @@
       "Bash(Get-ChildItem -Path \"d:\\\\PROYECTOS WEB\\\\cea-plataforma\\\\web\" -Directory)",
       "Bash(Select-Object Name)",
       "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx\\)$\")",
-      "Bash(xargs grep -l \"attendance\\\\|asistencia\")"
+      "Bash(xargs grep -l \"attendance\\\\|asistencia\")",
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"from PIL import Image; print\\('Pillow OK'\\)\")"
     ]
   }
 }

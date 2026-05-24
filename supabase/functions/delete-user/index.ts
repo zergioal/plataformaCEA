@@ -108,10 +108,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Teachers y administrativos solo pueden eliminar estudiantes
-    if (["teacher", "administrativo"].includes(callerRole) && targetProfile?.role !== "student") {
+    // Teachers solo pueden eliminar estudiantes
+    if (callerRole === "teacher" && targetProfile?.role !== "student") {
       return new Response(
-        JSON.stringify({ error: "Teachers and administrativos can only delete students" }),
+        JSON.stringify({ error: "Los docentes solo pueden eliminar estudiantes" }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Administrativos no pueden eliminar otros administrativos
+    if (callerRole === "administrativo" && targetProfile?.role === "administrativo") {
+      return new Response(
+        JSON.stringify({ error: "No se puede eliminar otro administrativo" }),
         {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
