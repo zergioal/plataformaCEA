@@ -48,37 +48,14 @@ const DIM_CONFIG: Record<
     min: number;
     color: string;
     moduleField: string;
+    presets: (number | null)[];
   }
 > = {
-  ser: { label: "SER", max: 10, min: 2, color: "#38bdf8", moduleField: "ser" },
-  saber: {
-    label: "SABER",
-    max: 30,
-    min: 6,
-    color: "#5eead4",
-    moduleField: "saber",
-  },
-  hacer_proceso: {
-    label: "HACER Proceso",
-    max: 20,
-    min: 4,
-    color: "#818cf8",
-    moduleField: "hacer_proceso",
-  },
-  hacer_producto: {
-    label: "HACER Producto",
-    max: 20,
-    min: 4,
-    color: "#c084fc",
-    moduleField: "hacer_producto",
-  },
-  decidir: {
-    label: "DECIDIR",
-    max: 10,
-    min: 2,
-    color: "#fb923c",
-    moduleField: "decidir",
-  },
+  ser:           { label: "SER",           max: 10, min: 2, color: "#38bdf8", moduleField: "ser",           presets: [10, 8, 6, 4, 2, null] },
+  saber:         { label: "SABER",         max: 30, min: 6, color: "#5eead4", moduleField: "saber",         presets: [30, 25, 20, 15, 10, null] },
+  hacer_proceso: { label: "HACER Proceso", max: 20, min: 4, color: "#818cf8", moduleField: "hacer_proceso", presets: [20, 15, 10, 5, 1, null] },
+  hacer_producto:{ label: "HACER Producto",max: 20, min: 4, color: "#c084fc", moduleField: "hacer_producto",presets: [20, 15, 10, 5, 1, null] },
+  decidir:       { label: "DECIDIR",       max: 10, min: 2, color: "#fb923c", moduleField: "decidir",       presets: [10, 8, 6, 4, 2, null] },
 };
 
 // Indicadores fijos para SER y DECIDIR
@@ -109,21 +86,23 @@ function cellKey(studentId: string, sectionId: number) {
   return `${studentId}_${sectionId}`;
 }
 
-// Ciclo de valores rápidos para HACER PROCESO
-const HP_PRESETS: (number | null)[] = [20, 15, 10, 5, null];
-
-function nextHpValue(current: number | null | undefined): number | null {
-  if (current === null || current === undefined) return 20;
-  const idx = HP_PRESETS.indexOf(current);
-  return idx === -1 ? 20 : HP_PRESETS[(idx + 1) % HP_PRESETS.length];
+// Ciclo de valores para modo fácil — genérico para cualquier dimensión
+function nextPresetValue(current: number | null | undefined, presets: (number | null)[]): number | null {
+  if (current === null || current === undefined) return presets[0] as number | null;
+  const idx = presets.indexOf(current);
+  return idx === -1 ? (presets[0] as number | null) : presets[(idx + 1) % presets.length];
 }
 
-function hpColor(val: number | null | undefined): string {
-  if (val === 20) return "#4ade80"; // verde
-  if (val === 15) return "#38bdf8"; // azul
-  if (val === 10) return "#fbbf24"; // amarillo
-  if (val === 5) return "#fb923c"; // naranja
-  return "#475569"; // gris (vacío)
+// Color por porcentaje del máximo — el preset más bajo siempre es rojo
+function presetColor(val: number | null | undefined, max: number, presets: (number | null)[]): string {
+  if (val === null || val === undefined) return "#475569";
+  const lowest = Math.min(...presets.filter((p): p is number => p !== null));
+  if (val <= lowest) return "#f87171";  // rojo
+  const pct = val / max;
+  if (pct >= 0.8) return "#4ade80";    // verde
+  if (pct >= 0.6) return "#38bdf8";    // azul
+  if (pct >= 0.4) return "#fbbf24";    // amarillo
+  return "#fb923c";                     // naranja
 }
 
 function calcAvg(scores: (number | null)[], max: number, min: number): number {
@@ -181,6 +160,7 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
   const [selectedLessonId, setSelectedLessonId] = useState<number | null>(null);
   const [savingIndicator, setSavingIndicator] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
+  const [manualMode, setManualMode] = useState(false);
 
   const loadKey = `${mid}-${dim}`;
   useEffect(() => {
@@ -413,6 +393,27 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       initMap.set(s.id, mg ? (mg[field] as number | null) : null);
     }
     initialMainValuesRef.current = initMap;
+
+    // SER y DECIDIR: su promedio viene de asistencia (automática, siempre disponible).
+    // Se auto-sincroniza al registro principal solo si ese campo no fue editado manualmente allí.
+    if (dim === "ser" || dim === "decidir") {
+      for (const s of studentList) {
+        const initVal = initMap.get(s.id) ?? null;
+        const calcAvgVal = avgs.get(s.id) ?? cfg.min;
+        const manuallyEdited = initVal !== null && initVal !== calcAvgVal;
+        if (!manuallyEdited) {
+          supabase
+            .from("module_grades")
+            .upsert(
+              { student_id: s.id, module_id: mid, [cfg.moduleField]: calcAvgVal },
+              { onConflict: "student_id,module_id" },
+            )
+            .then(({ error }) => {
+              if (!error) initialMainValuesRef.current.set(s.id, calcAvgVal);
+            });
+        }
+      }
+    }
 
     setLoadingData(false);
   }
@@ -976,7 +977,20 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
             {moduleTitle}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+          {/* Switch Fácil / Manual */}
+          <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(15,23,42,0.8)", border: "1px solid rgba(51,65,85,0.6)", borderRadius: 8, padding: "5px 10px" }}>
+            <span style={{ fontSize: 12, color: manualMode ? "#64748b" : "#e2e8f0", fontWeight: manualMode ? 400 : 600, transition: "color 0.2s" }}>Fácil</span>
+            <button
+              onClick={() => setManualMode((m) => !m)}
+              title={manualMode ? "Cambiar a modo fácil" : "Cambiar a entrada manual"}
+              style={{ width: 36, height: 20, borderRadius: 10, background: manualMode ? "#6366f1" : "#475569", border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}
+            >
+              <div style={{ position: "absolute", top: 2, left: manualMode ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
+            </button>
+            <span style={{ fontSize: 12, color: manualMode ? "#e2e8f0" : "#64748b", fontWeight: manualMode ? 600 : 400, transition: "color 0.2s" }}>Manual</span>
+          </div>
+
           <button
             onClick={exportPdf}
             disabled={pdfLoading !== null}
@@ -1190,16 +1204,16 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
                           );
                         }
 
-                        // HACER PROCESO: entrada rápida con clic cíclico
-                        if (dim === "hacer_proceso") {
-                          const color = hpColor(val);
+                        // Modo fácil (clic cíclico) — aplica a TODAS las dimensiones cuando !manualMode
+                        if (!manualMode) {
+                          const color = presetColor(val, cfg.max, cfg.presets);
                           return (
                             <td key={c.section_id} style={tdStyle}>
                               <button
                                 disabled={isSaving}
                                 title="Clic para cambiar nota"
                                 onClick={() =>
-                                  saveCell(s.id, c.section_id, nextHpValue(val))
+                                  saveCell(s.id, c.section_id, nextPresetValue(val, cfg.presets))
                                 }
                                 style={
                                   {
@@ -1211,9 +1225,7 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
                                     color,
                                     fontWeight: 700,
                                     fontSize: 14,
-                                    cursor: isSaving
-                                      ? "not-allowed"
-                                      : "pointer",
+                                    cursor: isSaving ? "not-allowed" : "pointer",
                                     display: "inline-flex",
                                     alignItems: "center",
                                     justifyContent: "center",
@@ -1228,6 +1240,7 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
                           );
                         }
 
+                        // Modo manual (input de texto)
                         return (
                           <td key={c.section_id} style={tdStyle}>
                             <input
