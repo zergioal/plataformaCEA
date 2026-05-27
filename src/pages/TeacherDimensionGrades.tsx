@@ -135,21 +135,27 @@ function calcAvg(scores: (number | null)[], max: number, min: number): number {
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export default function TeacherDimensionGrades() {
+interface InlineProps {
+  inlineModuleId?: number;
+  inlineDimension?: string;
+  onClose?: () => void;
+}
+
+export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension, onClose }: InlineProps = {}) {
   const nav = useNavigate();
-  const { moduleId, dimension } = useParams<{
+  const { moduleId: paramModuleId, dimension: paramDimension } = useParams<{
     moduleId: string;
     dimension: string;
   }>();
   const { loading, session, role } = useRole();
 
-  const mid = parseInt(moduleId ?? "", 10);
-  const dim = dimension as DimKey;
+  const mid = inlineModuleId ?? parseInt(paramModuleId ?? "", 10);
+  const dim = (inlineDimension ?? paramDimension) as DimKey;
   const cfg = DIM_CONFIG[dim];
 
   const isTeacherish = role === "teacher" || role === "admin";
   const invalid = isNaN(mid) || !cfg;
-  const loadedRef = useRef(false);
+  const loadedKeyRef = useRef<string | null>(null);
 
   const [moduleTitle, setModuleTitle] = useState("");
   const [levelName, setLevelName] = useState("");
@@ -173,13 +179,14 @@ export default function TeacherDimensionGrades() {
   const [savingIndicator, setSavingIndicator] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
 
+  const loadKey = `${mid}-${dim}`;
   useEffect(() => {
     if (!session || !isTeacherish || invalid) return;
-    if (loadedRef.current) return;
-    loadedRef.current = true;
+    if (loadedKeyRef.current === loadKey) return;
+    loadedKeyRef.current = loadKey;
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, isTeacherish, mid, dim]);
+  }, [session, isTeacherish, loadKey]);
 
   async function loadAll() {
     setLoadingData(true);
@@ -834,15 +841,17 @@ export default function TeacherDimensionGrades() {
 
   // ─── Guards ──────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="p-6 text-slate-300">Cargando...</div>;
-  if (!session || !isTeacherish) return <Navigate to="/login" replace />;
-  if (invalid) return <Navigate to="/teacher" replace />;
+  if (!onClose) {
+    if (loading) return <div className="p-6 text-slate-300">Cargando...</div>;
+    if (!session || !isTeacherish) return <Navigate to="/login" replace />;
+    if (invalid) return <Navigate to="/teacher" replace />;
+  }
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div
-      style={{ minHeight: "100vh", background: "#020617", color: "#e4e4e7" }}
+      style={onClose ? { color: "#e4e4e7" } : { minHeight: "100vh", background: "#020617", color: "#e4e4e7" }}
     >
       {/* Header — mismo estilo que TeacherModuleGrades */}
       <div
@@ -867,7 +876,7 @@ export default function TeacherDimensionGrades() {
             }}
           >
             <button
-              onClick={() => nav(`/teacher/module/${mid}/grades`)}
+              onClick={() => onClose ? onClose() : nav(`/teacher/module/${mid}/grades`)}
               style={{
                 background: "none",
                 border: "none",

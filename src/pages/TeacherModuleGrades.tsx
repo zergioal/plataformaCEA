@@ -8,12 +8,16 @@ import { useRole } from "../lib/useRole";
 import logoCea from "../assets/logo-cea.png";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import TeacherDimensionGrades from "./TeacherDimensionGrades";
+
+type DimKey = "ser" | "saber" | "hacer_proceso" | "hacer_producto" | "decidir";
 
 type ModuleRow = {
   id: number;
   level_id: number;
   title: string;
   sort_order: number;
+  grades_released: boolean;
 };
 
 type LevelRow = {
@@ -101,8 +105,19 @@ export default function TeacherModuleGrades() {
   const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set());
   const [globalSaving, setGlobalSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [gradesReleased, setGradesReleased] = useState(false);
+  const [releasingSaving, setReleasingSaving] = useState(false);
   const [shakingInputs, setShakingInputs] = useState<Set<string>>(new Set());
   const [autoEditingRows, setAutoEditingRows] = useState<Set<string>>(new Set());
+
+  // Centralizador
+  type CentralModule = { id: number; title: string; sort_order: number };
+  type CentralRow = { student: StudentProfile; totals: (number | null)[]; avg: number | null };
+  const [showCentralizador, setShowCentralizador] = useState(false);
+  const [activeDim, setActiveDim] = useState<DimKey | null>(null);
+  const [centralizadorLoading, setCentralizadorLoading] = useState(false);
+  const [centralizadorModules, setCentralizadorModules] = useState<CentralModule[]>([]);
+  const [centralizadorRows, setCentralizadorRows] = useState<CentralRow[]>([]);
   const autoSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Estados para el reporte PDF
@@ -203,7 +218,7 @@ export default function TeacherModuleGrades() {
 
       const { data: module, error: moduleError } = await supabase
         .from("modules")
-        .select("id,level_id,title,sort_order")
+        .select("id,level_id,title,sort_order,grades_released")
         .eq("id", mid)
         .single();
 
@@ -214,6 +229,7 @@ export default function TeacherModuleGrades() {
       }
 
       setModuleRow(module as ModuleRow);
+      setGradesReleased(!!(module as ModuleRow).grades_released);
 
       const { data: level, error: levelError } = await supabase
         .from("levels")
@@ -427,7 +443,7 @@ export default function TeacherModuleGrades() {
     const autoSer    = applyDimMin(grade.auto_ser,       DIM_MIN.auto_ser);
     const autoDecid  = applyDimMin(grade.auto_decidir,   DIM_MIN.auto_decidir);
 
-    return Math.round(ser + saber + hacerProc + hacerProd + decidir + autoSer + autoDecid);
+    return Math.max(Math.round(ser + saber + hacerProc + hacerProd + decidir + autoSer + autoDecid), 20);
   }
 
   function triggerShake(studentId: string, field: string) {
@@ -1197,6 +1213,233 @@ export default function TeacherModuleGrades() {
     } finally { setExtraPdfLoading(null); }
   }
 
+  async function toggleReleaseGrades() {
+    setReleasingSaving(true);
+    const newValue = !gradesReleased;
+    const { error } = await supabase
+      .from("modules")
+      .update({ grades_released: newValue })
+      .eq("id", mid);
+    setReleasingSaving(false);
+    if (!error) {
+      setGradesReleased(newValue);
+      setMsg(newValue ? "✅ Notas enviadas a los estudiantes" : "🔒 Notas ocultadas a los estudiantes");
+      setTimeout(() => setMsg(null), 3000);
+    } else {
+      setMsg("❌ Error al actualizar. Intenta de nuevo.");
+    }
+  }
+
+  async function generateCentralizadorPDF() {
+    if (centralizadorRows.length === 0) return;
+    const doc = new jsPDF({ orientation: "portrait" });
+    const pageWidth  = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const logo = await loadLogoBase64();
+    if (logo) doc.addImage(logo, "PNG", 10, 5, 18, 18);
+
+    doc.setFontSize(12); doc.setFont("helvetica", "bold");
+    doc.text("Centralizador de Calificaciones", pageWidth / 2, 14, { align: "center" });
+
+    const sp = 4.5;
+    const startY = 27;
+    const leftX = 10, midX = pageWidth / 3, rightX = (pageWidth / 3) * 2;
+    const turno = teacherShift.charAt(0).toUpperCase() + teacherShift.slice(1).toLowerCase();
+
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "bold");   doc.text("CEA:", leftX, startY);
+    doc.setFont("helvetica", "normal"); doc.text("Madre Maria Oliva", leftX + 11, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Facilitador(a):", leftX, startY + sp);
+    doc.setFont("helvetica", "normal"); doc.text(facilitator, leftX + 27, startY + sp);
+    doc.setFont("helvetica", "bold");   doc.text("Director(a):", leftX, startY + sp * 2);
+    doc.setFont("helvetica", "normal"); doc.text(director, leftX + 23, startY + sp * 2);
+
+    doc.setFont("helvetica", "bold");   doc.text("Carrera:", midX, startY);
+    doc.setFont("helvetica", "normal"); doc.text(careerName, midX + 17, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Nivel:", midX, startY + sp);
+    doc.setFont("helvetica", "normal"); doc.text(levelRow?.name || "", midX + 12, startY + sp);
+
+    doc.setFont("helvetica", "bold");   doc.text("Semestre:", rightX, startY);
+    doc.setFont("helvetica", "normal"); doc.text(semester, rightX + 19, startY);
+    doc.setFont("helvetica", "bold");   doc.text("Turno:", rightX, startY + sp);
+    doc.setFont("helvetica", "normal"); doc.text(turno, rightX + 13, startY + sp);
+
+    const TABLE_START_Y = startY + sp * 2 + 8;
+    const SIDE_MARGIN   = 10;
+    const TABLE_WIDTH   = pageWidth - SIDE_MARGIN * 2;
+    const HEADER_ROW_H  = 22;
+    const BOTTOM_PAD    = 20;
+    const nMods = centralizadorModules.length;
+    const n     = centralizadorRows.length;
+
+    const NUM_W  = 8;
+    const NAME_W = 58;
+    const AVG_W  = 16;
+    const OBS_W  = 26;
+    const modColTotal = TABLE_WIDTH - NUM_W - NAME_W - AVG_W - OBS_W;
+    const MOD_W = nMods > 0 ? Math.max(10, Math.floor(modColTotal / nMods)) : 14;
+
+    const bodyAvailH  = pageHeight - TABLE_START_Y - HEADER_ROW_H - BOTTOM_PAD;
+    const bodyRowH    = n <= 20 ? Math.max(4.5, bodyAvailH / n) : 6;
+    const bodyFontSz  = bodyRowH < 5.2 ? 7 : 8;
+
+    const tableData = centralizadorRows.map((row, idx) => {
+      const obs = row.avg !== null ? getObservation(row.avg).text : "";
+      return [
+        idx + 1,
+        formatName(row.student),
+        ...row.totals.map((t) => (t !== null ? t : "")),
+        row.avg !== null ? row.avg : "",
+        obs,
+      ];
+    });
+
+    const colStyles: Record<number, object> = {
+      0: { halign: "center", cellWidth: NUM_W },
+      1: { halign: "left",   cellWidth: NAME_W },
+      [nMods + 2]: { halign: "center", cellWidth: AVG_W, fontStyle: "bold" },
+      [nMods + 3]: { halign: "left",   cellWidth: OBS_W },
+    };
+    for (let i = 0; i < nMods; i++) {
+      colStyles[i + 2] = { halign: "center", cellWidth: MOD_W };
+    }
+
+    autoTable(doc, {
+      startY: TABLE_START_Y,
+      margin: { left: SIDE_MARGIN, right: SIDE_MARGIN },
+      head: [["N", "Participante", ...centralizadorModules.map(() => ""), "Prom.", "OBS"]],
+      body: tableData,
+      theme: "grid",
+      headStyles: {
+        fillColor: [235, 235, 235],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        halign: "center",
+        valign: "bottom",
+        fontSize: 7,
+        cellPadding: { top: 1, right: 1, bottom: 2, left: 1 },
+        minCellHeight: HEADER_ROW_H,
+      },
+      bodyStyles: {
+        fontSize: bodyFontSz,
+        cellPadding: { top: 1, right: 1, bottom: 1, left: 1 },
+        minCellHeight: bodyRowH,
+      },
+      styles: { lineColor: [180, 180, 180], lineWidth: 0.2 },
+      columnStyles: colStyles,
+      willDrawCell: (data) => {
+        if (data.section === "head" && data.column.index >= 2 && data.column.index < nMods + 2)
+          (data.cell as { text: string[] }).text = [];
+      },
+      didDrawCell: (data) => {
+        if (data.section === "head" && data.column.index >= 2 && data.column.index < nMods + 2) {
+          const title = centralizadorModules[data.column.index - 2]?.title ?? "";
+          drawDimLabel(doc, data.cell, title.length > 22 ? title.slice(0, 22) + "..." : title);
+        }
+      },
+      didParseCell: (data) => {
+        if (data.section === "body" && data.column.index === nMods + 3) {
+          const obs = data.cell.raw as string;
+          if (obs === "Postergado")              data.cell.styles.textColor = [220, 53, 69];
+          else if (obs === "Promovido")           data.cell.styles.textColor = [40, 167, 69];
+          else if (obs === "Promovido Excelente") data.cell.styles.textColor = [0, 123, 255];
+        }
+        if (data.section === "body" && data.column.index === nMods + 2) {
+          const avg = data.cell.raw as number | "";
+          if (avg !== "") {
+            if      (avg <= 50) data.cell.styles.textColor = [220, 53, 69];
+            else if (avg <= 75) data.cell.styles.textColor = [40, 167, 69];
+            else                data.cell.styles.textColor = [0, 123, 255];
+          }
+        }
+      },
+    });
+
+    // Signatures
+    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    const sigY = finalY + 8;
+    const firmaL = pageWidth / 4, firmaR = (pageWidth / 4) * 3;
+    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(0, 0, 0);
+    doc.line(firmaL - 35, sigY, firmaL + 35, sigY);
+    doc.text("Facilitador(a)", firmaL, sigY + 5, { align: "center" });
+    doc.line(firmaR - 35, sigY, firmaR + 35, sigY);
+    doc.text("Direccion", firmaR, sigY + 5, { align: "center" });
+
+    // Footer note
+    doc.setFontSize(7); doc.setFont("helvetica", "italic");
+    doc.text("(*) Calificacion minima por modulo: 20 pts.", SIDE_MARGIN, sigY + 12);
+
+    doc.save(`Centralizador_${levelRow?.name?.replace(/\s+/g, "_") ?? "nivel"}_${semester.replace("/", "-")}.pdf`);
+  }
+
+  async function loadCentralizador() {
+    if (!levelRow) return;
+    setCentralizadorLoading(true);
+    try {
+      const { data: modules } = await supabase
+        .from("modules")
+        .select("id,title,sort_order")
+        .eq("level_id", levelRow.id)
+        .order("sort_order");
+
+      const mods = (modules ?? []) as CentralModule[];
+      setCentralizadorModules(mods);
+
+      if (mods.length === 0 || rows.length === 0) {
+        setCentralizadorRows([]);
+        return;
+      }
+
+      const moduleIds = mods.map((m) => m.id);
+      const studentIds = rows.map((r) => r.student.id);
+
+      const [{ data: allGrades }, { data: allProgress }] = await Promise.all([
+        supabase
+          .from("module_grades")
+          .select("student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir")
+          .in("module_id", moduleIds)
+          .in("student_id", studentIds),
+        supabase
+          .from("v_module_progress")
+          .select("student_id,module_id,progress_percent")
+          .in("module_id", moduleIds)
+          .in("student_id", studentIds),
+      ]);
+
+      const gradesMap = new Map<number, Map<string, ModuleGrade>>();
+      for (const g of (allGrades ?? []) as ModuleGrade[]) {
+        if (!gradesMap.has(g.module_id)) gradesMap.set(g.module_id, new Map());
+        gradesMap.get(g.module_id)!.set(g.student_id, g);
+      }
+
+      const progressMap = new Map<number, Map<string, number>>();
+      for (const p of (allProgress ?? []) as { student_id: string; module_id: number; progress_percent: number }[]) {
+        if (!progressMap.has(p.module_id)) progressMap.set(p.module_id, new Map());
+        progressMap.get(p.module_id)!.set(p.student_id, p.progress_percent || 0);
+      }
+
+      const cRows: CentralRow[] = rows.map((row) => {
+        const totals: (number | null)[] = mods.map((mod) => {
+          const grade = gradesMap.get(mod.id)?.get(row.student.id);
+          if (!grade || (grade.ser === null && grade.saber === null && grade.hacer_proceso === null && grade.hacer_producto === null && grade.decidir === null)) {
+            return null;
+          }
+          const progress = progressMap.get(mod.id)?.get(row.student.id) ?? 0;
+          return calculateTotal(grade, Math.round((progress / 100) * 20));
+        });
+
+        const graded = totals.filter((t): t is number => t !== null);
+        const avg = graded.length > 0 ? Math.round(graded.reduce((a, b) => a + b, 0) / graded.length) : null;
+        return { student: row.student, totals, avg };
+      });
+
+      setCentralizadorRows(cRows);
+    } finally {
+      setCentralizadorLoading(false);
+    }
+  }
+
   if (loading)
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -1303,24 +1546,35 @@ export default function TeacherModuleGrades() {
             </span>
             <div className="flex items-center gap-3">
               {moduleRow && levelRow && (
-                <button
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 text-sm rounded-lg font-medium transition-all duration-200"
-                  onClick={() => {
-                    try {
-                      sessionStorage.setItem("teacher_content_manager_cache", JSON.stringify({
-                        view: "lessons",
-                        selectedModule: moduleRow,
-                        selectedLevel: levelRow,
-                      }));
-                    } catch { /* ignore */ }
-                    nav("/teacher/content");
-                  }}
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  Actividades
-                </button>
+                <>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 text-cyan-300 hover:text-cyan-200 text-sm rounded-lg font-medium transition-all duration-200"
+                    onClick={() => { setShowCentralizador(true); void loadCentralizador(); }}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+                    </svg>
+                    Centralizador
+                  </button>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 text-sm rounded-lg font-medium transition-all duration-200"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem("teacher_content_manager_cache", JSON.stringify({
+                          view: "lessons",
+                          selectedModule: moduleRow,
+                          selectedLevel: levelRow,
+                        }));
+                      } catch { /* ignore */ }
+                      nav("/teacher/content");
+                    }}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Actividades
+                  </button>
+                </>
               )}
               <button
                 onClick={saveAllGrades}
@@ -1331,6 +1585,33 @@ export default function TeacherModuleGrades() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 {globalSaving ? "Guardando..." : "Guardar cambios"}
+              </button>
+
+              <button
+                onClick={() => void toggleReleaseGrades()}
+                disabled={releasingSaving}
+                className={`flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-semibold transition-all duration-200 disabled:opacity-60 ${
+                  gradesReleased
+                    ? "bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-300 hover:text-amber-200"
+                    : "bg-sky-600/20 border border-sky-500/40 hover:bg-sky-600/30 text-sky-300 hover:text-sky-200"
+                }`}
+                title={gradesReleased ? "Las notas son visibles para los estudiantes. Clic para ocultar." : "Los estudiantes no ven estas notas aún. Clic para enviarlas."}
+              >
+                {gradesReleased ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                    {releasingSaving ? "..." : "Ocultar notas"}
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    {releasingSaving ? "..." : "Enviar notas a estudiantes"}
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1360,7 +1641,7 @@ export default function TeacherModuleGrades() {
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                           <button
                             className="text-sky-400 hover:text-sky-200 hover:underline transition-colors"
-                            onClick={() => nav(`/teacher/module/${mid}/grades/${dim}`)}
+                            onClick={() => setActiveDim(dim as DimKey)}
                             title={`Abrir registro ${label}`}
                           >
                             <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2, display: "block" }}>{label}</span>
@@ -1821,6 +2102,135 @@ export default function TeacherModuleGrades() {
           </div>
         </div>
       </main>
+
+      {/* ── MODAL CENTRALIZADOR ─────────────────────────────────────── */}
+      {showCentralizador && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/98 backdrop-blur-sm overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50 bg-slate-900/80 shrink-0">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+                </svg>
+                Centralizador de Notas
+              </h2>
+              <p className="text-sm text-slate-400 mt-0.5">{levelRow?.name} — {careerName}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {!centralizadorLoading && centralizadorRows.length > 0 && (
+                <button
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600/20 border border-red-500/30 hover:bg-red-600/30 text-red-300 hover:text-red-200 text-sm rounded-lg font-medium transition-all duration-200"
+                  onClick={() => void generateCentralizadorPDF()}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                    <path d="M12 18l4-4h-3v-4h-2v4H8l4 4z"/>
+                  </svg>
+                  Generar PDF
+                </button>
+              )}
+              <button
+                className="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-colors"
+                onClick={() => setShowCentralizador(false)}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-auto p-6">
+            {centralizadorLoading ? (
+              <div className="flex items-center justify-center h-40 text-slate-400 text-sm">
+                Cargando datos de todos los módulos...
+              </div>
+            ) : centralizadorRows.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-slate-500 text-sm">
+                No hay estudiantes o módulos para mostrar.
+              </div>
+            ) : (
+              <div className="bg-slate-900 rounded-2xl border border-slate-700/50 overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-slate-800/50">
+                      <tr>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">N°</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">Estudiante</th>
+                        {centralizadorModules.map((mod) => (
+                          <th
+                            key={mod.id}
+                            style={{ verticalAlign: "bottom", padding: "4px 6px", width: 52, textAlign: "center" }}
+                            className={`text-xs font-semibold uppercase tracking-wider ${mod.id === mid ? "text-cyan-400" : "text-slate-300"}`}
+                          >
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                              <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 4, display: "block" }}>
+                                {mod.title.length > 22 ? mod.title.slice(0, 22) + "…" : mod.title}
+                              </span>
+                            </div>
+                          </th>
+                        ))}
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-cyan-300 uppercase tracking-wider whitespace-nowrap">Promedio</th>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">Obs</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {centralizadorRows.map((row, idx) => {
+                        const obs = row.avg !== null ? getObservation(row.avg) : null;
+                        return (
+                          <tr key={row.student.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="px-3 py-3 text-center text-sm font-medium text-slate-400">{idx + 1}</td>
+                            <td className="px-4 py-3 text-sm text-slate-200 whitespace-nowrap">{formatName(row.student)}</td>
+                            {row.totals.map((total, i) => (
+                              <td
+                                key={i}
+                                className={`px-2 py-3 text-center text-sm font-semibold ${centralizadorModules[i]?.id === mid ? "bg-cyan-950/30" : ""}`}
+                              >
+                                {total !== null ? (
+                                  <span className={getObservation(total).color}>{total}</span>
+                                ) : (
+                                  <span className="text-slate-700">—</span>
+                                )}
+                              </td>
+                            ))}
+                            <td className="px-3 py-3 text-center">
+                              {row.avg !== null ? (
+                                <span className={`text-base font-bold ${obs!.color}`}>{row.avg}</span>
+                              ) : (
+                                <span className="text-slate-700 text-sm">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {obs ? (
+                                <span className={`text-sm font-semibold ${obs.color}`}>{obs.text}</span>
+                              ) : (
+                                <span className="text-slate-700 text-sm">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── OVERLAY DIMENSIÓN ──────────────────────────────────────────── */}
+      {activeDim && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950">
+          <TeacherDimensionGrades
+            inlineModuleId={mid}
+            inlineDimension={activeDim}
+            onClose={() => setActiveDim(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

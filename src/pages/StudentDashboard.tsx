@@ -13,6 +13,7 @@ type ModuleRow = {
   title: string;
   sort_order: number;
   is_active: boolean | null;
+  grades_released: boolean | null;
 };
 
 type ModuleProgress = {
@@ -265,15 +266,15 @@ export default function StudentDashboard() {
         ? hpSuggested
         : num0(g.hacer_proceso);
 
-    return (
+    const raw =
       num0(g.ser) +
       num0(g.saber) +
       hpFinal +
       num0(g.hacer_producto) +
       num0(g.decidir) +
       num0(g.auto_ser) +
-      num0(g.auto_decidir)
-    );
+      num0(g.auto_decidir);
+    return Math.max(raw, 20);
   }
 
   function getObservation(total: number) {
@@ -316,23 +317,31 @@ export default function StudentDashboard() {
 
     setHistoryLoading(true);
 
-    const res = await supabase
-      .from("v_student_grade_history")
-      .select(
-        "module_id,module_name,module_order,level_id,level_name,level_order,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total,observation",
-      )
-      .eq("student_id", session.user.id)
-      .order("level_order", { ascending: true })
-      .order("module_order", { ascending: true });
+    const [histRes, releasedRes] = await Promise.all([
+      supabase
+        .from("v_student_grade_history")
+        .select(
+          "module_id,module_name,module_order,level_id,level_name,level_order,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total,observation",
+        )
+        .eq("student_id", session.user.id)
+        .order("level_order", { ascending: true })
+        .order("module_order", { ascending: true }),
+      supabase
+        .from("modules")
+        .select("id")
+        .eq("grades_released", true),
+    ]);
 
     setHistoryLoading(false);
 
-    if (res.error) {
-      setMsg("No se pudo cargar historial: " + res.error.message);
+    if (histRes.error) {
+      setMsg("No se pudo cargar historial: " + histRes.error.message);
       return;
     }
 
-    setHistoryData((res.data ?? []) as GradeHistoryRow[]);
+    const releasedIds = new Set((releasedRes.data ?? []).map((m: { id: number }) => m.id));
+    const filtered = (histRes.data ?? []).filter((row: { module_id: number }) => releasedIds.has(row.module_id));
+    setHistoryData(filtered as GradeHistoryRow[]);
   }
 
   function toggleGrades(moduleId: number) {
@@ -441,7 +450,7 @@ export default function StudentDashboard() {
 
       const mods = await supabase
         .from("modules")
-        .select("id,level_id,title,sort_order,is_active")
+        .select("id,level_id,title,sort_order,is_active,grades_released")
         .eq("level_id", levelId)
         .order("sort_order");
 
@@ -1038,30 +1047,33 @@ export default function StudentDashboard() {
                         {unlocked ? "Entrar" : "🔒 Bloqueado"}
                       </button>
 
-                      <button
-                        type="button"
-                        className="px-4 py-2.5 rounded-xl border border-slate-700/50 hover:bg-slate-800/50 text-slate-300 transition-all duration-200"
-                        onClick={() => toggleGrades(m.id)}
-                      >
-                        <svg
-                          className="w-5 h-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                      {m.grades_released && (
+                        <button
+                          type="button"
+                          className="px-4 py-2.5 rounded-xl border border-slate-700/50 hover:bg-slate-800/50 text-slate-300 transition-all duration-200"
+                          onClick={() => toggleGrades(m.id)}
+                          title="Ver calificación"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                          />
-                        </svg>
-                      </button>
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                            />
+                          </svg>
+                        </button>
+                      )}
                     </div>
 
                     {/* Panel de calificaciones expandible */}
-                    {isGradesOpen && (
-                      <div className="rounded-xl border border-slate-700/30 bg-slate-800/30 p-4 overflow-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                    {isGradesOpen && m.grades_released && (
+                      <div className="rounded-xl border border-slate-700/30 bg-slate-800/30 p-4 animate-in fade-in slide-in-from-top-2 duration-200">
                         {isGradesLoading ? (
                           <div className="text-sm text-slate-400 text-center py-2">
                             Cargando calificaciones...
@@ -1069,84 +1081,27 @@ export default function StudentDashboard() {
                         ) : grade ? (
                           (() => {
                             const g = grade as ModuleGradeRow;
-                            const total = calcTotal(g, pct);
+                            const total = Math.max(calcTotal(g, pct), 20);
                             const obs = getObservation(total);
-
                             return (
-                              <div className="space-y-3">
-                                <table className="min-w-full text-xs">
-                                  <thead>
-                                    <tr className="text-slate-400 border-b border-slate-700/30">
-                                      <th className="py-2 pr-2 text-left">
-                                        Ser
-                                      </th>
-                                      <th className="py-2 pr-2 text-left">
-                                        Saber
-                                      </th>
-                                      <th className="py-2 pr-2 text-left">
-                                        H-Pro
-                                      </th>
-                                      <th className="py-2 pr-2 text-left">
-                                        H-Prod
-                                      </th>
-                                      <th className="py-2 pr-2 text-left">
-                                        Dec
-                                      </th>
-                                      <th className="py-2 pr-2 text-left">
-                                        A-Ser
-                                      </th>
-                                      <th className="py-2 pr-2 text-left">
-                                        A-Dec
-                                      </th>
-                                      <th className="py-2 pr-2 text-left font-semibold text-white">
-                                        Total
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <tr className="text-slate-200">
-                                      <td className="py-2 pr-2">
-                                        {num0(g.ser)}
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        {num0(g.saber)}
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        {g.hacer_proceso === null ||
-                                        g.hacer_proceso === undefined
-                                          ? `${Math.round((pct / 100) * 20)}`
-                                          : num0(g.hacer_proceso)}
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        {num0(g.hacer_producto)}
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        {num0(g.decidir)}
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        {num0(g.auto_ser)}
-                                      </td>
-                                      <td className="py-2 pr-2">
-                                        {num0(g.auto_decidir)}
-                                      </td>
-                                      <td className="py-2 pr-2 font-bold text-white">
-                                        {total}
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </table>
+                              <div className="flex items-center gap-4">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-xs text-slate-400 mb-1">Calificación</span>
+                                  <span className="text-3xl font-bold text-white">{total}</span>
+                                  <span className="text-xs text-slate-500">/ 100</span>
+                                </div>
                                 <div
-                                  className={`text-sm px-3 py-2 rounded-lg ${
+                                  className={`flex-1 text-sm font-semibold px-4 py-3 rounded-xl ${
                                     obs.includes("Excelente")
-                                      ? "bg-emerald-500/10 text-emerald-400"
+                                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                       : obs.includes("Promovido")
-                                        ? "bg-emerald-500/10 text-emerald-400"
+                                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                         : obs.includes("Postergado")
-                                          ? "bg-amber-500/10 text-amber-400"
-                                          : "bg-red-500/10 text-red-400"
+                                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                          : "bg-red-500/10 text-red-400 border border-red-500/20"
                                   }`}
                                 >
-                                  <span className="font-semibold">{obs}</span>
+                                  {obs}
                                 </div>
                               </div>
                             );
@@ -1455,135 +1410,43 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <>
-                {/* Vista móvil: tarjetas */}
-                <div className="sm:hidden space-y-3">
-                  {historyData.map((row) => (
-                    <div
-                      key={row.module_id}
-                      className="bg-slate-900/50 rounded-xl border border-slate-800 p-4 space-y-3"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-semibold text-white">
-                            {row.module_name}
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            {row.level_name}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-white">
-                            {row.total}
-                          </div>
-                          <div
-                            className={`text-xs font-medium ${
-                              row.observation.includes("Excelente")
-                                ? "text-emerald-400"
-                                : row.observation.includes("Promovido")
-                                  ? "text-emerald-400"
-                                  : row.observation.includes("Postergado")
-                                    ? "text-amber-400"
-                                    : "text-rose-400"
-                            }`}
-                          >
-                            {row.observation}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2 text-xs">
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">Ser</div>
-                          <div className="font-semibold">{row.ser}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">Saber</div>
-                          <div className="font-semibold">{row.saber}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">H-Pro</div>
-                          <div className="font-semibold">
-                            {row.hacer_proceso}
-                          </div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">H-Prod</div>
-                          <div className="font-semibold">
-                            {row.hacer_producto}
-                          </div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">Dec</div>
-                          <div className="font-semibold">{row.decidir}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">A-Ser</div>
-                          <div className="font-semibold">{row.auto_ser}</div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                          <div className="text-slate-500">A-Dec</div>
-                          <div className="font-semibold">
-                            {row.auto_decidir}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Vista desktop: tabla */}
-                <div className="hidden sm:block overflow-auto">
+                {/* Tabla unificada (responsive) */}
+                <div className="overflow-auto">
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-900 sticky top-0">
                       <tr className="text-left border-b border-slate-800">
-                        <th className="p-3">Nivel</th>
-                        <th className="p-3">Módulo</th>
-                        <th className="p-3">Ser</th>
-                        <th className="p-3">Saber</th>
-                        <th className="p-3">H-Pro</th>
-                        <th className="p-3">H-Prod</th>
-                        <th className="p-3">Dec</th>
-                        <th className="p-3">A-Ser</th>
-                        <th className="p-3">A-Dec</th>
-                        <th className="p-3 font-semibold">Total</th>
-                        <th className="p-3">Observación</th>
+                        <th className="p-3 text-slate-400 font-medium">Nivel</th>
+                        <th className="p-3 text-slate-400 font-medium">Módulo</th>
+                        <th className="p-3 text-center text-slate-400 font-medium">Total</th>
+                        <th className="p-3 text-slate-400 font-medium">Observación</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {historyData.map((row) => (
-                        <tr
-                          key={row.module_id}
-                          className="border-b border-slate-800"
-                        >
-                          <td className="p-3 text-slate-300">
-                            {row.level_name}
-                          </td>
-                          <td className="p-3 font-semibold">
-                            {row.module_name}
-                          </td>
-                          <td className="p-3">{row.ser}</td>
-                          <td className="p-3">{row.saber}</td>
-                          <td className="p-3">{row.hacer_proceso}</td>
-                          <td className="p-3">{row.hacer_producto}</td>
-                          <td className="p-3">{row.decidir}</td>
-                          <td className="p-3">{row.auto_ser}</td>
-                          <td className="p-3">{row.auto_decidir}</td>
-                          <td className="p-3 font-semibold">{row.total}</td>
-                          <td
-                            className={
-                              "p-3 " +
-                              (row.observation.includes("Excelente")
-                                ? "text-emerald-400 font-semibold"
-                                : row.observation.includes("Promovido")
+                      {historyData.map((row) => {
+                        const displayTotal = Math.max(row.total, 20);
+                        const displayObs = getObservation(displayTotal);
+                        return (
+                          <tr key={row.module_id} className="border-b border-slate-800/60 hover:bg-slate-800/30">
+                            <td className="p-3 text-slate-400 text-xs whitespace-nowrap">{row.level_name}</td>
+                            <td className="p-3 font-medium text-white">{row.module_name}</td>
+                            <td className="p-3 text-center">
+                              <span className="text-lg font-bold text-white">{displayTotal}</span>
+                            </td>
+                            <td className={
+                              "p-3 font-semibold " +
+                              (displayObs.includes("Excelente")
+                                ? "text-emerald-400"
+                                : displayObs.includes("Promovido")
                                   ? "text-emerald-400"
-                                  : row.observation.includes("Postergado")
+                                  : displayObs.includes("Postergado")
                                     ? "text-amber-400"
                                     : "text-rose-400")
-                            }
-                          >
-                            {row.observation}
-                          </td>
-                        </tr>
-                      ))}
+                            }>
+                              {displayObs}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
