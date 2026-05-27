@@ -156,6 +156,9 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
   const isTeacherish = role === "teacher" || role === "admin";
   const invalid = isNaN(mid) || !cfg;
   const loadedKeyRef = useRef<string | null>(null);
+  // Valores del registro principal al momento de abrir el secundario.
+  // Se usa para detectar si el docente editó manualmente en el principal (distinto del promedio calculado).
+  const initialMainValuesRef = useRef<Map<string, number | null>>(new Map());
 
   const [moduleTitle, setModuleTitle] = useState("");
   const [levelName, setLevelName] = useState("");
@@ -394,23 +397,24 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
     }
     setAverages(avgs);
 
-    setLoadingData(false);
+    // Cargar valores actuales del registro principal para detectar ediciones manuales del docente
+    type MainGradeRow = { student_id: string; ser: number | null; saber: number | null; hacer_proceso: number | null; hacer_producto: number | null; decidir: number | null };
+    const { data: mainGradesRaw } = await supabase
+      .from("module_grades")
+      .select("student_id,ser,saber,hacer_proceso,hacer_producto,decidir")
+      .eq("module_id", mid)
+      .in("student_id", studentList.map((s) => s.id));
+    const mainGrades = (mainGradesRaw ?? []) as MainGradeRow[];
 
-    // Sincronizar promedios al registro principal en segundo plano
-    // (incluye filas con notas en blanco, usando el mínimo calculado por calcAvg)
+    const initMap = new Map<string, number | null>();
+    const field = cfg.moduleField as keyof MainGradeRow;
     for (const s of studentList) {
-      const avg = avgs.get(s.id) ?? cfg.min;
-      supabase
-        .from("module_grades")
-        .upsert(
-          { student_id: s.id, module_id: mid, [cfg.moduleField]: avg },
-          { onConflict: "student_id,module_id" },
-        )
-        .then(({ error }) => {
-          if (error)
-            console.warn(`module_grades sync error (${s.id}):`, error.message);
-        });
+      const mg = mainGrades.find((g) => g.student_id === s.id);
+      initMap.set(s.id, mg ? (mg[field] as number | null) : null);
     }
+    initialMainValuesRef.current = initMap;
+
+    setLoadingData(false);
   }
 
   async function saveCell(
@@ -425,6 +429,9 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
     const newCells = new Map(cells);
     newCells.set(key, value);
     setCells(newCells);
+
+    // Capturar promedio anterior ANTES de recalcular (para comparar con el valor del registro principal)
+    const prevAvg = averages.get(studentId) ?? cfg.min;
 
     // Recalcular promedio del estudiante
     const scores = cols.map(
@@ -460,15 +467,18 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
         }
       }
 
-      // Copiar promedio al module_grades
-      await supabase.from("module_grades").upsert(
-        {
-          student_id: studentId,
-          module_id: mid,
-          [cfg.moduleField]: avg,
-        },
-        { onConflict: "student_id,module_id" },
-      );
+      // Solo sincronizar al registro principal si el docente NO editó ese campo manualmente allí.
+      // Se detecta edición manual cuando el valor en main ≠ null y ≠ el promedio anterior (que fue el último valor sincronizado).
+      const initVal = initialMainValuesRef.current.get(studentId) ?? null;
+      const mainWasManuallyEdited = initVal !== null && initVal !== prevAvg;
+      if (!mainWasManuallyEdited) {
+        await supabase.from("module_grades").upsert(
+          { student_id: studentId, module_id: mid, [cfg.moduleField]: avg },
+          { onConflict: "student_id,module_id" },
+        );
+        // Actualizar referencia local para que ediciones posteriores sigan sincronizando
+        initialMainValuesRef.current.set(studentId, avg);
+      }
 
       setMsg(null);
     } catch (err) {
