@@ -56,6 +56,7 @@ type StudentRow = {
   progress: number;
   suggestedHP: number;
   total: number;
+  autoEvalFromStudent: { auto_ser: number | null; auto_decidir: number | null } | null;
 };
 
 // Límites de cada dimensión editable
@@ -65,6 +66,8 @@ const GRADE_LIMITS: Record<string, { min: number; max: number }> = {
   hacer_proceso:  { min: 1, max: 20 },
   hacer_producto: { min: 1, max: 20 },
   decidir:        { min: 1, max: 10 },
+  auto_ser:       { min: 0, max: 5 },
+  auto_decidir:   { min: 0, max: 5 },
 };
 
 function degreePrefix(degree: string | null): string {
@@ -99,6 +102,7 @@ export default function TeacherModuleGrades() {
   const [globalSaving, setGlobalSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [shakingInputs, setShakingInputs] = useState<Set<string>>(new Set());
+  const [autoEditingRows, setAutoEditingRows] = useState<Set<string>>(new Set());
   const autoSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Estados para el reporte PDF
@@ -346,9 +350,9 @@ export default function TeacherModuleGrades() {
           hacer_proceso: r(existingGrade.hacer_proceso),
           hacer_producto: r(existingGrade.hacer_producto),
           decidir: r(existingGrade.decidir),
-          // auto_eval_responses tiene prioridad sobre module_grades para auto_ser/auto_decidir
-          auto_ser: autoEval?.auto_ser ?? r(existingGrade.auto_ser),
-          auto_decidir: autoEval?.auto_decidir ?? r(existingGrade.auto_decidir),
+          // module_grades tiene prioridad; auto_eval_responses solo se usa como fallback cuando el docente no ha editado
+          auto_ser: r(existingGrade.auto_ser) ?? autoEval?.auto_ser ?? null,
+          auto_decidir: r(existingGrade.auto_decidir) ?? autoEval?.auto_decidir ?? null,
         } : {
           student_id: student.id,
           module_id: mid,
@@ -367,32 +371,34 @@ export default function TeacherModuleGrades() {
           progress,
           suggestedHP,
           total: calculateTotal(grade, suggestedHP),
+          autoEvalFromStudent: autoEval ?? null,
         };
       });
 
       setRows(studentRows);
       setLoadingData(false);
 
-      // Sincronizar auto_ser / auto_decidir a module_grades en segundo plano
-      // para que el docente no tenga que guardar manualmente cada fila
+      // Sincronizar auto_ser / auto_decidir a module_grades solo cuando module_grades aún no tiene valor
+      // (si el docente ya editó manualmente, no se sobreescribe con la respuesta del estudiante)
       const syncRows = studentRows.filter((sr) => {
         const ae = autoEvalMap.get(sr.student.id);
         if (!ae) return false;
         const existing = gradesMap.get(sr.student.id);
         return (
-          (ae.auto_ser !== null && ae.auto_ser !== (existing?.auto_ser ?? null)) ||
-          (ae.auto_decidir !== null && ae.auto_decidir !== (existing?.auto_decidir ?? null))
+          (ae.auto_ser !== null && (existing?.auto_ser ?? null) === null) ||
+          (ae.auto_decidir !== null && (existing?.auto_decidir ?? null) === null)
         );
       });
 
       for (const sr of syncRows) {
         const ae = autoEvalMap.get(sr.student.id)!;
+        const existing = gradesMap.get(sr.student.id);
         await supabase.from("module_grades").upsert(
           {
             student_id: sr.student.id,
             module_id: mid,
-            auto_ser: ae.auto_ser,
-            auto_decidir: ae.auto_decidir,
+            auto_ser: (existing?.auto_ser ?? null) === null ? ae.auto_ser : existing!.auto_ser,
+            auto_decidir: (existing?.auto_decidir ?? null) === null ? ae.auto_decidir : existing!.auto_decidir,
           },
           { onConflict: "student_id,module_id" },
         );
@@ -409,7 +415,7 @@ export default function TeacherModuleGrades() {
 
   function applyDimMin(val: number | null, min: number): number {
     if (val === null) return min;
-    return Math.max(val, min);
+    return val;
   }
 
   function calculateTotal(grade: ModuleGrade, suggestedHP: number): number {
@@ -1480,18 +1486,62 @@ export default function TeacherModuleGrades() {
                         />
                       </td>
 
-                      {/* AUTO SER (5) — autocalificado por el estudiante */}
-                      <td className="px-3 py-4 text-center">
-                        <span className="text-sm font-semibold text-violet-400">
-                          {row.grade.auto_ser !== null ? row.grade.auto_ser : <span className="text-slate-600">—</span>}
-                        </span>
+                      {/* AUTO SER (5) */}
+                      <td className="px-2 py-3 text-center">
+                        {autoEditingRows.has(row.student.id) ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <input
+                              type="number"
+                              className={`w-14 px-1 py-2 bg-violet-900/30 border border-violet-500/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-auto_ser`) ? " shake" : ""}`}
+                              min="0" max="5"
+                              value={row.grade.auto_ser ?? ""}
+                              onChange={(e) => updateGradeField(row.student.id, "auto_ser", e.target.value)}
+                              placeholder="—"
+                            />
+                            {row.autoEvalFromStudent?.auto_ser !== null && row.autoEvalFromStudent?.auto_ser !== undefined && (
+                              <button
+                                className="text-xs text-violet-400 hover:text-violet-200 underline transition-colors"
+                                title={`El estudiante envió: ${row.autoEvalFromStudent.auto_ser}. Clic para copiar.`}
+                                onClick={() => updateGradeField(row.student.id, "auto_ser", String(row.autoEvalFromStudent!.auto_ser))}
+                              >
+                                ↓{row.autoEvalFromStudent.auto_ser}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm font-semibold text-violet-400">
+                            {row.grade.auto_ser !== null ? row.grade.auto_ser : <span className="text-slate-600">—</span>}
+                          </span>
+                        )}
                       </td>
 
-                      {/* AUTO DECIDIR (5) — autocalificado por el estudiante */}
-                      <td className="px-3 py-4 text-center">
-                        <span className="text-sm font-semibold text-violet-400">
-                          {row.grade.auto_decidir !== null ? row.grade.auto_decidir : <span className="text-slate-600">—</span>}
-                        </span>
+                      {/* AUTO DECIDIR (5) */}
+                      <td className="px-2 py-3 text-center">
+                        {autoEditingRows.has(row.student.id) ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <input
+                              type="number"
+                              className={`w-14 px-1 py-2 bg-violet-900/30 border border-violet-500/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-auto_decidir`) ? " shake" : ""}`}
+                              min="0" max="5"
+                              value={row.grade.auto_decidir ?? ""}
+                              onChange={(e) => updateGradeField(row.student.id, "auto_decidir", e.target.value)}
+                              placeholder="—"
+                            />
+                            {row.autoEvalFromStudent?.auto_decidir !== null && row.autoEvalFromStudent?.auto_decidir !== undefined && (
+                              <button
+                                className="text-xs text-violet-400 hover:text-violet-200 underline transition-colors"
+                                title={`El estudiante envió: ${row.autoEvalFromStudent.auto_decidir}. Clic para copiar.`}
+                                onClick={() => updateGradeField(row.student.id, "auto_decidir", String(row.autoEvalFromStudent!.auto_decidir))}
+                              >
+                                ↓{row.autoEvalFromStudent.auto_decidir}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm font-semibold text-violet-400">
+                            {row.grade.auto_decidir !== null ? row.grade.auto_decidir : <span className="text-slate-600">—</span>}
+                          </span>
+                        )}
                       </td>
 
                       {/* TOTAL */}
@@ -1512,11 +1562,25 @@ export default function TeacherModuleGrades() {
                         </span>
                       </td>
 
-                      {/* Indicador de guardado */}
-                      <td className="px-3 py-4 text-center" style={{ verticalAlign: "middle", width: 32 }}>
-                        {dirtyRows.has(row.student.id) && (
-                          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Guardando..." />
-                        )}
+                      {/* Editar autoeval + indicador de guardado */}
+                      <td className="px-2 py-3 text-center" style={{ verticalAlign: "middle", width: 56 }}>
+                        <div className="flex flex-col items-center gap-1.5">
+                          <button
+                            title={autoEditingRows.has(row.student.id) ? "Cerrar edición de autoevaluación" : "Editar autoevaluación"}
+                            className={`text-xs px-2 py-1 rounded-md border transition-colors ${autoEditingRows.has(row.student.id) ? "bg-violet-600/30 text-violet-300 border-violet-500/40" : "bg-slate-700/40 text-slate-400 hover:text-violet-300 hover:bg-violet-600/20 border-slate-600/40"}`}
+                            onClick={() => setAutoEditingRows((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(row.student.id)) next.delete(row.student.id);
+                              else next.add(row.student.id);
+                              return next;
+                            })}
+                          >
+                            {autoEditingRows.has(row.student.id) ? "✓" : "✎"}
+                          </button>
+                          {dirtyRows.has(row.student.id) && (
+                            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Guardando..." />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
