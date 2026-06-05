@@ -21,6 +21,13 @@ type StudentRow = {
   attendancePct: number; // 0-100
 };
 
+type SyncPreviewRow = {
+  student: StudentRow;
+  prevVal: number | null;
+  newAvg: number;
+  status: "new" | "up" | "down" | "same";
+};
+
 function formatName(s: StudentRow): string {
   const pat = s.last_name_pat ?? "";
   const mat = s.last_name_mat ?? "";
@@ -161,6 +168,10 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
   const [savingIndicator, setSavingIndicator] = useState(false);
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState(false);
+  const [syncingMain, setSyncingMain] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncPreview, setSyncPreview] = useState<SyncPreviewRow[]>([]);
+  const [syncSelected, setSyncSelected] = useState<Set<string>>(new Set());
 
   const loadKey = `${mid}-${dim}`;
   useEffect(() => {
@@ -487,6 +498,72 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
     }
 
     setSavingCell(null);
+  }
+
+  // ─── Cargar totales al registro principal (con modal de confirmación) ────
+
+  async function openSyncModal() {
+    if (students.length === 0) return;
+    setSyncingMain(true);
+
+    // Leer el valor ACTUAL del registro principal desde la BD para mostrar la nota real
+    type MainGradeRow = { student_id: string; ser: number | null; saber: number | null; hacer_proceso: number | null; hacer_producto: number | null; decidir: number | null };
+    const { data: currentMainRaw } = await supabase
+      .from("module_grades")
+      .select("student_id,ser,saber,hacer_proceso,hacer_producto,decidir")
+      .eq("module_id", mid)
+      .in("student_id", students.map((s) => s.id));
+    const currentMain = (currentMainRaw ?? []) as MainGradeRow[];
+    const field = cfg.moduleField as keyof MainGradeRow;
+
+    // Actualizar ref con valores frescos (para que saveCell siga siendo correcto)
+    const freshMap = new Map<string, number | null>();
+    for (const s of students) {
+      const mg = currentMain.find((g) => g.student_id === s.id);
+      freshMap.set(s.id, mg ? (mg[field] as number | null) : null);
+    }
+    initialMainValuesRef.current = freshMap;
+
+    const preview: SyncPreviewRow[] = students.map((s) => {
+      const prevVal = freshMap.get(s.id) ?? null;
+      const newAvg = averages.get(s.id) ?? cfg.min;
+      const status: SyncPreviewRow["status"] =
+        prevVal === null ? "new" :
+        newAvg > prevVal ? "up" :
+        newAvg < prevVal ? "down" : "same";
+      return { student: s, prevVal, newAvg, status };
+    });
+
+    setSyncingMain(false);
+    setSyncPreview(preview);
+    setSyncSelected(new Set(students.map((s) => s.id)));
+    setShowSyncModal(true);
+  }
+
+  async function confirmSync() {
+    setShowSyncModal(false);
+    setSyncingMain(true);
+    setMsg(null);
+    let errors = 0;
+    let count = 0;
+    for (const row of syncPreview) {
+      if (!syncSelected.has(row.student.id)) continue;
+      const { error } = await supabase
+        .from("module_grades")
+        .upsert(
+          { student_id: row.student.id, module_id: mid, [cfg.moduleField]: row.newAvg },
+          { onConflict: "student_id,module_id" },
+        );
+      if (error) errors++;
+      else { initialMainValuesRef.current.set(row.student.id, row.newAvg); count++; }
+    }
+    setSyncingMain(false);
+    if (errors > 0) {
+      setMsg(`⚠️ ${errors} fila(s) no se pudieron actualizar.`);
+    } else {
+      setMsg(`✅ ${count} nota(s) de ${cfg.label} cargadas al registro principal.`);
+      setTimeout(() => setMsg(null), 3000);
+    }
   }
 
   // ─── Añadir indicador desde registro ─────────────────────────────────────
@@ -1150,16 +1227,33 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
                       </button>
                     </th>
                   )}
-                  <th style={{ ...thStyle, color: cfg.color }}>
-                    TOTAL
-                    <br />
-                    <span
+                  <th style={{ ...thStyle, color: cfg.color, minWidth: 110 }}>
+                    <button
+                      onClick={openSyncModal}
+                      disabled={syncingMain || students.length === 0}
+                      title="Sobreescribe la columna correspondiente en el registro principal"
                       style={{
-                        fontSize: 11,
-                        fontWeight: 400,
-                        color: "#94a3b8",
+                        display: "block",
+                        width: "100%",
+                        marginBottom: 5,
+                        background: syncingMain ? "rgba(16,185,129,0.06)" : "rgba(16,185,129,0.13)",
+                        border: "1px solid rgba(16,185,129,0.4)",
+                        color: "#6ee7b7",
+                        borderRadius: 5,
+                        padding: "3px 6px",
+                        cursor: syncingMain || students.length === 0 ? "not-allowed" : "pointer",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        opacity: syncingMain || students.length === 0 ? 0.55 : 1,
+                        whiteSpace: "nowrap",
+                        transition: "background 0.15s",
                       }}
                     >
+                      {syncingMain ? "Cargando…" : "↑ Cargar al principal"}
+                    </button>
+                    TOTAL
+                    <br />
+                    <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8" }}>
                       ({cfg.max})
                     </span>
                   </th>
@@ -1476,6 +1570,126 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
                 }}
               >
                 {savingIndicator ? "Guardando..." : "Añadir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL CONFIRMACIÓN SYNC ─────────────────────────────────────── */}
+      {showSyncModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={() => setShowSyncModal(false)}
+        >
+          <div
+            style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, width: "100%", maxWidth: 640, maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 3 }}>
+                Cargar notas{" "}
+                <span style={{ color: cfg.color }}>{cfg.label}</span>{" "}
+                al registro principal
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>
+                Revisa los cambios y selecciona los estudiantes a actualizar.
+              </div>
+            </div>
+
+            {/* Select all / none */}
+            <div style={{ padding: "10px 22px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setSyncSelected(new Set(syncPreview.map((r) => r.student.id)))}
+                style={{ fontSize: 12, color: "#94a3b8", background: "none", border: "1px solid rgba(100,116,139,0.4)", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}
+              >
+                Seleccionar todos
+              </button>
+              <button
+                onClick={() => setSyncSelected(new Set())}
+                style={{ fontSize: 12, color: "#94a3b8", background: "none", border: "1px solid rgba(100,116,139,0.4)", borderRadius: 6, padding: "3px 10px", cursor: "pointer" }}
+              >
+                Deseleccionar todos
+              </button>
+            </div>
+
+            {/* Table */}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead style={{ position: "sticky", top: 0, background: "#0f172a", zIndex: 1 }}>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                    <th style={{ padding: "8px 12px", width: 36, textAlign: "center" }}></th>
+                    <th style={{ padding: "8px 12px", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Estudiante</th>
+                    <th style={{ padding: "8px 12px", textAlign: "center", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Anterior</th>
+                    <th style={{ padding: "8px 12px", textAlign: "center", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Actualizada</th>
+                    <th style={{ padding: "8px 12px", textAlign: "center", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Cambio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncPreview.map((row) => {
+                    const selected = syncSelected.has(row.student.id);
+                    const rowBg =
+                      !selected ? "transparent" :
+                      row.status === "new"  ? "rgba(74,222,128,0.07)" :
+                      row.status === "up"   ? "rgba(74,222,128,0.07)" :
+                      row.status === "down" ? "rgba(248,113,113,0.07)" :
+                      "transparent";
+                    const statusColor =
+                      row.status === "new"  ? "#4ade80" :
+                      row.status === "up"   ? "#4ade80" :
+                      row.status === "down" ? "#f87171" :
+                      "#64748b";
+                    const changeLabel =
+                      row.status === "new"  ? "Nueva" :
+                      row.status === "up"   ? `+${row.newAvg - row.prevVal!}` :
+                      row.status === "down" ? `${row.newAvg - row.prevVal!}` :
+                      "Sin cambio";
+                    return (
+                      <tr
+                        key={row.student.id}
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: rowBg, cursor: "pointer", opacity: selected ? 1 : 0.45 }}
+                        onClick={() => setSyncSelected((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row.student.id)) next.delete(row.student.id);
+                          else next.add(row.student.id);
+                          return next;
+                        })}
+                      >
+                        <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                          <input type="checkbox" checked={selected} readOnly style={{ accentColor: statusColor, width: 14, height: 14, cursor: "pointer" }} />
+                        </td>
+                        <td style={{ padding: "8px 12px", color: "#e2e8f0" }}>{formatName(row.student)}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "center", color: "#64748b" }}>
+                          {row.prevVal !== null ? row.prevVal : "—"}
+                        </td>
+                        <td style={{ padding: "8px 12px", textAlign: "center", color: "#fff", fontWeight: 700 }}>
+                          {row.newAvg}
+                        </td>
+                        <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                          <span style={{ color: statusColor, fontWeight: 600, fontSize: 12 }}>{changeLabel}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "14px 22px", borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                onClick={() => setShowSyncModal(false)}
+                style={{ padding: "8px 18px", background: "rgba(51,65,85,0.6)", border: "1px solid rgba(100,116,139,0.4)", color: "#cbd5e1", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmSync}
+                disabled={syncSelected.size === 0}
+                style={{ padding: "8px 18px", background: syncSelected.size === 0 ? "rgba(16,185,129,0.15)" : "rgba(16,185,129,0.8)", border: "1px solid rgba(16,185,129,0.5)", color: "#fff", borderRadius: 8, cursor: syncSelected.size === 0 ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: syncSelected.size === 0 ? 0.5 : 1 }}
+              >
+                Confirmar ({syncSelected.size})
               </button>
             </div>
           </div>

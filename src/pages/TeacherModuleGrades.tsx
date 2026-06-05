@@ -115,10 +115,12 @@ export default function TeacherModuleGrades() {
   type CentralRow = { student: StudentProfile; totals: (number | null)[]; avg: number | null };
   const [showCentralizador, setShowCentralizador] = useState(false);
   const [activeDim, setActiveDim] = useState<DimKey | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [centralizadorLoading, setCentralizadorLoading] = useState(false);
   const [centralizadorModules, setCentralizadorModules] = useState<CentralModule[]>([]);
   const [centralizadorRows, setCentralizadorRows] = useState<CentralRow[]>([]);
   const autoSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const rowsRef = useRef<StudentRow[]>([]);
 
   // Estados para el reporte PDF
   const currentMonth = new Date().getMonth() + 1;
@@ -168,15 +170,18 @@ export default function TeacherModuleGrades() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Mantener rowsRef sincronizado para acceso sin closures obsoletas
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+
   // Ref para evitar recargas al cambiar de pestaña/ventana
   const loadedModuleRef = useRef<number | null>(null);
   useEffect(() => {
     if (!session || !isTeacherish || invalidMid) return;
-    // Solo cargar si el módulo cambió o no se ha cargado aún
     if (loadedModuleRef.current === mid) return;
     loadedModuleRef.current = mid;
     loadAll();
-  }, [session, isTeacherish, mid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, isTeacherish, mid, refreshKey]);
 
   async function loadAll() {
     setLoadingData(true);
@@ -516,39 +521,60 @@ export default function TeacherModuleGrades() {
   }
 
 
-  // Auto-guardado silencioso (sin mensaje al docente)
+  // Guarda una fila usando rowsRef (sin efectos secundarios en state updaters)
   async function saveGradeQuiet(studentId: string) {
-    // Leer el estado actual desde la ref para evitar closure stale
-    setRows((prev) => {
-      const row = prev.find((r) => r.student.id === studentId);
-      if (!row) return prev;
-      const hacerProcesoFinal = row.grade.hacer_proceso ?? row.suggestedHP;
-      supabase.from("module_grades").upsert(
-        {
-          student_id: row.student.id,
-          module_id: mid,
-          ser: row.grade.ser,
-          saber: row.grade.saber,
-          hacer_proceso: hacerProcesoFinal,
-          hacer_producto: row.grade.hacer_producto,
-          decidir: row.grade.decidir,
-          auto_ser: row.grade.auto_ser,
-          auto_decidir: row.grade.auto_decidir,
-        },
-        { onConflict: "student_id,module_id" },
-      ).then(({ error }) => {
-        if (!error) {
-          setDirtyRows((prev2) => {
-            const next = new Set(prev2);
-            next.delete(studentId);
-            return next;
-          });
-          const now = new Date();
-          setSavedAt(`${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`);
-        }
-      });
-      return prev;
-    });
+    const row = rowsRef.current.find((r) => r.student.id === studentId);
+    if (!row) return;
+    const hacerProcesoFinal = row.grade.hacer_proceso ?? row.suggestedHP;
+    const { error } = await supabase.from("module_grades").upsert(
+      {
+        student_id: row.student.id,
+        module_id: mid,
+        ser: row.grade.ser,
+        saber: row.grade.saber,
+        hacer_proceso: hacerProcesoFinal,
+        hacer_producto: row.grade.hacer_producto,
+        decidir: row.grade.decidir,
+        auto_ser: row.grade.auto_ser,
+        auto_decidir: row.grade.auto_decidir,
+      },
+      { onConflict: "student_id,module_id" },
+    );
+    if (!error) {
+      setDirtyRows((prev) => { const next = new Set(prev); next.delete(studentId); return next; });
+      const now = new Date();
+      setSavedAt(`${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`);
+    }
+  }
+
+  // Vacía los timers pendientes y guarda inmediatamente antes de recargar datos
+  async function flushDirtyRows() {
+    const pendingIds = [...autoSaveTimers.current.keys()];
+    for (const timer of autoSaveTimers.current.values()) clearTimeout(timer);
+    autoSaveTimers.current.clear();
+    if (pendingIds.length === 0) return;
+    await Promise.all(
+      pendingIds.map(async (studentId) => {
+        const row = rowsRef.current.find((r) => r.student.id === studentId);
+        if (!row) return;
+        const hacerProcesoFinal = row.grade.hacer_proceso ?? row.suggestedHP;
+        await supabase.from("module_grades").upsert(
+          {
+            student_id: row.student.id,
+            module_id: mid,
+            ser: row.grade.ser,
+            saber: row.grade.saber,
+            hacer_proceso: hacerProcesoFinal,
+            hacer_producto: row.grade.hacer_producto,
+            decidir: row.grade.decidir,
+            auto_ser: row.grade.auto_ser,
+            auto_decidir: row.grade.auto_decidir,
+          },
+          { onConflict: "student_id,module_id" },
+        );
+      }),
+    );
+    setDirtyRows(new Set());
   }
 
   // Guardado global (botón "Guardar cambios")
@@ -2227,7 +2253,12 @@ export default function TeacherModuleGrades() {
           <TeacherDimensionGrades
             inlineModuleId={mid}
             inlineDimension={activeDim}
-            onClose={() => setActiveDim(null)}
+            onClose={async () => {
+              await flushDirtyRows();
+              loadedModuleRef.current = null;
+              setRefreshKey((k) => k + 1);
+              setActiveDim(null);
+            }}
           />
         </div>
       )}
