@@ -8,6 +8,7 @@ import { useRole } from "../lib/useRole";
 import logoCea from "../assets/logo-cea.png";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 import TeacherDimensionGrades from "./TeacherDimensionGrades";
 
 type DimKey = "ser" | "saber" | "hacer_proceso" | "hacer_producto" | "decidir";
@@ -633,9 +634,9 @@ export default function TeacherModuleGrades() {
   }
 
   async function generatePDF() {
-    const doc = new jsPDF({ orientation: "landscape" });
-    const pageWidth = doc.internal.pageSize.getWidth();   // 297mm (A4 landscape)
-    const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
+    const doc = new jsPDF({ orientation: "landscape", format: "letter" });
+    const pageWidth = doc.internal.pageSize.getWidth();   // 279.4mm (Letter landscape)
+    const pageHeight = doc.internal.pageSize.getHeight(); // 215.9mm
 
     // ── Logo ──────────────────────────────────────────────────────────────────
     const logoImg = new Image();
@@ -829,6 +830,31 @@ export default function TeacherModuleGrades() {
 
     const fileName = `Calificaciones_${moduleRow?.title?.replace(/\s+/g, "_") || "Modulo"}_${semester.replace("/", "-")}.pdf`;
     doc.save(fileName);
+  }
+
+  function generateExcel() {
+    const headers = ["N°", "Participante", "SER (10)", "SABER (30)", "HACER PROCESO (20)", "HACER PRODUCTO (20)", "DECIDIR (10)", "AUTOEVA SER (5)", "AUTOEVA DEC (5)", "TOTAL (100)", "OBS"];
+    const data = rows.map((row, idx) => {
+      const obs = getObservation(row.total);
+      return [
+        idx + 1,
+        formatName(row.student),
+        row.grade.ser ?? "",
+        row.grade.saber ?? "",
+        row.grade.hacer_proceso ?? row.suggestedHP,
+        row.grade.hacer_producto ?? "",
+        row.grade.decidir ?? "",
+        row.grade.auto_ser ?? "",
+        row.grade.auto_decidir ?? "",
+        row.total,
+        obs.text,
+      ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    ws["!cols"] = [8, 30, 10, 10, 14, 14, 10, 10, 10, 10, 14].map((w) => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Calificaciones");
+    XLSX.writeFile(wb, `Calificaciones_${moduleRow?.title?.replace(/\s+/g, "_") || "Modulo"}_${semester.replace("/", "-")}.xlsx`);
   }
 
   // ─── PDFs adicionales ────────────────────────────────────────────────────────
@@ -1258,7 +1284,7 @@ export default function TeacherModuleGrades() {
 
   async function generateCentralizadorPDF() {
     if (centralizadorRows.length === 0) return;
-    const doc = new jsPDF({ orientation: "portrait" });
+    const doc = new jsPDF({ orientation: "portrait", format: "letter" });
     const pageWidth  = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -1397,6 +1423,34 @@ export default function TeacherModuleGrades() {
     doc.text("(*) Calificacion minima por modulo: 20 pts.", SIDE_MARGIN, sigY + 12);
 
     doc.save(`Centralizador_${levelRow?.name?.replace(/\s+/g, "_") ?? "nivel"}_${semester.replace("/", "-")}.pdf`);
+  }
+
+  function generateCentralizadorExcel() {
+    if (centralizadorRows.length === 0) return;
+    const moduleHeaders = centralizadorModules.map((m) => m.title);
+    const headers = ["N°", "Participante", ...moduleHeaders, "PROMEDIO", "OBS"];
+    const data = centralizadorRows.map((row, idx) => {
+      const obs = row.avg !== null ? getObservation(row.avg).text : "";
+      return [
+        idx + 1,
+        formatName(row.student),
+        ...row.totals.map((t) => (t !== null ? t : "")),
+        row.avg !== null ? row.avg : "",
+        obs,
+      ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    const modW = Math.max(10, Math.floor(60 / (centralizadorModules.length || 1)));
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 30 },
+      ...centralizadorModules.map(() => ({ wch: modW })),
+      { wch: 10 },
+      { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Centralizador");
+    XLSX.writeFile(wb, `Centralizador_${levelRow?.name?.replace(/\s+/g, "_") ?? "nivel"}_${semester.replace("/", "-")}.xlsx`);
   }
 
   async function loadCentralizador() {
@@ -2044,6 +2098,16 @@ export default function TeacherModuleGrades() {
               </button>
 
               <button
+                onClick={generateExcel}
+                className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-green-900/30 flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 13H9l-1-2-1 2H5l2-3-2-3h2l1 2 1-2h2l-2 3 2 3zm5-7h-4V4.5L18 8z" />
+                </svg>
+                Descargar Excel
+              </button>
+
+              <button
                 onClick={exportDimsPdf}
                 disabled={extraPdfLoading !== null}
                 className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg font-medium transition-all duration-200 shadow-lg shadow-indigo-900/30 flex items-center gap-2"
@@ -2145,16 +2209,27 @@ export default function TeacherModuleGrades() {
             </div>
             <div className="flex items-center gap-3">
               {!centralizadorLoading && centralizadorRows.length > 0 && (
-                <button
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600/20 border border-red-500/30 hover:bg-red-600/30 text-red-300 hover:text-red-200 text-sm rounded-lg font-medium transition-all duration-200"
-                  onClick={() => void generateCentralizadorPDF()}
-                >
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
-                    <path d="M12 18l4-4h-3v-4h-2v4H8l4 4z"/>
-                  </svg>
-                  Generar PDF
-                </button>
+                <>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600/20 border border-red-500/30 hover:bg-red-600/30 text-red-300 hover:text-red-200 text-sm rounded-lg font-medium transition-all duration-200"
+                    onClick={() => void generateCentralizadorPDF()}
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                      <path d="M12 18l4-4h-3v-4h-2v4H8l4 4z"/>
+                    </svg>
+                    Generar PDF
+                  </button>
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-300 hover:text-green-200 text-sm rounded-lg font-medium transition-all duration-200"
+                    onClick={generateCentralizadorExcel}
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 13H9l-1-2-1 2H5l2-3-2-3h2l1 2 1-2h2l-2 3 2 3zm5-7h-4V4.5L18 8z"/>
+                    </svg>
+                    Generar Excel
+                  </button>
+                </>
               )}
               <button
                 className="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-colors"

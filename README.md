@@ -1,73 +1,83 @@
-# React + TypeScript + Vite
+# CEA Plataforma Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema de gestión académica para el **Centro de Educación Alternativa Madre María Oliva**. Permite a docentes registrar asistencia y calificaciones por dimensiones, y a estudiantes consultar su progreso.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | React 19 + TypeScript + Vite |
+| Estilos | Tailwind CSS v3 |
+| Backend / DB | Supabase (PostgreSQL + RLS) |
+| Enrutamiento | React Router v7 |
+| PDF | jsPDF + jspdf-autotable |
+| Excel | SheetJS (xlsx) |
 
-## React Compiler
+## Roles
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Administrador** — gestión de usuarios, carreras, niveles, módulos y contenido.
+- **Docente** — registro de asistencia, calificaciones por dimensión y generación de reportes.
+- **Estudiante** — consulta de asistencia, notas y módulos.
 
-## Expanding the ESLint configuration
+## Estructura de calificaciones
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Cada módulo usa el modelo de evaluación por competencias:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+| Dimensión | Puntos |
+|-----------|--------|
+| SER | 10 |
+| SABER | 30 |
+| HACER Proceso | 20 |
+| HACER Producto | 20 |
+| DECIDIR | 10 |
+| Autoevaluación SER | 5 |
+| Autoevaluación DECIDIR | 5 |
+| **TOTAL** | **100** |
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+SER y DECIDIR se calculan automáticamente desde la asistencia. Cada dimensión tiene un registro secundario con modo Fácil (clic para ciclar presets) o Manual (entrada libre).
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Páginas principales
+
+```
+/login
+/admin/dashboard
+/teacher/dashboard
+/teacher/modules
+/teacher/module/:id/grades          ← Registro modular principal
+/teacher/module/:id/grades/ser      ← Registro secundario (inline overlay)
+/teacher/module/:id/grades/saber
+/teacher/module/:id/grades/hacer_proceso
+/teacher/module/:id/grades/hacer_producto
+/teacher/module/:id/grades/decidir
+/teacher/module/:id/attendance
+/student/dashboard
+/student/module/:id
+/student/attendance
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Exportaciones
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Desde el registro modular y el centralizador se pueden generar:
+- **PDF** (tamaño Carta, orientación horizontal/vertical) con firmas al pie.
+- **Excel (.xlsx)** con el mismo contenido tabular.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Desarrollo local
+
+```bash
+npm install
+npm run dev
+```
+
+Requiere un proyecto Supabase con las tablas `users`, `modules`, `module_grades`, `attendance`, etc. Configura las variables de entorno en `.env`:
+
+```
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+## Build
+
+```bash
+npm run build   # tsc + vite build → dist/
+npm run preview # sirve dist/ localmente
 ```
