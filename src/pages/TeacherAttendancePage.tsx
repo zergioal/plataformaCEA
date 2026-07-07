@@ -34,6 +34,16 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   L: "L",
 };
 const DAY_LABELS = ["L", "M", "Mi", "J", "V"];
+
+function semesterDateRange(sem: string): { start: string; end: string } {
+  const [sn, sy] = sem.split("/");
+  const year = parseInt(sy ?? "2026");
+  const s = parseInt(sn ?? "1");
+  return {
+    start: s === 1 ? `${year}-01-01` : `${year}-07-01`,
+    end:   s === 1 ? `${year}-06-30` : `${year}-12-31`,
+  };
+}
 const MONTH_NAMES = [
   "Enero",
   "Febrero",
@@ -143,6 +153,10 @@ export default function TeacherAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [activeSemester, setActiveSemester] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getMonth() < 6 ? 1 : 2}/${now.getFullYear()}`;
+  });
 
   const weekdays = getWeekdays(year, month);
 
@@ -265,6 +279,18 @@ export default function TeacherAttendancePage() {
     [session, role],
   );
 
+  // Cargar semestre activo desde site_settings
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "active_semester")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value) setActiveSemester(data.value as string);
+      });
+  }, []);
+
   useEffect(() => {
     if (selectedLevel !== null) loadStudentsForLevel(selectedLevel);
   }, [selectedLevel, loadStudentsForLevel]);
@@ -300,19 +326,19 @@ export default function TeacherAttendancePage() {
     loadAttendance();
   }, [loadAttendance]);
 
-  // Cargar estadísticas históricas (todos los meses) cuando cambia la lista de estudiantes
+  // Cargar estadísticas del semestre activo cuando cambia la lista de estudiantes o el semestre
   const loadHistoricalStats = useCallback(async () => {
     if (students.length === 0) {
       setHistoricalStats(new Map());
       return;
     }
+    const { start, end } = semesterDateRange(activeSemester);
     const { data } = await supabase
       .from("attendance")
       .select("student_id,status")
-      .in(
-        "student_id",
-        students.map((s) => s.id),
-      );
+      .in("student_id", students.map((s) => s.id))
+      .gte("date", start)
+      .lte("date", end);
 
     const map: StatMap = new Map();
     for (const row of data ?? []) {
@@ -323,7 +349,7 @@ export default function TeacherAttendancePage() {
       });
     }
     setHistoricalStats(map);
-  }, [students]);
+  }, [students, activeSemester]);
 
   useEffect(() => {
     loadHistoricalStats();
@@ -847,7 +873,7 @@ export default function TeacherAttendancePage() {
         ((hist.total - hist.faltas) / hist.total) * 100,
       );
       doc.setFont("helvetica", "bold");
-      doc.text("Asistencia total (todos los meses):", 15, finalY + 28);
+      doc.text(`Asistencia semestral (${activeSemester}):`, 15, finalY + 28);
       doc.setFont("helvetica", "normal");
       doc.text(
         `Clases registradas: ${hist.total}    Faltas: ${hist.faltas}    % Asistencia: ${pctHist}%`,

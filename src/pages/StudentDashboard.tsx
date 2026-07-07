@@ -34,6 +34,10 @@ type ModuleGradeRow = {
   decidir: number | null;
   auto_ser: number | null;
   auto_decidir: number | null;
+  total_override: number | null;
+  socializacion: number | null;
+  proyecto_sistematizacion: number | null;
+  proyecto_vida: number | null;
 };
 
 type GradeHistoryRow = {
@@ -259,13 +263,25 @@ export default function StudentDashboard() {
     return typeof x === "number" && Number.isFinite(x) ? x : 0;
   }
 
-  function calcTotal(g: ModuleGradeRow, pct: number) {
+  function calcTotal(g: ModuleGradeRow, pct: number, mod: ModuleRow): number {
+    if (g.total_override !== null && g.total_override !== undefined) {
+      return g.total_override;
+    }
+    const isGrad =
+      mod.sort_order === 20 || mod.title.toLowerCase().includes("modalidad");
+    if (isGrad) {
+      return Math.min(
+        100,
+        num0(g.socializacion) +
+          num0(g.proyecto_sistematizacion) +
+          num0(g.proyecto_vida),
+      );
+    }
     const hpSuggested = Math.round((clampPct(pct) / 100) * 20);
     const hpFinal =
       g.hacer_proceso === null || g.hacer_proceso === undefined
         ? hpSuggested
         : num0(g.hacer_proceso);
-
     const raw =
       num0(g.ser) +
       num0(g.saber) +
@@ -289,13 +305,16 @@ export default function StudentDashboard() {
 
     setGradesLoadingByModule((p) => ({ ...p, [moduleId]: true }));
 
+    const autoSem = `${new Date().getMonth() < 6 ? 1 : 2}/${new Date().getFullYear()}`;
+    const sem = displaySemester ?? autoSem;
     const res = await supabase
       .from("module_grades")
       .select(
-        "student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir",
+        "student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total_override,socializacion,proyecto_sistematizacion,proyecto_vida",
       )
       .eq("student_id", session.user.id)
       .eq("module_id", moduleId)
+      .eq("semester", sem)
       .maybeSingle();
 
     setGradesLoadingByModule((p) => ({ ...p, [moduleId]: false }));
@@ -670,6 +689,18 @@ export default function StudentDashboard() {
       </header>
 
       <main className="mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
+        {/* Banner de egresado */}
+        {profile?.is_graduated && (
+          <div className="w-full max-w-4xl mx-auto bg-gradient-to-br from-amber-900/30 to-amber-800/20 border border-amber-500/30 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-lg shadow-amber-900/20">
+            <div className="text-4xl flex-shrink-0">🎓</div>
+            <div>
+              <h2 className="text-base font-bold text-white">¡Felicitaciones, egresado!</h2>
+              <p className="text-amber-300 text-sm font-medium">Has culminado exitosamente tus estudios · Técnico Medio</p>
+              <p className="text-slate-400 text-xs mt-0.5">Puedes consultar tus notas y asistencia, pero el acceso a actividades está cerrado.</p>
+            </div>
+          </div>
+        )}
+
         {/* Anuncio global */}
         {announcement && (
           <div className="w-full max-w-4xl mx-auto bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 flex items-start gap-3">
@@ -1032,19 +1063,21 @@ export default function StudentDashboard() {
                     <div className="flex gap-2">
                       <button
                         className={`flex-1 rounded-xl px-4 py-2.5 font-medium transition-all duration-200 ${
-                          unlocked
+                          unlocked && !profile?.is_graduated
                             ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-900/30"
                             : "bg-slate-800 text-slate-500 cursor-not-allowed"
                         }`}
-                        disabled={!unlocked}
+                        disabled={!unlocked || !!profile?.is_graduated}
                         onClick={() => nav(`/student/module/${m.id}`)}
                         title={
-                          !unlocked
-                            ? "Completa el módulo anterior al 70% para desbloquear"
-                            : "Entrar al módulo"
+                          profile?.is_graduated
+                            ? "Has egresado — el acceso a actividades está cerrado"
+                            : !unlocked
+                              ? "Completa el módulo anterior al 70% para desbloquear"
+                              : "Entrar al módulo"
                         }
                       >
-                        {unlocked ? "Entrar" : "🔒 Bloqueado"}
+                        {profile?.is_graduated ? "🎓 Egresado" : unlocked ? "Entrar" : "🔒 Bloqueado"}
                       </button>
 
                       {m.grades_released && (
@@ -1081,7 +1114,7 @@ export default function StudentDashboard() {
                         ) : grade ? (
                           (() => {
                             const g = grade as ModuleGradeRow;
-                            const total = Math.max(calcTotal(g, pct), 20);
+                            const total = Math.max(calcTotal(g, pct, m), 20);
                             const obs = getObservation(total);
                             return (
                               <div className="flex items-center gap-4">

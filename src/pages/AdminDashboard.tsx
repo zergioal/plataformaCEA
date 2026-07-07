@@ -303,6 +303,17 @@ const darkStyles = {
   },
 };
 
+function getSemesterOptions(): string[] {
+  const MIN_YEAR = 2026;
+  const currentYear = new Date().getFullYear();
+  const startYear = Math.max(currentYear - 1, MIN_YEAR);
+  const opts: string[] = [];
+  for (let y = startYear; y <= currentYear; y++) {
+    opts.push(`1/${y}`, `2/${y}`);
+  }
+  return opts;
+}
+
 export default function AdminDashboard() {
   const nav = useNavigate();
   const { role: authRole, profile: adminProfile } = useRole();
@@ -494,6 +505,16 @@ export default function AdminDashboard() {
   const [cfgAnnouncementActive, setCfgAnnouncementActive] = useState(false);
   const [cfgSemester, setCfgSemester] = useState("1/2026");
   const [cfgBulkSemester, setCfgBulkSemester] = useState(false);
+
+  // ── Semester management ──────────────────────────────────
+  type SemStudent = { id: string; code: string; full_name: string; career_id: number | null; current_semester: string | null };
+  const [semStudents, setSemStudents] = useState<SemStudent[]>([]);
+  const [semStudentsLoading, setSemStudentsLoading] = useState(false);
+  const [semRetireSet, setSemRetireSet] = useState<Set<string>>(new Set());
+  const [semRetireSaving, setSemRetireSaving] = useState(false);
+  const [semActionMsg, setSemActionMsg] = useState<string | null>(null);
+  const [semResetLoading, setSemResetLoading] = useState(false);
+  const [semResetMsg, setSemResetMsg] = useState<string | null>(null);
   const [configSaved, setConfigSaved] = useState<string | null>(null);
   const [cfgGallery, setCfgGallery] = useState<{src:string;alt:string}[]>([
     { src: "/images/CEA.jpeg",  alt: "Fachada del CEA Madre María Oliva" },
@@ -872,6 +893,14 @@ export default function AdminDashboard() {
     if (adminSection === "administrativos") { void loadAdminStaff(); return; }
     void loadCatalogs();
   }, [adminSection, loadAdminStaff]);
+
+  // Load active students when semestre tab opens
+  useEffect(() => {
+    if (adminSection === "config" && configTab === "semestre") {
+      void loadSemStudents();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminSection, configTab]);
 
   // Load site settings when entering config section
   useEffect(() => {
@@ -2296,12 +2325,77 @@ export default function AdminDashboard() {
     setSavingConfig(true);
     const err = await upsertSettings([{ key: "active_semester", value: cfgSemester }]);
     if (!err && cfgBulkSemester) {
-      await supabase.from("profiles").update({ current_semester: cfgSemester }).neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("profiles").update({ current_semester: cfgSemester }).eq("role", "student").eq("is_active", true);
     }
     setSavingConfig(false);
     if (err) { void showMessage("Error al guardar", err, "error"); return; }
     setConfigSaved("semestre");
     setTimeout(() => setConfigSaved(null), 2500);
+    void loadSemStudents();
+  };
+
+  const loadSemStudents = useCallback(async () => {
+    setSemStudentsLoading(true);
+    const { data } = await supabase
+      .from("profiles")
+      .select("id,code,full_name,career_id,current_semester")
+      .eq("role", "student")
+      .eq("is_active", true)
+      .order("full_name");
+    setSemStudents((data ?? []) as { id: string; code: string; full_name: string; career_id: number | null; current_semester: string | null }[]);
+    setSemRetireSet(new Set());
+    setSemStudentsLoading(false);
+  }, []);
+
+  const retireSelected = async () => {
+    if (semRetireSet.size === 0) return;
+    setSemRetireSaving(true);
+    const ids = Array.from(semRetireSet);
+    await supabase.from("profiles").update({ is_active: false }).in("id", ids);
+    setSemRetireSaving(false);
+    setSemActionMsg(`${ids.length} participante(s) marcado(s) como retirado(s).`);
+    setTimeout(() => setSemActionMsg(null), 4000);
+    void loadSemStudents();
+  };
+
+  const resetSemesterProgress = async () => {
+    if (!confirm("¿Limpiar el avance de contenidos y los intentos de quiz de todos los participantes activos?\n\nEsto NO borra las calificaciones — solo reinicia qué lecciones han completado y los intentos de evaluación, para que empiecen el nuevo semestre desde cero.")) return;
+    setSemResetLoading(true);
+    setSemResetMsg(null);
+    try {
+      const { data: students } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("role", "student")
+        .eq("is_active", true)
+        .eq("is_graduated", false);
+      if (!students || students.length === 0) {
+        setSemResetMsg("No hay participantes activos.");
+        setSemResetLoading(false);
+        return;
+      }
+      const studentIds = students.map((s: { id: string }) => s.id);
+      // La Edge Function usa SERVICE_ROLE_KEY para bypasear RLS
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession) throw new Error("Sesión no válida");
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-student-progress`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${currentSession.access_token}`,
+          },
+          body: JSON.stringify({ student_ids: studentIds }),
+        },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      setSemResetMsg(`✅ Avance y quizzes reiniciados para ${studentIds.length} participante(s).`);
+    } catch (err) {
+      setSemResetMsg(`❌ Error: ${err}`);
+    }
+    setSemResetLoading(false);
+    setTimeout(() => setSemResetMsg(null), 6000);
   };
 
   const saveGallery = async () => {
@@ -4483,33 +4577,161 @@ export default function AdminDashboard() {
             )}
 
             {configTab === "semestre" && (
-              <div style={{ display: "grid", gap: "16px" }}>
+              <div style={{ display: "grid", gap: "20px" }}>
+
+                {/* ── Abrir nuevo semestre ── */}
                 <div style={{ ...darkStyles.card, padding: "28px" }}>
-                  <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "6px" }}>Semestre Activo</h3>
-                  <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px" }}>Define el período académico actual. Los nuevos registros usarán este semestre automáticamente.</p>
-                  <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-                    <div>
-                      <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Período (ej: 1/2026)</label>
-                      <input value={cfgSemester} onChange={e => setCfgSemester(e.target.value)} placeholder="1/2026" style={{ ...darkStyles.input, width: "160px" }} />
+                  <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>Abrir nuevo semestre</h3>
+                  <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "20px" }}>Cambia el período académico global. Los nuevos registros de calificaciones usarán este semestre automáticamente.</p>
+                  <div>
+                    <label style={{ display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Selecciona el período activo</label>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      {getSemesterOptions().map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setCfgSemester(opt)}
+                          style={{
+                            padding: "10px 22px",
+                            borderRadius: "999px",
+                            fontSize: "15px",
+                            fontWeight: "700",
+                            cursor: "pointer",
+                            transition: "all 0.15s",
+                            border: cfgSemester === opt ? "2px solid #22c55e" : "2px solid #475569",
+                            background: cfgSemester === opt ? "rgba(34,197,94,0.15)" : "rgba(30,41,59,0.6)",
+                            color: cfgSemester === opt ? "#4ade80" : "#94a3b8",
+                          }}
+                        >
+                          {opt}
+                        </button>
+                      ))}
                     </div>
+                    <p style={{ marginTop: "8px", fontSize: "12px", color: "#4ade80" }}>
+                      Semestre seleccionado: <strong>{cfgSemester}</strong>
+                    </p>
                   </div>
                   <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "10px" }}>
                     <button onClick={() => setCfgBulkSemester(v => !v)} style={{ width: "42px", height: "24px", borderRadius: "12px", background: cfgBulkSemester ? "#f59e0b" : "#374151", border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
                       <span style={{ position: "absolute", top: "3px", left: cfgBulkSemester ? "21px" : "3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
                     </button>
-                    <span style={{ color: cfgBulkSemester ? "#fbbf24" : "#94a3b8", fontSize: "13px" }}>Actualizar semestre en todos los perfiles de usuario</span>
+                    <span style={{ color: cfgBulkSemester ? "#fbbf24" : "#94a3b8", fontSize: "13px" }}>Propagar semestre a todos los participantes activos</span>
                   </div>
                   {cfgBulkSemester && (
                     <div style={{ marginTop: "10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: "10px", padding: "12px 16px", fontSize: "13px", color: "#fbbf24" }}>
-                      ⚠ Esto actualizará el semestre activo en los perfiles de <strong>todos los usuarios</strong> de la plataforma.
+                      ⚠ Actualizará el semestre en los perfiles de todos los participantes activos. Los retirados no se ven afectados.
                     </div>
                   )}
                   <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
                     <button onClick={saveSemester} disabled={savingConfig} style={{ ...darkStyles.btnPrimary, opacity: savingConfig ? 0.6 : 1 }}>
-                      {savingConfig ? "Guardando..." : "Guardar semestre"}
+                      {savingConfig ? "Guardando..." : "Abrir nuevo semestre"}
                     </button>
                     {configSaved === "semestre" && <span style={{ color: "#4ade80", fontSize: "13px" }}>✓ Guardado</span>}
                   </div>
+                </div>
+
+                {/* ── Registrar retiros ── */}
+                <div style={{ ...darkStyles.card, padding: "28px" }}>
+                  <h3 style={{ fontSize: "17px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>Registrar retiros</h3>
+                  <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>
+                    Selecciona los participantes que no continuarán en el próximo semestre. Se marcarán como inactivos y dejarán de aparecer en los registros del docente. Sus calificaciones se conservan.
+                  </p>
+
+                  {semActionMsg && (
+                    <div style={{ marginBottom: "14px", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#4ade80" }}>
+                      ✓ {semActionMsg}
+                    </div>
+                  )}
+
+                  {semStudentsLoading ? (
+                    <div style={{ color: "#64748b", fontSize: "13px", padding: "16px 0" }}>Cargando participantes activos...</div>
+                  ) : semStudents.length === 0 ? (
+                    <div style={{ color: "#64748b", fontSize: "13px", padding: "16px 0" }}>No hay participantes activos.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                        <button
+                          onClick={() => setSemRetireSet(semRetireSet.size === semStudents.length ? new Set() : new Set(semStudents.map(s => s.id)))}
+                          style={{ ...darkStyles.btnSecondary, fontSize: "12px", padding: "6px 14px" }}
+                        >
+                          {semRetireSet.size === semStudents.length ? "Deseleccionar todos" : "Seleccionar todos"}
+                        </button>
+                        <span style={{ color: "#64748b", fontSize: "12px" }}>{semStudents.length} activos · {semRetireSet.size} seleccionados</span>
+                      </div>
+
+                      <div style={{ maxHeight: "340px", overflowY: "auto", border: "1px solid rgba(71,85,105,0.4)", borderRadius: "10px" }}>
+                        {semStudents.map((s, i) => (
+                          <div
+                            key={s.id}
+                            onClick={() => setSemRetireSet(prev => {
+                              const next = new Set(prev);
+                              next.has(s.id) ? next.delete(s.id) : next.add(s.id);
+                              return next;
+                            })}
+                            style={{
+                              display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px",
+                              borderBottom: i < semStudents.length - 1 ? "1px solid rgba(71,85,105,0.25)" : "none",
+                              cursor: "pointer",
+                              background: semRetireSet.has(s.id) ? "rgba(239,68,68,0.08)" : "transparent",
+                              transition: "background 0.15s"
+                            }}
+                          >
+                            <div style={{
+                              width: "18px", height: "18px", borderRadius: "4px", flexShrink: 0,
+                              background: semRetireSet.has(s.id) ? "#ef4444" : "transparent",
+                              border: `2px solid ${semRetireSet.has(s.id) ? "#ef4444" : "#475569"}`,
+                              display: "flex", alignItems: "center", justifyContent: "center"
+                            }}>
+                              {semRetireSet.has(s.id) && <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><polyline points="2,6 5,9 10,3"/></svg>}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: "500" }}>{s.full_name}</span>
+                              {s.code && <span style={{ color: "#64748b", fontSize: "12px", marginLeft: "8px" }}>#{s.code}</span>}
+                            </div>
+                            {s.current_semester && (
+                              <span style={{ color: "#64748b", fontSize: "11px", background: "rgba(71,85,105,0.3)", padding: "2px 8px", borderRadius: "999px" }}>
+                                Sem. {s.current_semester}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                        <button
+                          onClick={retireSelected}
+                          disabled={semRetireSet.size === 0 || semRetireSaving}
+                          style={{
+                            ...darkStyles.btnPrimary,
+                            background: semRetireSet.size > 0 ? "rgba(239,68,68,0.2)" : undefined,
+                            border: semRetireSet.size > 0 ? "1px solid rgba(239,68,68,0.5)" : undefined,
+                            color: semRetireSet.size > 0 ? "#f87171" : undefined,
+                            opacity: (semRetireSet.size === 0 || semRetireSaving) ? 0.5 : 1
+                          }}
+                        >
+                          {semRetireSaving ? "Procesando..." : `Retirar ${semRetireSet.size > 0 ? `(${semRetireSet.size})` : ""} seleccionados`}
+                        </button>
+                        <span style={{ color: "#64748b", fontSize: "12px" }}>Se pueden reactivar desde la sección Participantes.</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div style={{ ...darkStyles.card, padding: "24px" }}>
+                  <h4 style={{ fontSize: "15px", fontWeight: "600", color: "#fff", marginBottom: "8px" }}>Limpiar avance de contenidos</h4>
+                  <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>
+                    Reinicia el progreso de lecciones de todos los participantes activos en su nivel actual, sin borrar calificaciones.
+                    Úsalo justo después de ascender participantes y abrir el nuevo semestre.
+                  </p>
+                  <button
+                    onClick={resetSemesterProgress}
+                    disabled={semResetLoading}
+                    style={{ ...darkStyles.btnSecondary, opacity: semResetLoading ? 0.6 : 1, display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    {semResetLoading ? "Procesando..." : "🔄 Limpiar avance de contenidos"}
+                  </button>
+                  {semResetMsg && (
+                    <p style={{ marginTop: "12px", fontSize: "13px", color: semResetMsg.startsWith("✅") ? "#34d399" : "#f87171" }}>{semResetMsg}</p>
+                  )}
                 </div>
 
                 <div style={{ ...darkStyles.card, padding: "24px" }}>

@@ -26,6 +26,7 @@ type ProfileRow = {
   is_board_member: boolean;
   admin_type: string | null;
   academic_degree: string | null;
+  is_graduated: boolean;
 };
 
 // Cache key
@@ -95,7 +96,7 @@ export function useRole() {
       const { data: p, error } = await supabase
         .from("profiles")
         .select(
-          "id,role,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,shift,career_id,rudeal_number,carnet_number,gender,birth_date,current_semester,is_board_member,admin_type,academic_degree"
+          "id,role,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,likes,avatar_key,shift,career_id,rudeal_number,carnet_number,gender,birth_date,current_semester,is_board_member,admin_type,academic_degree,is_graduated"
         )
         .eq("id", s.user.id)
         .single();

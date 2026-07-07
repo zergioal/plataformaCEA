@@ -36,6 +36,16 @@ function formatName(s: StudentRow): string {
   return surnames ? `${surnames}, ${names}` : names;
 }
 
+function semesterDateRange(sem: string): { start: string; end: string } {
+  const [sn, sy] = sem.split("/");
+  const year = parseInt(sy ?? "2026");
+  const s = parseInt(sn ?? "1");
+  return {
+    start: s === 1 ? `${year}-01-01` : `${year}-07-01`,
+    end:   s === 1 ? `${year}-06-30` : `${year}-12-31`,
+  };
+}
+
 type ActivityCol = {
   section_id: number;
   title: string;
@@ -158,6 +168,10 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
   const [savingCell, setSavingCell] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [activeSemester, setActiveSemester] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getMonth() < 6 ? 1 : 2}/${now.getFullYear()}`;
+  });
 
   const [lessonsList, setLessonsList] = useState<
     { id: number; title: string }[]
@@ -173,7 +187,19 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
   const [syncPreview, setSyncPreview] = useState<SyncPreviewRow[]>([]);
   const [syncSelected, setSyncSelected] = useState<Set<string>>(new Set());
 
-  const loadKey = `${mid}-${dim}`;
+  // Cargar semestre activo desde site_settings
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "active_semester")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value) setActiveSemester(data.value as string);
+      });
+  }, []);
+
+  const loadKey = `${mid}-${dim}-${activeSemester}`;
   useEffect(() => {
     if (!session || !isTeacherish || invalid) return;
     if (loadedKeyRef.current === loadKey) return;
@@ -253,11 +279,14 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       .order("last_name_mat")
       .order("first_names");
 
-    // Asistencia de cada estudiante (para SER/DECIDIR auto)
+    // Asistencia del semestre activo (para SER/DECIDIR auto)
+    const { start: attStart, end: attEnd } = semesterDateRange(activeSemester);
     const { data: attendRows } = await supabase
       .from("attendance")
       .select("student_id, status")
-      .in("student_id", studentIds);
+      .in("student_id", studentIds)
+      .gte("date", attStart)
+      .lte("date", attEnd);
 
     const attendMap = new Map<string, { total: number; present: number }>();
     for (const sid of studentIds) attendMap.set(sid, { total: 0, present: 0 });

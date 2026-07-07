@@ -1,5 +1,5 @@
 // cea-plataforma/web/src/pages/Login.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useRole } from "../lib/useRole";
@@ -56,6 +56,9 @@ export default function Login() {
   const [remainingTime, setRemainingTime] = useState(0);
   const [inactiveAccount, setInactiveAccount] = useState(false);
 
+  // Evita que el useEffect de sesión navegue mientras onSubmit verifica is_active
+  const isLoggingIn = useRef(false);
+
   // Timer para countdown de bloqueo local
   useEffect(() => {
     if (!localLockout) return;
@@ -74,13 +77,16 @@ export default function Login() {
     return () => clearInterval(interval);
   }, [localLockout]);
 
+  // Solo redirige si no estamos en medio de un login activo (evita race condition
+  // entre SIGNED_IN → setSession y el signOut de cuentas inactivas en onSubmit)
   useEffect(() => {
-    if (!loading && session) nav("/app", { replace: true });
+    if (!loading && session && !isLoggingIn.current) nav("/app", { replace: true });
   }, [loading, session, nav]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
+    isLoggingIn.current = true;
 
     const email = toEmail(user);
     if (!email || !pass) {
@@ -191,22 +197,24 @@ export default function Login() {
       // Ignorar errores al registrar login exitoso
     }
 
-    // Verificar si el usuario está activo
+    // Verificar si el usuario está activo o es egresado
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session?.user?.id) {
         const { data: profileData } = await supabase
           .from("profiles")
-          .select("is_active, role")
+          .select("is_active, is_graduated, role")
           .eq("id", sessionData.session.user.id)
           .single();
 
-        // Solo verificar is_active para estudiantes
+        // Bloquear solo estudiantes inactivos que NO hayan egresado.
+        // Los egresados (is_graduated=true) pasan normalmente al StudentDashboard,
+        // que ya muestra su pantalla de felicitaciones.
         if (
           profileData?.role === "student" &&
-          profileData?.is_active === false
+          profileData?.is_active === false &&
+          !profileData?.is_graduated
         ) {
-          // Cerrar sesión inmediatamente
           await supabase.auth.signOut({ scope: "local" });
           setSending(false);
           setInactiveAccount(true);

@@ -1,7 +1,7 @@
 // cea-plataforma/web/src/pages/TeacherDashboard.tsx
 // 🎨 PARTE 1: Dashboard oscuro + Modales funcionando + Nueva estructura de tabla
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
@@ -70,6 +70,7 @@ type Student = {
   current_semester?: string | null;
   last_seen_at?: string | null;
   is_board_member?: boolean;
+  is_graduated?: boolean;
 };
 
 type AvatarItem = { key: string; label: string; url: string };
@@ -309,8 +310,10 @@ export default function TeacherDashboard() {
   const [obsTemplates, setObsTemplates] = useState<string[]>([]);
   const [newTemplate, setNewTemplate] = useState("");
 
-  // Estado para mostrar estudiantes inactivos
-  const [showInactiveStudents, setShowInactiveStudents] = useState(false);
+  // Estado para filtro de estudiantes (activos / inactivos / egresados)
+  const [studentFilter, setStudentFilter] = useState<"activos" | "inactivos" | "egresados">("activos");
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [isAscendingAll, setIsAscendingAll] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
 
   // Estado para estadísticas de asistencia
@@ -327,6 +330,18 @@ export default function TeacherDashboard() {
     const s = now.getMonth() < 6 ? 1 : 2;
     return `${s}/${now.getFullYear()}`;
   }
+  function getSemesterOptions(): string[] {
+    const MIN_YEAR = 2026;
+    const currentYear = new Date().getFullYear();
+    const startYear = Math.max(currentYear - 1, MIN_YEAR);
+    const opts: string[] = [];
+    for (let y = startYear; y <= currentYear; y++) {
+      opts.push(`1/${y}`, `2/${y}`);
+    }
+    return opts;
+  }
+  const [adminSemester, setAdminSemester] = useState<string>(computeCurrentSemester);
+  const adminSemesterRef = useRef<string>(computeCurrentSemester());
   const [viewSemester, setViewSemester] = useState<string>(
     computeCurrentSemester,
   );
@@ -456,11 +471,20 @@ export default function TeacherDashboard() {
 
         const loadedLevels = (levelsData as Level[]) ?? [];
         setLevels(loadedLevels);
+        const { data: semRow } = await supabase
+          .from("site_settings")
+          .select("value")
+          .eq("key", "active_semester")
+          .maybeSingle();
+        const activeSem = (semRow?.value as string | null) ?? computeCurrentSemester();
+        setViewSemester(activeSem);
+        setAdminSemester(activeSem);
+        adminSemesterRef.current = activeSem;
         await loadStudents(
           prof.career_id,
           prof.shift,
           loadedLevels,
-          computeCurrentSemester(),
+          activeSem,
         );
       }
 
@@ -471,19 +495,45 @@ export default function TeacherDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, isTeacherish, initialLoadDone, dashView]);
 
-  // Anuncio global (se carga una vez al montar)
+  // Anuncio global + semestre activo (se carga una vez al montar)
   useEffect(() => {
     supabase
       .from("site_settings")
       .select("key,value")
-      .in("key", ["announcement_text", "announcement_active"])
+      .in("key", ["announcement_text", "announcement_active", "active_semester"])
       .then(({ data }) => {
         if (!data) return;
         const map = Object.fromEntries(data.map((r: { key: string; value: string | null }) => [r.key, r.value ?? ""]));
         if (map["announcement_active"] === "true" && map["announcement_text"]) {
           setAnnouncement(map["announcement_text"]);
         }
+        if (map["active_semester"]) {
+          setViewSemester(map["active_semester"]);
+          setAdminSemester(map["active_semester"]);
+          adminSemesterRef.current = map["active_semester"];
+        }
       });
+  }, []);
+
+  // Suscripción Realtime: actualiza adminSemester cuando el admin cambia el semestre activo
+  useEffect(() => {
+    const channel = supabase
+      .channel("teacher-admin-semester-sync")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "site_settings", filter: "key=eq.active_semester" },
+        (payload) => {
+          const newSem = (payload.new as { value?: string }).value;
+          if (!newSem) return;
+          const oldAdminSem = adminSemesterRef.current;
+          adminSemesterRef.current = newSem;
+          setAdminSemester(newSem);
+          // Si el docente estaba viendo el semestre admin anterior, cambia automáticamente
+          setViewSemester((prev) => (prev === oldAdminSem ? newSem : prev));
+        },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, []);
 
   // Cargar perfil inmediatamente al entrar (independiente de dashView)
@@ -564,7 +614,7 @@ export default function TeacherDashboard() {
     const { data: studentsData, error: studentsError } = await supabase
       .from("profiles")
       .select(
-        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester,last_seen_at,is_board_member",
+        "id,code,full_name,first_names,last_name_pat,last_name_mat,phone,contact_email,career_id,shift,rudeal_number,carnet_number,gender,birth_date,is_active,current_semester,last_seen_at,is_board_member,is_graduated",
       )
       .eq("role", "student")
       .eq("career_id", careerId)
@@ -614,50 +664,45 @@ export default function TeacherDashboard() {
 
       // Verificar si puede ascender: debe completar TODOS los 5 módulos del nivel
       let canAscend = false;
-      if (levelId && levelInfo && levelInfo.sort_order < 4) {
+      if (levelId && levelInfo) {
         const { data: modulesInLevel } = await supabase
           .from("modules")
-          .select("id")
+          .select("id,sort_order,title")
           .eq("level_id", levelId);
 
-        const moduleIds = (modulesInLevel ?? []).map((m: any) => m.id);
+        const mods = (modulesInLevel ?? []) as { id: number; sort_order: number; title: string }[];
+        const moduleIds = mods.map((m) => m.id);
+        const modMap = new Map(mods.map((m) => [m.id, m]));
 
         if (moduleIds.length > 0) {
+          const sem = semesterFilter ?? computeCurrentSemester();
           const { data: grades } = await supabase
             .from("module_grades")
             .select(
-              "module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir",
+              "module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total_override,socializacion,proyecto_sistematizacion,proyecto_vida",
             )
             .eq("student_id", s.id)
+            .eq("semester", sem)
             .in("module_id", moduleIds);
 
-          // Verificar que tenga TODAS las notas completadas Y aprobadas (>= 51)
-          const completedAndPassedModules = (grades ?? []).filter((g: any) => {
-            const allFieldsFilled =
-              g.ser !== null &&
-              g.saber !== null &&
-              g.hacer_proceso !== null &&
-              g.hacer_producto !== null &&
-              g.decidir !== null &&
-              g.auto_ser !== null &&
-              g.auto_decidir !== null;
-
-            if (!allFieldsFilled) return false;
-
-            const total =
-              (g.ser || 0) +
-              (g.saber || 0) +
-              (g.hacer_proceso || 0) +
-              (g.hacer_producto || 0) +
-              (g.decidir || 0) +
-              (g.auto_ser || 0) +
-              (g.auto_decidir || 0);
-
+          const passedModules = (grades ?? []).filter((g: any) => {
+            const mod = modMap.get(g.module_id);
+            if (!mod) return false;
+            let total: number;
+            if (g.total_override !== null && g.total_override !== undefined) {
+              total = g.total_override;
+            } else {
+              const isGrad = mod.sort_order === 20 || mod.title.toLowerCase().includes("modalidad");
+              if (isGrad) {
+                total = Math.min(100, (g.socializacion ?? 0) + (g.proyecto_sistematizacion ?? 0) + (g.proyecto_vida ?? 0));
+              } else {
+                total = Math.max((g.ser ?? 0) + (g.saber ?? 0) + (g.hacer_proceso ?? 0) + (g.hacer_producto ?? 0) + (g.decidir ?? 0) + (g.auto_ser ?? 0) + (g.auto_decidir ?? 0), 20);
+              }
+            }
             return total >= 51;
           }).length;
 
-          // Solo puede ascender si completó Y aprobó TODOS los módulos (normalmente 5)
-          canAscend = completedAndPassedModules >= moduleIds.length;
+          canAscend = passedModules >= moduleIds.length;
         }
       }
 
@@ -667,7 +712,8 @@ export default function TeacherDashboard() {
         level_name: levelInfo?.name ?? null,
         level_sort_order: levelInfo?.sort_order ?? null,
         can_ascend: canAscend,
-        is_active: s.is_active !== false, // Por defecto activo si es null/undefined
+        is_active: s.is_active !== false,
+        is_graduated: s.is_graduated === true,
       });
     }
 
@@ -725,11 +771,13 @@ export default function TeacherDashboard() {
   useEffect(() => {
     let filtered = students;
 
-    // Filtro por activos/inactivos
-    if (showInactiveStudents) {
-      filtered = filtered.filter((s) => s.is_active === false);
+    // Filtro por estado
+    if (studentFilter === "inactivos") {
+      filtered = filtered.filter((s) => s.is_active === false && !s.is_graduated);
+    } else if (studentFilter === "egresados") {
+      filtered = filtered.filter((s) => s.is_graduated === true);
     } else {
-      filtered = filtered.filter((s) => s.is_active !== false);
+      filtered = filtered.filter((s) => s.is_active !== false && !s.is_graduated);
     }
 
     // Filtro por nivel
@@ -804,7 +852,7 @@ export default function TeacherDashboard() {
     sortOrder,
     sortColumn,
     students,
-    showInactiveStudents,
+    studentFilter,
   ]);
 
   async function saveProfile() {
@@ -1022,7 +1070,7 @@ export default function TeacherDashboard() {
       setAddBirthDate("");
       setAddingStudent(false);
 
-      await loadStudents(profileData.career_id, profileData.shift, levels);
+      await loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
     } catch (error) {
       setMsg(`Error: ${error}`);
       setAddingStudent(false);
@@ -1176,7 +1224,7 @@ export default function TeacherDashboard() {
       );
 
       // Recargar la lista de estudiantes
-      await loadStudents(profileData.career_id, profileData.shift, levels);
+      await loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
     } catch (error) {
       setMsg(`Error: ${error}`);
       setEditingStudentData(false);
@@ -1241,59 +1289,6 @@ export default function TeacherDashboard() {
     }
   }
 
-  async function handleDeleteStudent(studentId: string, studentCode: string) {
-    if (
-      !confirm(`¿Eliminar a ${studentCode}? Esta acción no se puede deshacer.`)
-    ) {
-      return;
-    }
-
-    if (!profileData?.career_id || !profileData?.shift) {
-      setMsg("Error: No se pudo obtener datos del docente");
-      return;
-    }
-
-    try {
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-      if (!currentSession) {
-        setMsg("Error: Sesión no válida");
-        return;
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${currentSession.access_token}`,
-          },
-          body: JSON.stringify({
-            user_id: studentId,
-          }),
-        },
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        setMsg(`Error: ${result.error || "Error desconocido"}`);
-        return;
-      }
-
-      await loadStudents(profileData.career_id, profileData.shift, levels);
-      await showMessage(
-        "✅ Estudiante eliminado",
-        `El estudiante ${studentCode} ha sido eliminado correctamente.`,
-        "success",
-      );
-    } catch (error) {
-      setMsg(`Error: ${error}`);
-    }
-  }
-
   async function handleToggleActive(
     studentId: string,
     studentName: string,
@@ -1333,7 +1328,7 @@ export default function TeacherDashboard() {
         return;
       }
 
-      await loadStudents(profileData.career_id, profileData.shift, levels);
+      await loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
       await showMessage(
         newStatus ? "✅ Estudiante activado" : "✅ Estudiante desactivado",
         newStatus
@@ -1348,53 +1343,111 @@ export default function TeacherDashboard() {
     }
   }
 
-  async function handleAscend(
-    studentId: string,
-    currentLevelSortOrder: number | null,
-  ) {
-    if (currentLevelSortOrder === null) {
-      setMsg("Error: El estudiante no tiene nivel asignado");
+  async function handleAscendAll() {
+    const eligible = filteredStudents.filter((s) => s.can_ascend && !s.is_graduated);
+    if (eligible.length === 0) {
+      setMsg("Ningún participante activo cumple los requisitos para ascender en este semestre");
       return;
     }
-
-    if (currentLevelSortOrder >= 4) {
-      setMsg("El estudiante ya está en el nivel máximo (Técnico Medio 2)");
-      return;
+    if (!profileData?.career_id || !profileData?.shift) return;
+    const maxOrder = levels.length > 0 ? Math.max(...levels.map((l) => l.sort_order)) : 4;
+    const toGraduate = eligible.filter((s) => (s.level_sort_order ?? 0) >= maxOrder);
+    const toAscend = eligible.filter((s) => (s.level_sort_order ?? 0) < maxOrder);
+    const reproved = filteredStudents.filter((s) => !s.can_ascend && s.is_active && !s.is_graduated);
+    const lines: string[] = [];
+    if (toAscend.length) lines.push(`• ${toAscend.length} participante(s) ascenderán al siguiente nivel`);
+    if (toGraduate.length) lines.push(`• ${toGraduate.length} participante(s) serán marcados como egresados`);
+    if (reproved.length) lines.push(`• ${reproved.length} participante(s) reprobado(s): se reiniciará su avance de actividades`);
+    if (!confirm(`Acción para ${eligible.length} participante(s) aprobado(s):\n\n${lines.join("\n")}\n\n¿Continuar?`)) return;
+    setIsAscendingAll(true);
+    let graduated = 0, ascended = 0;
+    for (const s of toGraduate) {
+      await supabase.from("profiles").update({ is_graduated: true, is_active: false }).eq("id", s.id);
+      graduated++;
     }
-
-    const nextLevelSortOrder = currentLevelSortOrder + 1;
-    const nextLevel = levels.find((l) => l.sort_order === nextLevelSortOrder);
-
-    if (!nextLevel) {
-      setMsg("Error: No se encontró el siguiente nivel");
-      return;
-    }
-
-    if (!confirm(`¿Ascender al estudiante a ${nextLevel.name}?`)) {
-      return;
-    }
-
-    if (!profileData?.career_id || !profileData?.shift) {
-      setMsg("Error: No se pudo obtener datos del docente");
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("enrollments")
-        .update({ level_id: nextLevel.id })
-        .eq("student_id", studentId);
-
-      if (error) {
-        setMsg(`Error: ${error.message}`);
-        return;
+    for (const s of toAscend) {
+      const nextLevel = levels.find((l) => l.sort_order === (s.level_sort_order ?? 0) + 1);
+      if (nextLevel) {
+        await supabase.from("enrollments").update({ level_id: nextLevel.id }).eq("student_id", s.id);
+        ascended++;
       }
-
-      setMsg("✅ Estudiante ascendido exitosamente");
-      await loadStudents(profileData.career_id, profileData.shift, levels);
-    } catch (error) {
-      setMsg(`Error: ${error}`);
     }
+    // Reiniciar avance (section_progress, lesson_progress, quiz_attempts) para reprobados
+    // Se usa la Edge Function porque el anon key no puede borrar registros de otros usuarios (RLS)
+    if (reproved.length > 0) {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (currentSession) {
+        await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-student-progress`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${currentSession.access_token}`,
+            },
+            body: JSON.stringify({ student_ids: reproved.map((s) => s.id) }),
+          },
+        );
+      }
+    }
+    setIsAscendingAll(false);
+    const parts: string[] = [];
+    if (ascended) parts.push(`✅ ${ascended} ascendido(s)`);
+    if (graduated) parts.push(`🎓 ${graduated} egresado(s)`);
+    if (reproved.length) parts.push(`🔄 ${reproved.length} reprobado(s) reiniciado(s)`);
+    setMsg(parts.join(" · "));
+    setSelectedStudents(new Set());
+    await loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
+  }
+
+  function getSelectedNames(ids: string[]): string[] {
+    return ids.map((id) => {
+      const s = filteredStudents.find((x) => x.id === id);
+      return s?.full_name ?? s?.code ?? id;
+    });
+  }
+
+  async function handleBulkDeactivate() {
+    if (selectedStudents.size === 0) return;
+    const ids = Array.from(selectedStudents);
+    const names = getSelectedNames(ids);
+    if (!confirm(`¿Desactivar a los siguientes participantes?\n\n${names.join("\n")}\n\nNo podrán acceder al sistema.`)) return;
+    if (!profileData?.career_id || !profileData?.shift) return;
+    setTogglingActive(true);
+    await supabase.from("profiles").update({ is_active: false }).in("id", ids);
+    setTogglingActive(false);
+    setSelectedStudents(new Set());
+    setMsg(`✅ Desactivados: ${names.join(", ")}`);
+    await loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
+  }
+
+  async function handleBulkDelete() {
+    if (selectedStudents.size === 0) return;
+    const ids = Array.from(selectedStudents);
+    const names = getSelectedNames(ids);
+    if (!confirm(`¿ELIMINAR permanentemente a los siguientes participantes? Esta acción NO se puede deshacer.\n\n${names.join("\n")}`)) return;
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (!currentSession) { setMsg("Error: Sesión no válida"); return; }
+    const failed: string[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentSession.access_token}` },
+          body: JSON.stringify({ user_id: ids[i] }),
+        },
+      );
+      if (!res.ok) failed.push(names[i]);
+    }
+    setSelectedStudents(new Set());
+    if (failed.length > 0) {
+      setMsg(`❌ No se pudieron eliminar: ${failed.join(", ")}`);
+    } else {
+      setMsg(`✅ Eliminados: ${names.join(", ")}`);
+    }
+    if (profileData?.career_id && profileData?.shift)
+      await loadStudents(profileData.career_id, profileData.shift, levels, viewSemester);
   }
 
   // Función para generar nombre VCF normalizado (sin tildes, espacios como _)
@@ -2491,12 +2544,16 @@ export default function TeacherDashboard() {
             {/* Widget de Semestre */}
             <section className="bg-slate-900/60 rounded-2xl border border-slate-700/50 p-4 shadow-lg">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-slate-400 text-sm font-medium">
-                    Semestre activo:
+                    Vista de semestre:
                   </span>
                   <button
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300 font-bold transition-all"
+                    className={`flex items-center gap-2 px-4 py-2 border rounded-xl font-bold transition-all ${
+                      viewSemester === adminSemester
+                        ? "bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/40 text-emerald-300"
+                        : "bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300"
+                    }`}
                     onClick={() => {
                       setSemesterInput(viewSemester);
                       setShowSemesterModal(true);
@@ -2504,24 +2561,33 @@ export default function TeacherDashboard() {
                     title="Cambiar semestre visualizado"
                   >
                     📅 {viewSemester}
-                    {viewSemester !== computeCurrentSemester() && (
+                    {viewSemester !== adminSemester && (
                       <span className="ml-1 px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-full">
                         Vista histórica
                       </span>
                     )}
                   </button>
-                  {viewSemester !== computeCurrentSemester() && (
+                  {viewSemester !== adminSemester && (
                     <button
-                      className="text-xs text-slate-400 hover:text-white underline transition-colors"
-                      onClick={() => setViewSemester(computeCurrentSemester())}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 underline transition-colors"
+                      onClick={async () => {
+                        setViewSemester(adminSemester);
+                        if (profileData?.career_id && profileData?.shift)
+                          await loadStudents(profileData.career_id, profileData.shift, levels, adminSemester);
+                      }}
                     >
-                      Volver al actual
+                      ↩ Volver al activo ({adminSemester})
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-slate-500">
-                  Haz clic en el semestre para cambiar la vista
-                </p>
+                {viewSemester === adminSemester ? (
+                  <p className="text-xs text-emerald-500/80">✓ Mostrando el semestre activo</p>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Semestre activo (admin):{" "}
+                    <span className="text-emerald-400 font-medium">{adminSemester}</span>
+                  </p>
+                )}
               </div>
             </section>
 
@@ -2671,24 +2737,30 @@ export default function TeacherDashboard() {
                   >
                     📋 <span className="hidden sm:inline">Asistencia</span>
                   </button>
+                  {(["activos", "inactivos", "egresados"] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base capitalize ${
+                        studentFilter === f
+                          ? f === "activos"
+                            ? "bg-gradient-to-r from-emerald-700 to-emerald-800 text-white shadow-lg"
+                            : f === "inactivos"
+                              ? "bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-lg"
+                              : "bg-gradient-to-r from-violet-600 to-violet-700 text-white shadow-lg"
+                          : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                      }`}
+                      onClick={() => { setStudentFilter(f); setSelectedStudents(new Set()); }}
+                    >
+                      {f === "activos" ? "👥 Activos" : f === "inactivos" ? "👤 Inactivos" : "🎓 Egresados"}
+                    </button>
+                  ))}
                   <button
-                    className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base ${
-                      showInactiveStudents
-                        ? "bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-lg shadow-amber-900/30"
-                        : "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
-                    }`}
-                    onClick={() =>
-                      setShowInactiveStudents(!showInactiveStudents)
-                    }
-                    title={
-                      showInactiveStudents
-                        ? "Ver estudiantes activos"
-                        : "Ver estudiantes inactivos"
-                    }
+                    className={`w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-medium transition-all duration-200 text-sm sm:text-base bg-teal-800/60 hover:bg-teal-700/60 text-teal-300 border border-teal-600/40 ${isAscendingAll ? "opacity-50 cursor-not-allowed" : ""}`}
+                    onClick={handleAscendAll}
+                    disabled={isAscendingAll}
+                    title="Ascender a todos los que aprobaron todos los módulos del semestre"
                   >
-                    {showInactiveStudents
-                      ? "👥 Ver Activos"
-                      : "👤 Ver Inactivos"}
+                    {isAscendingAll ? "Procesando..." : "⬆ Ascender a todos"}
                   </button>
                 </div>
               </div>
@@ -2703,18 +2775,52 @@ export default function TeacherDashboard() {
 
               {studentsExpanded && (
                 <>
-                  {/* Indicador de modo inactivos */}
-                  {showInactiveStudents && (
+                  {/* Indicador de modo */}
+                  {studentFilter === "inactivos" && (
                     <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
                       <span className="text-amber-400 text-lg">⚠️</span>
                       <div>
-                        <div className="text-amber-300 font-medium">
-                          Modo: Estudiantes Inactivos
-                        </div>
-                        <div className="text-amber-400/70 text-sm">
-                          Estos estudiantes no pueden acceder al sistema. Puedes
-                          reactivarlos con el botón "Activar".
-                        </div>
+                        <div className="text-amber-300 font-medium">Modo: Inactivos</div>
+                        <div className="text-amber-400/70 text-sm">Participantes desactivados. Puedes reactivarlos desde "Editar".</div>
+                      </div>
+                    </div>
+                  )}
+                  {studentFilter === "egresados" && (
+                    <div className="bg-violet-500/10 border border-violet-500/30 rounded-xl px-4 py-3 flex items-center gap-3">
+                      <span className="text-violet-300 text-lg">🎓</span>
+                      <div>
+                        <div className="text-violet-300 font-medium">Egresados</div>
+                        <div className="text-violet-400/70 text-sm">Participantes que completaron todos los niveles de la carrera. Sus calificaciones se conservan.</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Barra de acciones masivas */}
+                  {selectedStudents.size > 0 && studentFilter !== "egresados" && (
+                    <div className="bg-slate-800 border border-slate-600/50 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+                      <span className="text-slate-300 text-sm font-medium">{selectedStudents.size} seleccionado(s)</span>
+                      <div className="flex gap-2 ml-auto">
+                        {studentFilter === "activos" && (
+                          <button
+                            onClick={handleBulkDeactivate}
+                            disabled={togglingActive}
+                            className="px-3 py-1.5 text-amber-400 hover:bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm transition-colors disabled:opacity-50"
+                          >
+                            Desactivar seleccionados
+                          </button>
+                        )}
+                        <button
+                          onClick={handleBulkDelete}
+                          className="px-3 py-1.5 text-red-400 hover:bg-red-500/10 border border-red-500/30 rounded-lg text-sm transition-colors"
+                        >
+                          Eliminar seleccionados
+                        </button>
+                        <button
+                          onClick={() => setSelectedStudents(new Set())}
+                          className="px-3 py-1.5 text-slate-400 hover:bg-slate-700 rounded-lg text-sm transition-colors"
+                        >
+                          Cancelar
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2787,8 +2893,14 @@ export default function TeacherDashboard() {
                                 }
                                 return (
                                   <>
-                                    <th className="px-2 py-3 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider w-12">
-                                      N°
+                                    <th className="px-2 py-3 text-center w-10">
+                                      <input
+                                        type="checkbox"
+                                        className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                                        checked={filteredStudents.length > 0 && filteredStudents.every((s) => selectedStudents.has(s.id))}
+                                        onChange={(e) => setSelectedStudents(e.target.checked ? new Set(filteredStudents.map((s) => s.id)) : new Set())}
+                                        title="Seleccionar todos"
+                                      />
                                     </th>
                                     <Col col="code" label="Código" />
                                     <Col col="rudeal_number" label="RUDEAL" />
@@ -2823,13 +2935,22 @@ export default function TeacherDashboard() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/50">
-                            {filteredStudents.map((s, index) => (
+                            {filteredStudents.map((s) => (
                               <tr
                                 key={s.id}
                                 className="hover:bg-slate-800/30 transition-colors"
                               >
-                                <td className="px-2 py-3 whitespace-nowrap text-sm text-center text-slate-400 font-mono">
-                                  {index + 1}
+                                <td className="px-2 py-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                                    checked={selectedStudents.has(s.id)}
+                                    onChange={(e) => setSelectedStudents((prev) => {
+                                      const next = new Set(prev);
+                                      if (e.target.checked) next.add(s.id); else next.delete(s.id);
+                                      return next;
+                                    })}
+                                  />
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-white font-mono">
                                   {s.code || "-"}
@@ -2871,7 +2992,13 @@ export default function TeacherDashboard() {
                                     : "-"}
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-center">
-                                  <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg border border-blue-500/20">
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-lg border border-blue-500/20">
+                                    {studentFilter === "activos" && (
+                                      <span
+                                        className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${s.can_ascend ? "bg-emerald-400" : "bg-red-500"}`}
+                                        title={s.can_ascend ? "Aprobó todos los módulos — listo para ascender" : "Aún no aprueba todos los módulos"}
+                                      />
+                                    )}
                                     {s.level_name ?? "Sin nivel"}
                                   </span>
                                 </td>
@@ -2989,74 +3116,25 @@ export default function TeacherDashboard() {
                                       Notas
                                     </button>
                                     <button
-                                      className={`px-3 py-1.5 rounded-lg transition-colors ${
-                                        !s.can_ascend
-                                          ? "text-slate-600 cursor-not-allowed"
-                                          : "text-teal-400 hover:bg-teal-500/10"
-                                      }`}
-                                      onClick={() =>
-                                        s.can_ascend &&
-                                        handleAscend(s.id, s.level_sort_order)
-                                      }
-                                      disabled={!s.can_ascend}
-                                      title={
-                                        s.can_ascend
-                                          ? "Ascender al siguiente nivel"
-                                          : "Debe completar y aprobar todos los módulos del nivel"
-                                      }
-                                    >
-                                      Ascender
-                                    </button>
-                                    <button
                                       className="px-3 py-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
                                       onClick={() =>
                                         openAvatarUnlockModal(
                                           s.id,
-                                          [
-                                            s.first_names,
-                                            s.last_name_pat,
-                                            s.last_name_mat,
-                                          ]
-                                            .filter(Boolean)
-                                            .join(" ") ||
-                                            s.code ||
-                                            "",
+                                          [s.first_names, s.last_name_pat, s.last_name_mat]
+                                            .filter(Boolean).join(" ") || s.code || "",
                                         )
                                       }
                                       title="Gestionar avatares de desafío"
                                     >
                                       Avatares
                                     </button>
-                                    <button
-                                      className={`px-3 py-1.5 rounded-lg transition-colors ${
-                                        s.is_active
-                                          ? "text-amber-400 hover:bg-amber-500/10"
-                                          : "text-emerald-400 hover:bg-emerald-500/10"
-                                      }`}
-                                      onClick={() =>
-                                        handleToggleActive(
-                                          s.id,
-                                          s.full_name ?? s.code ?? "",
-                                          s.is_active !== false,
-                                        )
-                                      }
-                                      disabled={togglingActive}
-                                    >
-                                      {s.is_active !== false
-                                        ? "Desactivar"
-                                        : "Activar"}
-                                    </button>
-                                    {!showInactiveStudents && (
+                                    {studentFilter === "inactivos" && (
                                       <button
-                                        className="px-3 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                        onClick={() =>
-                                          handleDeleteStudent(
-                                            s.id,
-                                            s.code ?? "",
-                                          )
-                                        }
+                                        className="px-3 py-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                        onClick={() => handleToggleActive(s.id, s.full_name ?? s.code ?? "", false)}
+                                        disabled={togglingActive}
                                       >
-                                        Eliminar
+                                        Activar
                                       </button>
                                     )}
                                   </div>
@@ -3856,22 +3934,40 @@ export default function TeacherDashboard() {
             className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-sm w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold text-white mb-4">
+            <h3 className="text-lg font-bold text-white mb-1">
               Cambiar vista de semestre
             </h3>
             <p className="text-sm text-slate-400 mb-4">
-              Semestre actual:{" "}
-              <span className="text-blue-400 font-bold">
-                {computeCurrentSemester()}
-              </span>
+              Semestre activo (admin):{" "}
+              <span className="text-emerald-400 font-bold">{adminSemester}</span>
             </p>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Ver semestre:
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Selecciona un período:
               </label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {getSemesterOptions().map((opt) => (
+                  <button
+                    key={opt}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                      semesterInput === opt
+                        ? "bg-emerald-600/25 border-emerald-500/50 text-emerald-300"
+                        : opt === adminSemester
+                        ? "bg-emerald-900/20 border-emerald-700/40 text-emerald-500"
+                        : "bg-slate-800 border-slate-700 text-slate-300 hover:border-blue-500/40 hover:text-white"
+                    }`}
+                    onClick={() => setSemesterInput(opt)}
+                  >
+                    {opt}
+                    {opt === adminSemester && (
+                      <span className="ml-1 text-emerald-400 text-xs">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
               <input
-                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all"
-                placeholder="Ej: 1/2026"
+                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all text-sm"
+                placeholder="O escribe otro período (ej: 1/2025)"
                 value={semesterInput}
                 onChange={(e) => setSemesterInput(e.target.value)}
               />
@@ -3885,10 +3981,14 @@ export default function TeacherDashboard() {
               </button>
               <button
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all"
-                onClick={() => {
+                onClick={async () => {
                   const trimmed = semesterInput.trim();
-                  if (trimmed) setViewSemester(trimmed);
-                  setShowSemesterModal(false);
+                  if (trimmed) {
+                    setViewSemester(trimmed);
+                    setShowSemesterModal(false);
+                    if (profileData?.career_id && profileData?.shift)
+                      await loadStudents(profileData.career_id, profileData.shift, levels, trimmed);
+                  }
                 }}
               >
                 Aplicar

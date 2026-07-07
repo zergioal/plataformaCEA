@@ -53,6 +53,10 @@ type ModuleGrade = {
   decidir: number | null;
   auto_ser: number | null;
   auto_decidir: number | null;
+  total_override: number | null;
+  socializacion: number | null;
+  proyecto_sistematizacion: number | null;
+  proyecto_vida: number | null;
 };
 
 type StudentRow = {
@@ -66,13 +70,16 @@ type StudentRow = {
 
 // Límites de cada dimensión editable
 const GRADE_LIMITS: Record<string, { min: number; max: number }> = {
-  ser:            { min: 1, max: 10 },
-  saber:          { min: 1, max: 30 },
-  hacer_proceso:  { min: 1, max: 20 },
-  hacer_producto: { min: 1, max: 20 },
-  decidir:        { min: 1, max: 10 },
-  auto_ser:       { min: 0, max: 5 },
-  auto_decidir:   { min: 0, max: 5 },
+  ser:                       { min: 1, max: 10 },
+  saber:                     { min: 1, max: 30 },
+  hacer_proceso:             { min: 1, max: 20 },
+  hacer_producto:            { min: 1, max: 20 },
+  decidir:                   { min: 1, max: 10 },
+  auto_ser:                  { min: 0, max: 5 },
+  auto_decidir:              { min: 0, max: 5 },
+  socializacion:             { min: 0, max: 50 },
+  proyecto_sistematizacion:  { min: 0, max: 30 },
+  proyecto_vida:             { min: 0, max: 20 },
 };
 
 function degreePrefix(degree: string | null): string {
@@ -89,6 +96,16 @@ function withDegree(name: string | null, degree: string | null): string {
   const p = degreePrefix(degree);
   if (!p || !name) return name ?? "";
   return `${p} ${name}`;
+}
+
+function semesterDateRange(sem: string): { start: string; end: string } {
+  const [sn, sy] = sem.split("/");
+  const year = parseInt(sy ?? "2026");
+  const s = parseInt(sn ?? "1");
+  return {
+    start: s === 1 ? `${year}-01-01` : `${year}-07-01`,
+    end:   s === 1 ? `${year}-06-30` : `${year}-12-31`,
+  };
 }
 
 export default function TeacherModuleGrades() {
@@ -110,6 +127,8 @@ export default function TeacherModuleGrades() {
   const [releasingSaving, setReleasingSaving] = useState(false);
   const [shakingInputs, setShakingInputs] = useState<Set<string>>(new Set());
   const [autoEditingRows, setAutoEditingRows] = useState<Set<string>>(new Set());
+  // Map studentId → current string value while the total override input is open
+  const [totalOverrideInputs, setTotalOverrideInputs] = useState<Map<string, string>>(new Map());
 
   // Centralizador
   type CentralModule = { id: number; title: string; sort_order: number };
@@ -140,6 +159,10 @@ export default function TeacherModuleGrades() {
   const isTeacherish = role === "teacher" || role === "admin";
   const mid = parseInt(moduleId ?? "", 10);
   const invalidMid = isNaN(mid) || mid <= 0;
+
+  const isGraduacionModule =
+    moduleRow !== null &&
+    (moduleRow.sort_order === 20 || moduleRow.title.toLowerCase().includes("modalidad"));
 
   // Cargar configuración institucional (director, semestre activo)
   useEffect(() => {
@@ -277,6 +300,8 @@ export default function TeacherModuleGrades() {
         .in("id", studentIds)
         .eq("career_id", teacherProfile.career_id)
         .eq("shift", teacherProfile.shift)
+        .eq("is_active", true)
+        .eq("is_graduated", false)
         .order("last_name_pat")
         .order("last_name_mat")
         .order("first_names");
@@ -315,9 +340,10 @@ export default function TeacherModuleGrades() {
       const { data: grades } = await supabase
         .from("module_grades")
         .select(
-          "student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir",
+          "student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total_override,socializacion,proyecto_sistematizacion,proyecto_vida",
         )
         .eq("module_id", mid)
+        .eq("semester", semester)
         .in(
           "student_id",
           students.map((s) => s.id),
@@ -358,6 +384,10 @@ export default function TeacherModuleGrades() {
         }
       }
 
+      const isGrad =
+        (module as ModuleRow).sort_order === 20 ||
+        (module as ModuleRow).title.toLowerCase().includes("modalidad");
+
       const studentRows: StudentRow[] = students.map((student) => {
         const existingGrade = gradesMap.get(student.id);
         const autoEval = autoEvalMap.get(student.id);
@@ -375,6 +405,10 @@ export default function TeacherModuleGrades() {
           // module_grades tiene prioridad; auto_eval_responses solo se usa como fallback cuando el docente no ha editado
           auto_ser: r(existingGrade.auto_ser) ?? autoEval?.auto_ser ?? null,
           auto_decidir: r(existingGrade.auto_decidir) ?? autoEval?.auto_decidir ?? null,
+          total_override: existingGrade.total_override ?? null,
+          socializacion: existingGrade.socializacion ?? null,
+          proyecto_sistematizacion: existingGrade.proyecto_sistematizacion ?? null,
+          proyecto_vida: existingGrade.proyecto_vida ?? null,
         } : {
           student_id: student.id,
           module_id: mid,
@@ -385,6 +419,10 @@ export default function TeacherModuleGrades() {
           decidir: null,
           auto_ser: autoEval?.auto_ser ?? null,
           auto_decidir: autoEval?.auto_decidir ?? null,
+          total_override: null,
+          socializacion: null,
+          proyecto_sistematizacion: null,
+          proyecto_vida: null,
         };
 
         return {
@@ -392,7 +430,7 @@ export default function TeacherModuleGrades() {
           grade,
           progress,
           suggestedHP,
-          total: calculateTotal(grade, suggestedHP),
+          total: calculateTotal(grade, suggestedHP, isGrad),
           autoEvalFromStudent: autoEval ?? null,
         };
       });
@@ -419,10 +457,11 @@ export default function TeacherModuleGrades() {
           {
             student_id: sr.student.id,
             module_id: mid,
+            semester,
             auto_ser: (existing?.auto_ser ?? null) === null ? ae.auto_ser : existing!.auto_ser,
             auto_decidir: (existing?.auto_decidir ?? null) === null ? ae.auto_decidir : existing!.auto_decidir,
           },
-          { onConflict: "student_id,module_id" },
+          { onConflict: "student_id,module_id,semester" },
         );
       }
     } catch (error) {
@@ -440,7 +479,15 @@ export default function TeacherModuleGrades() {
     return val;
   }
 
-  function calculateTotal(grade: ModuleGrade, suggestedHP: number): number {
+  // forceIsGrad se usa dentro de loadAll antes de que moduleRow esté en el estado React
+  function calculateTotal(grade: ModuleGrade, suggestedHP: number, forceIsGrad?: boolean): number {
+    if (grade.total_override !== null && grade.total_override !== undefined) {
+      return grade.total_override;
+    }
+    const grad = forceIsGrad ?? isGraduacionModule;
+    if (grad) {
+      return Math.min(100, (grade.socializacion ?? 0) + (grade.proyecto_sistematizacion ?? 0) + (grade.proyecto_vida ?? 0));
+    }
     const ser        = applyDimMin(grade.ser,           DIM_MIN.ser);
     const saber      = applyDimMin(grade.saber,         DIM_MIN.saber);
     const hacerProc  = applyDimMin(grade.hacer_proceso ?? suggestedHP, DIM_MIN.hacer_proceso);
@@ -450,6 +497,13 @@ export default function TeacherModuleGrades() {
     const autoDecid  = applyDimMin(grade.auto_decidir,   DIM_MIN.auto_decidir);
 
     return Math.max(Math.round(ser + saber + hacerProc + hacerProd + decidir + autoSer + autoDecid), 20);
+  }
+
+  function getQualitativeGraduacion(total: number): { text: string; color: string } {
+    if (total <= 50) return { text: "No promovido",  color: "text-red-400" };
+    if (total <= 75) return { text: "Suficiente",    color: "text-amber-400" };
+    if (total <= 80) return { text: "Bueno",         color: "text-emerald-400" };
+    return              { text: "Excelente",       color: "text-blue-400" };
   }
 
   function triggerShake(studentId: string, field: string) {
@@ -521,6 +575,47 @@ export default function TeacherModuleGrades() {
     return { text: "Promovido Excelente", color: "text-blue-400" };
   }
 
+  function scheduleAutoSave(studentId: string) {
+    setDirtyRows((prev) => new Set(prev).add(studentId));
+    const existing = autoSaveTimers.current.get(studentId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      autoSaveTimers.current.delete(studentId);
+      void saveGradeQuiet(studentId);
+    }, 700);
+    autoSaveTimers.current.set(studentId, timer);
+  }
+
+  function startTotalEdit(studentId: string, currentTotal: number) {
+    setTotalOverrideInputs((prev) => new Map(prev).set(studentId, String(currentTotal)));
+  }
+
+  function cancelTotalEdit(studentId: string) {
+    setTotalOverrideInputs((prev) => { const m = new Map(prev); m.delete(studentId); return m; });
+  }
+
+  function applyTotalOverride(studentId: string) {
+    const raw = totalOverrideInputs.get(studentId) ?? "";
+    const val = parseInt(raw, 10);
+    if (isNaN(val) || val < 20 || val > 100) { triggerShake(studentId, "total"); return; }
+    setRows((prev) => prev.map((r) => {
+      if (r.student.id !== studentId) return r;
+      const updatedGrade = { ...r.grade, total_override: val };
+      return { ...r, grade: updatedGrade, total: val };
+    }));
+    setTotalOverrideInputs((prev) => { const m = new Map(prev); m.delete(studentId); return m; });
+    scheduleAutoSave(studentId);
+  }
+
+  function clearTotalOverride(studentId: string) {
+    setRows((prev) => prev.map((r) => {
+      if (r.student.id !== studentId) return r;
+      const updatedGrade = { ...r.grade, total_override: null };
+      return { ...r, grade: updatedGrade, total: calculateTotal(updatedGrade, r.suggestedHP) };
+    }));
+    setTotalOverrideInputs((prev) => { const m = new Map(prev); m.delete(studentId); return m; });
+    scheduleAutoSave(studentId);
+  }
 
   // Guarda una fila usando rowsRef (sin efectos secundarios en state updaters)
   async function saveGradeQuiet(studentId: string) {
@@ -531,6 +626,7 @@ export default function TeacherModuleGrades() {
       {
         student_id: row.student.id,
         module_id: mid,
+        semester,
         ser: row.grade.ser,
         saber: row.grade.saber,
         hacer_proceso: hacerProcesoFinal,
@@ -538,8 +634,12 @@ export default function TeacherModuleGrades() {
         decidir: row.grade.decidir,
         auto_ser: row.grade.auto_ser,
         auto_decidir: row.grade.auto_decidir,
+        total_override: row.grade.total_override,
+        socializacion: row.grade.socializacion,
+        proyecto_sistematizacion: row.grade.proyecto_sistematizacion,
+        proyecto_vida: row.grade.proyecto_vida,
       },
-      { onConflict: "student_id,module_id" },
+      { onConflict: "student_id,module_id,semester" },
     );
     if (!error) {
       setDirtyRows((prev) => { const next = new Set(prev); next.delete(studentId); return next; });
@@ -563,6 +663,7 @@ export default function TeacherModuleGrades() {
           {
             student_id: row.student.id,
             module_id: mid,
+            semester,
             ser: row.grade.ser,
             saber: row.grade.saber,
             hacer_proceso: hacerProcesoFinal,
@@ -570,8 +671,12 @@ export default function TeacherModuleGrades() {
             decidir: row.grade.decidir,
             auto_ser: row.grade.auto_ser,
             auto_decidir: row.grade.auto_decidir,
+            total_override: row.grade.total_override,
+            socializacion: row.grade.socializacion,
+            proyecto_sistematizacion: row.grade.proyecto_sistematizacion,
+            proyecto_vida: row.grade.proyecto_vida,
           },
-          { onConflict: "student_id,module_id" },
+          { onConflict: "student_id,module_id,semester" },
         );
       }),
     );
@@ -590,6 +695,7 @@ export default function TeacherModuleGrades() {
         {
           student_id: row.student.id,
           module_id: mid,
+          semester,
           ser: row.grade.ser,
           saber: row.grade.saber,
           hacer_proceso: hacerProcesoFinal,
@@ -597,8 +703,12 @@ export default function TeacherModuleGrades() {
           decidir: row.grade.decidir,
           auto_ser: row.grade.auto_ser,
           auto_decidir: row.grade.auto_decidir,
+          total_override: row.grade.total_override,
+          socializacion: row.grade.socializacion,
+          proyecto_sistematizacion: row.grade.proyecto_sistematizacion,
+          proyecto_vida: row.grade.proyecto_vida,
         },
-        { onConflict: "student_id,module_id" },
+        { onConflict: "student_id,module_id,semester" },
       );
       if (error) anyError = true;
     }
@@ -679,135 +789,128 @@ export default function TeacherModuleGrades() {
     doc.setFont("helvetica", "normal"); doc.text(turnoCapitalized, rightX + 13, startY + sp);
 
     // ── Datos de la tabla ─────────────────────────────────────────────────────
-    const tableData = rows.map((row, index) => {
-      const obs = getObservation(row.total);
-      return [
-        index + 1,
-        formatName(row.student),
-        row.grade.ser ?? "",
-        row.grade.saber ?? "",
-        row.grade.hacer_proceso ?? row.suggestedHP,
-        row.grade.hacer_producto ?? "",
-        row.grade.decidir ?? "",
-        row.grade.auto_ser ?? "",
-        row.grade.auto_decidir ?? "",
-        row.total,
-        obs.text,
-      ];
-    });
-
-    // Etiquetas rotadas para columnas de notas (índices 2-9)
-    // Cada entrada es un array de líneas; las de 2 líneas se dibujan en paralelo
-    const GRADE_LABELS: string[][] = [
-      ["SER (10)"],
-      ["SABER (30)"],
-      ["HACER",    "PROCESO(20)"],
-      ["HACER",    "PRODUCTO(20)"],
-      ["DECIDIR (10)"],
-      ["AUTOEVA",  "SER (5)"],
-      ["AUTOEVA",  "DEC (5)"],
-      ["TOTAL (100)"],
-    ];
-
-    // ── Layout: tabla al 80% del ancho, centrada ─────────────────────────────
-    const TABLE_WIDTH   = pageWidth * 0.80;          // ≈ 238 mm
+    const TABLE_WIDTH   = pageWidth * 0.80;
     const SIDE_MARGIN   = (pageWidth - TABLE_WIDTH) / 2;
-    const TABLE_START_Y = startY + sp * 2 + 8;       // ≈ 44 mm
-    // Con etiquetas en 2 líneas la más larga es "PRODUCTO(20)" ≈ 12 chars × 1mm = 12mm
-    const HEADER_ROW_H  = 16;                        // reducido de 22 a 16 mm
-    const SIG_BLOCK_H   = 16;                        // espacio para línea + texto de firma
-    const sigGap        = 6;                         // separación tabla → firma
+    const TABLE_START_Y = startY + sp * 2 + 8;
+    const HEADER_ROW_H  = 16;
+    const SIG_BLOCK_H   = 16;
+    const sigGap        = 6;
     const BOTTOM_PAD    = 4;
     const n = rows.length;
-
-    // Columnas: anchos que suman ≈ TABLE_WIDTH (238 mm)
-    const COL_W = { num: 9, name: 86, grade: 14, total: 16, obs: 29 };
-
-    // bodyAvailH incluye sigGap para garantizar que las firmas quepan en la misma hoja
     const bodyAvailH = pageHeight - TABLE_START_Y - HEADER_ROW_H - sigGap - SIG_BLOCK_H - BOTTOM_PAD;
-    // Filas más compactas; mínimo 4.5 mm para que el texto de 7-8 pt sea legible
     const bodyRowH   = n <= 20 ? Math.max(4.5, bodyAvailH / n) : 6;
     const bodyFontSize = bodyRowH < 5.2 ? 7 : 8;
 
-    autoTable(doc, {
-      startY: TABLE_START_Y,
-      margin: { left: SIDE_MARGIN, right: SIDE_MARGIN },
-      // Columnas 2-9: texto vacío — se dibuja rotado en didDrawCell
-      head: [["N°", "Participante", "", "", "", "", "", "", "", "", "OBS"]],
-      body: tableData,
-      theme: "grid",
-      headStyles: {
-        fillColor: [235, 235, 235],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        halign: "center",
-        valign: "bottom",
-        fontSize: 7,
-        cellPadding: { top: 1, right: 1, bottom: 2, left: 1 },
-        minCellHeight: HEADER_ROW_H,
-      },
-      bodyStyles: {
-        fontSize: bodyFontSize,
-        cellPadding: { top: 1, right: 1, bottom: 1, left: 1 },
-        minCellHeight: bodyRowH,
-      },
-      styles: {
-        lineColor: [180, 180, 180],
-        lineWidth: 0.2,
-      },
-      columnStyles: {
-        0:  { halign: "center", cellWidth: COL_W.num },
-        1:  { halign: "left",   cellWidth: COL_W.name },
-        2:  { halign: "center", cellWidth: COL_W.grade },
-        3:  { halign: "center", cellWidth: COL_W.grade },
-        4:  { halign: "center", cellWidth: COL_W.grade },
-        5:  { halign: "center", cellWidth: COL_W.grade },
-        6:  { halign: "center", cellWidth: COL_W.grade },
-        7:  { halign: "center", cellWidth: COL_W.grade },
-        8:  { halign: "center", cellWidth: COL_W.grade },
-        9:  { halign: "center", cellWidth: COL_W.total, fontStyle: "bold" },
-        10: { halign: "center", cellWidth: COL_W.obs },
-      },
-      // Suprimir texto por defecto en celdas de encabezado rotadas
-      willDrawCell: (data) => {
-        if (data.section === "head" && data.column.index >= 2 && data.column.index <= 9) {
-          (data.cell as unknown as { text: string[] }).text = [];
-        }
-      },
-      // Dibujar texto rotado 90° en cada celda de encabezado de nota
-      didDrawCell: (data) => {
-        if (data.section === "head" && data.column.index >= 2 && data.column.index <= 9) {
-          const lines = GRADE_LABELS[data.column.index - 2];
-          const cx = data.cell.x + data.cell.width / 2;
-          const y  = data.cell.y + data.cell.height - 2;
-          doc.setFontSize(5);
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(0, 0, 0);
-          if (lines.length === 1) {
-            doc.text(lines[0], cx, y, { angle: 90, align: "left" });
-          } else {
-            // Dos líneas: separadas ~2 mm horizontalmente (que al rotar = "profundidad")
-            doc.text(lines[0], cx - 1.5, y, { angle: 90, align: "left" });
-            doc.text(lines[1], cx + 1.5, y, { angle: 90, align: "left" });
+    if (isGraduacionModule) {
+      // ── Tabla Modalidades de Graduación ──────────────────────────────────────
+      const tableData = rows.map((row, index) => {
+        const qual = getQualitativeGraduacion(row.total);
+        return [index + 1, formatName(row.student), row.grade.socializacion ?? "", row.grade.proyecto_sistematizacion ?? "", row.grade.proyecto_vida ?? "", row.total, qual.text];
+      });
+      const COL_W = { num: 9, name: 70, grade: 22, total: 16, qual: 36 };
+      autoTable(doc, {
+        startY: TABLE_START_Y,
+        margin: { left: SIDE_MARGIN, right: SIDE_MARGIN },
+        head: [["N°", "Participante", "Socialización\n(50)", "Proy. Sistematización\n(30)", "Proyecto de Vida\n(20)", "TOTAL\n(100)", "Calificación"]],
+        body: tableData,
+        theme: "grid",
+        headStyles: { fillColor: [235, 235, 235], textColor: [0, 0, 0], fontStyle: "bold", halign: "center", valign: "middle", fontSize: 7, cellPadding: { top: 2, right: 1, bottom: 2, left: 1 }, minCellHeight: HEADER_ROW_H },
+        bodyStyles: { fontSize: bodyFontSize, cellPadding: { top: 1, right: 1, bottom: 1, left: 1 }, minCellHeight: bodyRowH },
+        styles: { lineColor: [180, 180, 180], lineWidth: 0.2 },
+        columnStyles: {
+          0: { halign: "center", cellWidth: COL_W.num },
+          1: { halign: "left",   cellWidth: COL_W.name },
+          2: { halign: "center", cellWidth: COL_W.grade },
+          3: { halign: "center", cellWidth: COL_W.grade },
+          4: { halign: "center", cellWidth: COL_W.grade },
+          5: { halign: "center", cellWidth: COL_W.total, fontStyle: "bold" },
+          6: { halign: "center", cellWidth: COL_W.qual },
+        },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.column.index === 5) {
+            const t = data.cell.raw as number;
+            if (t <= 50) data.cell.styles.textColor = [220, 53, 69];
+            else if (t <= 75) data.cell.styles.textColor = [217, 119, 6];
+            else if (t <= 80) data.cell.styles.textColor = [40, 167, 69];
+            else data.cell.styles.textColor = [0, 123, 255];
           }
-        }
-      },
-      didParseCell: (data) => {
-        if (data.section === "body" && data.column.index === 10) {
-          const obs = data.cell.raw as string;
-          if (obs === "Postergado")               data.cell.styles.textColor = [220, 53, 69];
-          else if (obs === "Promovido")            data.cell.styles.textColor = [40, 167, 69];
-          else if (obs === "Promovido Excelente")  data.cell.styles.textColor = [0, 123, 255];
-        }
-        if (data.section === "body" && data.column.index === 9) {
-          const total = data.cell.raw as number;
-          if      (total === 0)               data.cell.styles.textColor = [100, 100, 100];
-          else if (total >= 1 && total <= 50)  data.cell.styles.textColor = [220, 53, 69];
-          else if (total >= 51 && total <= 75) data.cell.styles.textColor = [40, 167, 69];
-          else if (total >= 76)               data.cell.styles.textColor = [0, 123, 255];
-        }
-      },
-    });
+          if (data.section === "body" && data.column.index === 6) {
+            const q = data.cell.raw as string;
+            if (q === "No promovido")  data.cell.styles.textColor = [220, 53, 69];
+            else if (q === "Suficiente") data.cell.styles.textColor = [217, 119, 6];
+            else if (q === "Bueno")      data.cell.styles.textColor = [40, 167, 69];
+            else                         data.cell.styles.textColor = [0, 123, 255];
+          }
+        },
+      });
+    } else {
+      // ── Tabla normal con dimensiones ──────────────────────────────────────────
+      const tableData = rows.map((row, index) => {
+        const obs = getObservation(row.total);
+        return [index + 1, formatName(row.student), row.grade.ser ?? "", row.grade.saber ?? "", row.grade.hacer_proceso ?? row.suggestedHP, row.grade.hacer_producto ?? "", row.grade.decidir ?? "", row.grade.auto_ser ?? "", row.grade.auto_decidir ?? "", row.total, obs.text];
+      });
+      const GRADE_LABELS: string[][] = [
+        ["SER (10)"], ["SABER (30)"], ["HACER", "PROCESO(20)"], ["HACER", "PRODUCTO(20)"],
+        ["DECIDIR (10)"], ["AUTOEVA", "SER (5)"], ["AUTOEVA", "DEC (5)"], ["TOTAL (100)"],
+      ];
+      const COL_W = { num: 9, name: 86, grade: 14, total: 16, obs: 29 };
+      autoTable(doc, {
+        startY: TABLE_START_Y,
+        margin: { left: SIDE_MARGIN, right: SIDE_MARGIN },
+        head: [["N°", "Participante", "", "", "", "", "", "", "", "", "OBS"]],
+        body: tableData,
+        theme: "grid",
+        headStyles: { fillColor: [235, 235, 235], textColor: [0, 0, 0], fontStyle: "bold", halign: "center", valign: "bottom", fontSize: 7, cellPadding: { top: 1, right: 1, bottom: 2, left: 1 }, minCellHeight: HEADER_ROW_H },
+        bodyStyles: { fontSize: bodyFontSize, cellPadding: { top: 1, right: 1, bottom: 1, left: 1 }, minCellHeight: bodyRowH },
+        styles: { lineColor: [180, 180, 180], lineWidth: 0.2 },
+        columnStyles: {
+          0: { halign: "center", cellWidth: COL_W.num },
+          1: { halign: "left",   cellWidth: COL_W.name },
+          2: { halign: "center", cellWidth: COL_W.grade },
+          3: { halign: "center", cellWidth: COL_W.grade },
+          4: { halign: "center", cellWidth: COL_W.grade },
+          5: { halign: "center", cellWidth: COL_W.grade },
+          6: { halign: "center", cellWidth: COL_W.grade },
+          7: { halign: "center", cellWidth: COL_W.grade },
+          8: { halign: "center", cellWidth: COL_W.grade },
+          9: { halign: "center", cellWidth: COL_W.total, fontStyle: "bold" },
+          10: { halign: "center", cellWidth: COL_W.obs },
+        },
+        willDrawCell: (data) => {
+          if (data.section === "head" && data.column.index >= 2 && data.column.index <= 9)
+            (data.cell as unknown as { text: string[] }).text = [];
+        },
+        didDrawCell: (data) => {
+          if (data.section === "head" && data.column.index >= 2 && data.column.index <= 9) {
+            const lines = GRADE_LABELS[data.column.index - 2];
+            const cx = data.cell.x + data.cell.width / 2;
+            const y  = data.cell.y + data.cell.height - 2;
+            doc.setFontSize(5); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0);
+            if (lines.length === 1) {
+              doc.text(lines[0], cx, y, { angle: 90, align: "left" });
+            } else {
+              doc.text(lines[0], cx - 1.5, y, { angle: 90, align: "left" });
+              doc.text(lines[1], cx + 1.5, y, { angle: 90, align: "left" });
+            }
+          }
+        },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.column.index === 10) {
+            const obs = data.cell.raw as string;
+            if (obs === "Postergado")              data.cell.styles.textColor = [220, 53, 69];
+            else if (obs === "Promovido")           data.cell.styles.textColor = [40, 167, 69];
+            else if (obs === "Promovido Excelente") data.cell.styles.textColor = [0, 123, 255];
+          }
+          if (data.section === "body" && data.column.index === 9) {
+            const total = data.cell.raw as number;
+            if (total === 0)               data.cell.styles.textColor = [100, 100, 100];
+            else if (total <= 50)          data.cell.styles.textColor = [220, 53, 69];
+            else if (total <= 75)          data.cell.styles.textColor = [40, 167, 69];
+            else                           data.cell.styles.textColor = [0, 123, 255];
+          }
+        },
+      });
+    }
 
     // ── Firmas: siempre debajo, sin superponerse; misma hoja si ≤20 alumnos ──
     const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
@@ -833,25 +936,28 @@ export default function TeacherModuleGrades() {
   }
 
   function generateExcel() {
-    const headers = ["N°", "Participante", "SER (10)", "SABER (30)", "HACER PROCESO (20)", "HACER PRODUCTO (20)", "DECIDIR (10)", "AUTOEVA SER (5)", "AUTOEVA DEC (5)", "TOTAL (100)", "OBS"];
-    const data = rows.map((row, idx) => {
-      const obs = getObservation(row.total);
-      return [
-        idx + 1,
-        formatName(row.student),
-        row.grade.ser ?? "",
-        row.grade.saber ?? "",
-        row.grade.hacer_proceso ?? row.suggestedHP,
-        row.grade.hacer_producto ?? "",
-        row.grade.decidir ?? "",
-        row.grade.auto_ser ?? "",
-        row.grade.auto_decidir ?? "",
-        row.total,
-        obs.text,
-      ];
-    });
+    let headers: string[];
+    let data: (string | number)[][];
+    if (isGraduacionModule) {
+      headers = ["N°", "Participante", "Socialización (50)", "Proy. Sistematización (30)", "Proyecto de Vida (20)", "TOTAL (100)", "Calificación"];
+      data = rows.map((row, idx) => [
+        idx + 1, formatName(row.student),
+        row.grade.socializacion ?? "", row.grade.proyecto_sistematizacion ?? "", row.grade.proyecto_vida ?? "",
+        row.total, getQualitativeGraduacion(row.total).text,
+      ]);
+    } else {
+      headers = ["N°", "Participante", "SER (10)", "SABER (30)", "HACER PROCESO (20)", "HACER PRODUCTO (20)", "DECIDIR (10)", "AUTOEVA SER (5)", "AUTOEVA DEC (5)", "TOTAL (100)", "OBS"];
+      data = rows.map((row, idx) => [
+        idx + 1, formatName(row.student),
+        row.grade.ser ?? "", row.grade.saber ?? "", row.grade.hacer_proceso ?? row.suggestedHP,
+        row.grade.hacer_producto ?? "", row.grade.decidir ?? "", row.grade.auto_ser ?? "", row.grade.auto_decidir ?? "",
+        row.total, getObservation(row.total).text,
+      ]);
+    }
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    ws["!cols"] = [8, 30, 10, 10, 14, 14, 10, 10, 10, 10, 14].map((w) => ({ wch: w }));
+    ws["!cols"] = isGraduacionModule
+      ? [8, 30, 18, 22, 18, 12, 16].map((w) => ({ wch: w }))
+      : [8, 30, 10, 10, 14, 14, 10, 10, 10, 10, 14].map((w) => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Calificaciones");
     XLSX.writeFile(wb, `Calificaciones_${moduleRow?.title?.replace(/\s+/g, "_") || "Modulo"}_${semester.replace("/", "-")}.xlsx`);
@@ -912,9 +1018,13 @@ export default function TeacherModuleGrades() {
       const studentList = rows.map((r) => r.student);
       const studentIds = studentList.map((s) => s.id);
 
-      // Cargar asistencia para SER/DECIDIR
+      // Cargar asistencia del semestre activo para SER/DECIDIR
+      const { start: attStart, end: attEnd } = semesterDateRange(semester);
       const { data: attendRows } = await supabase
-        .from("attendance").select("student_id, status").in("student_id", studentIds);
+        .from("attendance").select("student_id, status")
+        .in("student_id", studentIds)
+        .gte("date", attStart)
+        .lte("date", attEnd);
       const attendMap = new Map<string, { total: number; present: number }>();
       for (const sid of studentIds) attendMap.set(sid, { total: 0, present: 0 });
       for (const a of attendRows ?? []) {
@@ -1477,9 +1587,10 @@ export default function TeacherModuleGrades() {
       const [{ data: allGrades }, { data: allProgress }] = await Promise.all([
         supabase
           .from("module_grades")
-          .select("student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir")
+          .select("student_id,module_id,ser,saber,hacer_proceso,hacer_producto,decidir,auto_ser,auto_decidir,total_override,socializacion,proyecto_sistematizacion,proyecto_vida")
           .in("module_id", moduleIds)
-          .in("student_id", studentIds),
+          .in("student_id", studentIds)
+          .eq("semester", semester),
         supabase
           .from("v_module_progress")
           .select("student_id,module_id,progress_percent")
@@ -1499,14 +1610,24 @@ export default function TeacherModuleGrades() {
         progressMap.get(p.module_id)!.set(p.student_id, p.progress_percent || 0);
       }
 
+      const isGradMod = (mod: CentralModule) =>
+        mod.sort_order === 20 || mod.title.toLowerCase().includes("modalidad");
+
       const cRows: CentralRow[] = rows.map((row) => {
         const totals: (number | null)[] = mods.map((mod) => {
           const grade = gradesMap.get(mod.id)?.get(row.student.id);
-          if (!grade || (grade.ser === null && grade.saber === null && grade.hacer_proceso === null && grade.hacer_producto === null && grade.decidir === null)) {
+          if (!grade) return null;
+          if (grade.total_override !== null && grade.total_override !== undefined) return grade.total_override;
+          if (isGradMod(mod)) {
+            const hasGradData = grade.socializacion !== null || grade.proyecto_sistematizacion !== null || grade.proyecto_vida !== null;
+            if (!hasGradData) return null;
+            return Math.min(100, (grade.socializacion ?? 0) + (grade.proyecto_sistematizacion ?? 0) + (grade.proyecto_vida ?? 0));
+          }
+          if (grade.ser === null && grade.saber === null && grade.hacer_proceso === null && grade.hacer_producto === null && grade.decidir === null) {
             return null;
           }
           const progress = progressMap.get(mod.id)?.get(row.student.id) ?? 0;
-          return calculateTotal(grade, Math.round((progress / 100) * 20));
+          return calculateTotal(grade, Math.round((progress / 100) * 20), false);
         });
 
         const graded = totals.filter((t): t is number => t !== null);
@@ -1701,250 +1822,282 @@ export default function TeacherModuleGrades() {
               <table className="min-w-full">
                 <thead className="bg-slate-800/50">
                   <tr>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      N°
-                    </th>
-                    <th className="px-3 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      Estudiante
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      Progreso
-                    </th>
-                    {[
-                      { label: "SER", pts: 10, dim: "ser" },
-                      { label: "SABER", pts: 30, dim: "saber" },
-                      { label: "HACER Proceso", pts: 20, dim: "hacer_proceso" },
-                      { label: "HACER Producto", pts: 20, dim: "hacer_producto" },
-                      { label: "DECIDIR", pts: 10, dim: "decidir" },
-                    ].map(({ label, pts, dim }) => (
-                      <th key={dim} style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold uppercase tracking-wider">
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                          <button
-                            className="text-sky-400 hover:text-sky-200 hover:underline transition-colors"
-                            onClick={() => setActiveDim(dim as DimKey)}
-                            title={`Abrir registro ${label}`}
-                          >
-                            <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2, display: "block" }}>{label}</span>
-                          </button>
-                          <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>({pts})</span>
-                        </div>
-                      </th>
-                    ))}
-                    <th style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2 }}>AUTO SER</span>
-                        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>(5)</span>
-                      </div>
-                    </th>
-                    <th style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2 }}>AUTO DECIDIR</span>
-                        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>(5)</span>
-                      </div>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      TOTAL
-                      <br />
-                      <span className="text-xs font-normal text-slate-400">
-                        (100)
-                      </span>
-                    </th>
-                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">
-                      OBS
-                    </th>
+                    <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">N°</th>
+                    <th className="px-3 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">Estudiante</th>
+
+                    {isGraduacionModule ? (
+                      <>
+                        {[
+                          { label: "Socialización",              pts: 50, field: "socializacion" },
+                          { label: "Proy. Sistematización",      pts: 30, field: "proyecto_sistematizacion" },
+                          { label: "Proyecto de Vida",           pts: 20, field: "proyecto_vida" },
+                        ].map(({ label, pts, field }) => (
+                          <th key={field} style={{ verticalAlign: "bottom", padding: "4px 6px", width: 60, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                              <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2, display: "block" }}>{label}</span>
+                              <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>({pts})</span>
+                            </div>
+                          </th>
+                        ))}
+                        <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">TOTAL<br /><span className="text-xs font-normal text-slate-400">(100)</span></th>
+                        <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">Calificación</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">Progreso</th>
+                        {[
+                          { label: "SER", pts: 10, dim: "ser" },
+                          { label: "SABER", pts: 30, dim: "saber" },
+                          { label: "HACER Proceso", pts: 20, dim: "hacer_proceso" },
+                          { label: "HACER Producto", pts: 20, dim: "hacer_producto" },
+                          { label: "DECIDIR", pts: 10, dim: "decidir" },
+                        ].map(({ label, pts, dim }) => (
+                          <th key={dim} style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold uppercase tracking-wider">
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                              <button className="text-sky-400 hover:text-sky-200 hover:underline transition-colors" onClick={() => setActiveDim(dim as DimKey)} title={`Abrir registro ${label}`}>
+                                <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2, display: "block" }}>{label}</span>
+                              </button>
+                              <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>({pts})</span>
+                            </div>
+                          </th>
+                        ))}
+                        <th style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2 }}>AUTO SER</span>
+                            <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>(5)</span>
+                          </div>
+                        </th>
+                        <th style={{ verticalAlign: "bottom", padding: "4px 6px", width: 44, textAlign: "center" }} className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, paddingBottom: 2 }}>AUTO DECIDIR</span>
+                            <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>(5)</span>
+                          </div>
+                        </th>
+                        <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">TOTAL<br /><span className="text-xs font-normal text-slate-400">(100)</span></th>
+                        <th className="px-3 py-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">OBS</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
-                  {rows.map((row, idx) => (
-                    <tr
-                      key={row.student.id}
-                      className="hover:bg-slate-800/30 transition-colors"
-                    >
-                      <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-white text-center">
-                        {idx + 1}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap text-sm text-slate-200">
-                        {formatName(row.student)}
-                      </td>
-                      <td className="px-3 py-4 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <span
-                            className={`text-sm font-semibold ${getProgressTextColor(
-                              row.progress,
-                            )}`}
-                          >
-                            {row.progress}%
-                          </span>
-                          <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full bg-gradient-to-r ${getProgressColor(
-                                row.progress,
-                              )} rounded-full transition-all duration-500`}
-                              style={{ width: `${row.progress}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
+                  {rows.map((row, idx) => {
+                    const obs = isGraduacionModule ? getQualitativeGraduacion(row.total) : getObservation(row.total);
+                    const isEditingTotal = totalOverrideInputs.has(row.student.id);
+                    const hasOverride = row.grade.total_override !== null;
 
-                      {/* SER (10) */}
-                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
-                        <input
-                          type="number"
-                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-ser`) ? " shake" : ""}`}
-                          min="1" max="10"
-                          value={row.grade.ser ?? ""}
-                          onChange={(e) => updateGradeField(row.student.id, "ser", e.target.value)}
-                          placeholder="—"
-                        />
-                      </td>
-
-                      {/* SABER (30) */}
-                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
-                        <input
-                          type="number"
-                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-saber`) ? " shake" : ""}`}
-                          min="1" max="30"
-                          value={row.grade.saber ?? ""}
-                          onChange={(e) => updateGradeField(row.student.id, "saber", e.target.value)}
-                          placeholder="—"
-                        />
-                      </td>
-
-                      {/* HACER Proceso (20) — sugerencia como tooltip para no romper alineación */}
-                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
-                        <input
-                          type="number"
-                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-amber-500/30 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-hacer_proceso`) ? " shake" : ""}`}
-                          min="1" max="20"
-                          value={row.grade.hacer_proceso ?? ""}
-                          onChange={(e) => updateGradeField(row.student.id, "hacer_proceso", e.target.value)}
-                          placeholder={String(row.suggestedHP)}
-                          title={`Sugerido según avance: ${row.suggestedHP}/20`}
-                        />
-                      </td>
-
-                      {/* HACER Producto (20) */}
-                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
-                        <input
-                          type="number"
-                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-hacer_producto`) ? " shake" : ""}`}
-                          min="1" max="20"
-                          value={row.grade.hacer_producto ?? ""}
-                          onChange={(e) => updateGradeField(row.student.id, "hacer_producto", e.target.value)}
-                          placeholder="—"
-                        />
-                      </td>
-
-                      {/* DECIDIR (10) */}
-                      <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
-                        <input
-                          type="number"
-                          className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-decidir`) ? " shake" : ""}`}
-                          min="1" max="10"
-                          value={row.grade.decidir ?? ""}
-                          onChange={(e) => updateGradeField(row.student.id, "decidir", e.target.value)}
-                          placeholder="—"
-                        />
-                      </td>
-
-                      {/* AUTO SER (5) */}
-                      <td className="px-2 py-3 text-center">
-                        {autoEditingRows.has(row.student.id) ? (
+                    // Shared TOTAL cell
+                    const totalCell = (
+                      <td className="px-3 py-4 text-center" style={{ minWidth: 90 }}>
+                        {isEditingTotal ? (
                           <div className="flex flex-col items-center gap-1">
                             <input
                               type="number"
-                              className={`w-14 px-1 py-2 bg-violet-900/30 border border-violet-500/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-auto_ser`) ? " shake" : ""}`}
-                              min="0" max="5"
-                              value={row.grade.auto_ser ?? ""}
-                              onChange={(e) => updateGradeField(row.student.id, "auto_ser", e.target.value)}
-                              placeholder="—"
+                              min="20" max="100"
+                              className={`w-16 px-2 py-1 bg-slate-800 border border-amber-500/60 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-total`) ? " shake" : ""}`}
+                              value={totalOverrideInputs.get(row.student.id) ?? ""}
+                              onChange={(e) => setTotalOverrideInputs((prev) => new Map(prev).set(row.student.id, e.target.value))}
+                              onKeyDown={(e) => { if (e.key === "Enter") applyTotalOverride(row.student.id); if (e.key === "Escape") cancelTotalEdit(row.student.id); }}
+                              autoFocus
                             />
-                            {row.autoEvalFromStudent?.auto_ser !== null && row.autoEvalFromStudent?.auto_ser !== undefined && (
-                              <button
-                                className="text-xs text-violet-400 hover:text-violet-200 underline transition-colors"
-                                title={`El estudiante envió: ${row.autoEvalFromStudent.auto_ser}. Clic para copiar.`}
-                                onClick={() => updateGradeField(row.student.id, "auto_ser", String(row.autoEvalFromStudent!.auto_ser))}
-                              >
-                                ↓{row.autoEvalFromStudent.auto_ser}
-                              </button>
-                            )}
+                            <div className="flex gap-1">
+                              <button onClick={() => applyTotalOverride(row.student.id)} className="text-xs px-1.5 py-0.5 rounded bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/50 border border-emerald-500/30 transition-colors" title="Confirmar">✓</button>
+                              <button onClick={() => cancelTotalEdit(row.student.id)} className="text-xs px-1.5 py-0.5 rounded bg-slate-700/40 text-slate-400 hover:text-white border border-slate-600/40 transition-colors" title="Cancelar">✕</button>
+                            </div>
                           </div>
                         ) : (
-                          <span className="text-sm font-semibold text-violet-400">
-                            {row.grade.auto_ser !== null ? row.grade.auto_ser : <span className="text-slate-600">—</span>}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* AUTO DECIDIR (5) */}
-                      <td className="px-2 py-3 text-center">
-                        {autoEditingRows.has(row.student.id) ? (
                           <div className="flex flex-col items-center gap-1">
-                            <input
-                              type="number"
-                              className={`w-14 px-1 py-2 bg-violet-900/30 border border-violet-500/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-auto_decidir`) ? " shake" : ""}`}
-                              min="0" max="5"
-                              value={row.grade.auto_decidir ?? ""}
-                              onChange={(e) => updateGradeField(row.student.id, "auto_decidir", e.target.value)}
-                              placeholder="—"
-                            />
-                            {row.autoEvalFromStudent?.auto_decidir !== null && row.autoEvalFromStudent?.auto_decidir !== undefined && (
+                            <div className={`text-xl font-bold ${obs.color} flex items-center gap-1`}>
+                              {row.total}
+                              {hasOverride && <span className="text-xs text-amber-400/70" title="Nota editada manualmente">✎</span>}
+                            </div>
+                            <div className="flex gap-1">
                               <button
-                                className="text-xs text-violet-400 hover:text-violet-200 underline transition-colors"
-                                title={`El estudiante envió: ${row.autoEvalFromStudent.auto_decidir}. Clic para copiar.`}
-                                onClick={() => updateGradeField(row.student.id, "auto_decidir", String(row.autoEvalFromStudent!.auto_decidir))}
-                              >
-                                ↓{row.autoEvalFromStudent.auto_decidir}
-                              </button>
-                            )}
+                                onClick={() => startTotalEdit(row.student.id, row.total)}
+                                className="text-xs px-1.5 py-0.5 rounded bg-slate-700/40 text-slate-400 hover:text-amber-300 hover:bg-amber-600/20 border border-slate-600/40 transition-colors"
+                                title="Editar nota final directamente (20-100)"
+                              >✎</button>
+                              {hasOverride && (
+                                <button
+                                  onClick={() => clearTotalOverride(row.student.id)}
+                                  className="text-xs px-1.5 py-0.5 rounded bg-slate-700/40 text-slate-400 hover:text-red-300 hover:bg-red-600/20 border border-slate-600/40 transition-colors"
+                                  title="Deshacer: volver a la suma de dimensiones"
+                                >↩</button>
+                              )}
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-sm font-semibold text-violet-400">
-                            {row.grade.auto_decidir !== null ? row.grade.auto_decidir : <span className="text-slate-600">—</span>}
-                          </span>
                         )}
                       </td>
+                    );
 
-                      {/* TOTAL */}
-                      <td className="px-3 py-4 text-center">
-                        <div
-                          className={`text-xl font-bold ${getObservation(row.total).color}`}
-                        >
-                          {row.total}
-                        </div>
-                      </td>
+                    return (
+                      <tr key={row.student.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-white text-center">{idx + 1}</td>
+                        <td className="px-3 py-4 whitespace-nowrap text-sm text-slate-200">{formatName(row.student)}</td>
 
-                      {/* OBS */}
-                      <td className="px-3 py-4 text-center">
-                        <span
-                          className={`text-sm font-semibold ${getObservation(row.total).color}`}
-                        >
-                          {getObservation(row.total).text}
-                        </span>
-                      </td>
+                        {isGraduacionModule ? (
+                          <>
+                            {/* Socialización (50) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="0" max="50"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-socializacion`) ? " shake" : ""}`}
+                                value={row.grade.socializacion ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "socializacion", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+                            {/* Proyecto sistematización (30) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="0" max="30"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-proyecto_sistematizacion`) ? " shake" : ""}`}
+                                value={row.grade.proyecto_sistematizacion ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "proyecto_sistematizacion", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+                            {/* Proyecto de vida (20) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="0" max="20"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-proyecto_vida`) ? " shake" : ""}`}
+                                value={row.grade.proyecto_vida ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "proyecto_vida", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+                            {totalCell}
+                            {/* Calificación cualitativa */}
+                            <td className="px-3 py-4 text-center">
+                              <span className={`text-sm font-semibold ${obs.color}`}>{obs.text}</span>
+                            </td>
+                            {/* Indicador de guardado */}
+                            <td className="px-2 py-3 text-center" style={{ verticalAlign: "middle", width: 32 }}>
+                              {dirtyRows.has(row.student.id) && <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Guardando..." />}
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            {/* Progreso */}
+                            <td className="px-3 py-4 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`text-sm font-semibold ${getProgressTextColor(row.progress)}`}>{row.progress}%</span>
+                                <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                  <div className={`h-full bg-gradient-to-r ${getProgressColor(row.progress)} rounded-full transition-all duration-500`} style={{ width: `${row.progress}%` }} />
+                                </div>
+                              </div>
+                            </td>
 
-                      {/* Editar autoeval + indicador de guardado */}
-                      <td className="px-2 py-3 text-center" style={{ verticalAlign: "middle", width: 56 }}>
-                        <div className="flex flex-col items-center gap-1.5">
-                          <button
-                            title={autoEditingRows.has(row.student.id) ? "Cerrar edición de autoevaluación" : "Editar autoevaluación"}
-                            className={`text-xs px-2 py-1 rounded-md border transition-colors ${autoEditingRows.has(row.student.id) ? "bg-violet-600/30 text-violet-300 border-violet-500/40" : "bg-slate-700/40 text-slate-400 hover:text-violet-300 hover:bg-violet-600/20 border-slate-600/40"}`}
-                            onClick={() => setAutoEditingRows((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(row.student.id)) next.delete(row.student.id);
-                              else next.add(row.student.id);
-                              return next;
-                            })}
-                          >
-                            {autoEditingRows.has(row.student.id) ? "✓" : "✎"}
-                          </button>
-                          {dirtyRows.has(row.student.id) && (
-                            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Guardando..." />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            {/* SER (10) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="1" max="10"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-ser`) ? " shake" : ""}`}
+                                value={row.grade.ser ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "ser", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+                            {/* SABER (30) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="1" max="30"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-saber`) ? " shake" : ""}`}
+                                value={row.grade.saber ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "saber", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+                            {/* HACER Proceso (20) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="1" max="20"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-amber-500/30 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-hacer_proceso`) ? " shake" : ""}`}
+                                value={row.grade.hacer_proceso ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "hacer_proceso", e.target.value)}
+                                placeholder={String(row.suggestedHP)}
+                                title={`Sugerido según avance: ${row.suggestedHP}/20`}
+                              />
+                            </td>
+                            {/* HACER Producto (20) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="1" max="20"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-hacer_producto`) ? " shake" : ""}`}
+                                value={row.grade.hacer_producto ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "hacer_producto", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+                            {/* DECIDIR (10) */}
+                            <td className="px-3 py-4" style={{ verticalAlign: "middle" }}>
+                              <input type="number" min="1" max="10"
+                                className={`w-16 px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-decidir`) ? " shake" : ""}`}
+                                value={row.grade.decidir ?? ""}
+                                onChange={(e) => updateGradeField(row.student.id, "decidir", e.target.value)}
+                                placeholder="—"
+                              />
+                            </td>
+
+                            {/* AUTO SER (5) */}
+                            <td className="px-2 py-3 text-center">
+                              {autoEditingRows.has(row.student.id) ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <input type="number" min="0" max="5"
+                                    className={`w-14 px-1 py-2 bg-violet-900/30 border border-violet-500/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-auto_ser`) ? " shake" : ""}`}
+                                    value={row.grade.auto_ser ?? ""}
+                                    onChange={(e) => updateGradeField(row.student.id, "auto_ser", e.target.value)}
+                                    placeholder="—"
+                                  />
+                                  {row.autoEvalFromStudent?.auto_ser != null && (
+                                    <button className="text-xs text-violet-400 hover:text-violet-200 underline transition-colors" title={`El estudiante envió: ${row.autoEvalFromStudent.auto_ser}. Clic para copiar.`} onClick={() => updateGradeField(row.student.id, "auto_ser", String(row.autoEvalFromStudent!.auto_ser))}>↓{row.autoEvalFromStudent.auto_ser}</button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-sm font-semibold text-violet-400">{row.grade.auto_ser !== null ? row.grade.auto_ser : <span className="text-slate-600">—</span>}</span>
+                              )}
+                            </td>
+
+                            {/* AUTO DECIDIR (5) */}
+                            <td className="px-2 py-3 text-center">
+                              {autoEditingRows.has(row.student.id) ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <input type="number" min="0" max="5"
+                                    className={`w-14 px-1 py-2 bg-violet-900/30 border border-violet-500/50 rounded-lg text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${shakingInputs.has(`${row.student.id}-auto_decidir`) ? " shake" : ""}`}
+                                    value={row.grade.auto_decidir ?? ""}
+                                    onChange={(e) => updateGradeField(row.student.id, "auto_decidir", e.target.value)}
+                                    placeholder="—"
+                                  />
+                                  {row.autoEvalFromStudent?.auto_decidir != null && (
+                                    <button className="text-xs text-violet-400 hover:text-violet-200 underline transition-colors" title={`El estudiante envió: ${row.autoEvalFromStudent.auto_decidir}. Clic para copiar.`} onClick={() => updateGradeField(row.student.id, "auto_decidir", String(row.autoEvalFromStudent!.auto_decidir))}>↓{row.autoEvalFromStudent.auto_decidir}</button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-sm font-semibold text-violet-400">{row.grade.auto_decidir !== null ? row.grade.auto_decidir : <span className="text-slate-600">—</span>}</span>
+                              )}
+                            </td>
+
+                            {totalCell}
+
+                            {/* OBS */}
+                            <td className="px-3 py-4 text-center">
+                              <span className={`text-sm font-semibold ${obs.color}`}>{obs.text}</span>
+                            </td>
+
+                            {/* Editar autoeval + indicador de guardado */}
+                            <td className="px-2 py-3 text-center" style={{ verticalAlign: "middle", width: 56 }}>
+                              <div className="flex flex-col items-center gap-1.5">
+                                <button
+                                  title={autoEditingRows.has(row.student.id) ? "Cerrar edición de autoevaluación" : "Editar autoevaluación"}
+                                  className={`text-xs px-2 py-1 rounded-md border transition-colors ${autoEditingRows.has(row.student.id) ? "bg-violet-600/30 text-violet-300 border-violet-500/40" : "bg-slate-700/40 text-slate-400 hover:text-violet-300 hover:bg-violet-600/20 border-slate-600/40"}`}
+                                  onClick={() => setAutoEditingRows((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(row.student.id)) next.delete(row.student.id);
+                                    else next.add(row.student.id);
+                                    return next;
+                                  })}
+                                >{autoEditingRows.has(row.student.id) ? "✓" : "✎"}</button>
+                                {dirtyRows.has(row.student.id) && <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Guardando..." />}
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
