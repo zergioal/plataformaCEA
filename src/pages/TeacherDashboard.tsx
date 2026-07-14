@@ -581,7 +581,7 @@ export default function TeacherDashboard() {
           .maybeSingle();
 
         if (data) {
-          setScheduleRows((data.schedule_rows as any) ?? []);
+          setScheduleRows((data.schedule_rows as { day: string; time: string; room: string }[]) ?? []);
           setSaberPct(data.saber_pct ?? 25);
           setHacerProcesoPct(data.hacer_proceso_pct ?? 25);
           setHacerProductoPct(data.hacer_producto_pct ?? 25);
@@ -685,7 +685,7 @@ export default function TeacherDashboard() {
             .eq("semester", sem)
             .in("module_id", moduleIds);
 
-          const passedModules = (grades ?? []).filter((g: any) => {
+          const passedModules = (grades ?? []).filter((g: { module_id: number; ser: number | null; saber: number | null; hacer_proceso: number | null; hacer_producto: number | null; decidir: number | null; auto_ser: number | null; auto_decidir: number | null; total_override: number | null; socializacion: number | null; proyecto_sistematizacion: number | null; proyecto_vida: number | null }) => {
             const mod = modMap.get(g.module_id);
             if (!mod) return false;
             let total: number;
@@ -1372,9 +1372,16 @@ export default function TeacherDashboard() {
         ascended++;
       }
     }
-    // Reiniciar avance (section_progress, lesson_progress, quiz_attempts) para reprobados
+    // Reiniciar avance (section_progress, lesson_progress, quiz_attempts) para todos los afectados:
+    // - Reprobados: reinician en el mismo nivel
+    // - Ascendidos y egresados: ya no necesitan el progreso del nivel anterior
     // Se usa la Edge Function porque el anon key no puede borrar registros de otros usuarios (RLS)
-    if (reproved.length > 0) {
+    const allAffected = [
+      ...reproved.map((s) => s.id),
+      ...toAscend.map((s) => s.id),
+      ...toGraduate.map((s) => s.id),
+    ];
+    if (allAffected.length > 0) {
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       if (currentSession) {
         await fetch(
@@ -1385,7 +1392,7 @@ export default function TeacherDashboard() {
               "Content-Type": "application/json",
               Authorization: `Bearer ${currentSession.access_token}`,
             },
-            body: JSON.stringify({ student_ids: reproved.map((s) => s.id) }),
+            body: JSON.stringify({ student_ids: allAffected }),
           },
         );
       }

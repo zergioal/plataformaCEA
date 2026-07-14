@@ -261,7 +261,9 @@ export default function TeacherAttendancePage() {
         .from("profiles")
         .select("id,code,full_name,last_name_pat,last_name_mat,first_names")
         .in("id", studentIds)
-        .eq("role", "student");
+        .eq("role", "student")
+        .eq("is_active", true)
+        .eq("is_graduated", false);
 
       if (role === "teacher") {
         const { data: prof } = await supabase
