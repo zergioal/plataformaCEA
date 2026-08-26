@@ -275,6 +275,8 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       .in("id", studentIds)
       .eq("career_id", prof.career_id)
       .eq("shift", prof.shift)
+      .eq("is_active", true)
+      .eq("is_graduated", false)
       .order("last_name_pat")
       .order("last_name_mat")
       .order("first_names");
@@ -423,6 +425,7 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       .from("module_grades")
       .select("student_id,ser,saber,hacer_proceso,hacer_producto,decidir")
       .eq("module_id", mid)
+      .eq("semester", activeSemester)
       .in("student_id", studentList.map((s) => s.id));
     const mainGrades = (mainGradesRaw ?? []) as MainGradeRow[];
 
@@ -445,8 +448,8 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
           supabase
             .from("module_grades")
             .upsert(
-              { student_id: s.id, module_id: mid, [cfg.moduleField]: calcAvgVal },
-              { onConflict: "student_id,module_id" },
+              { student_id: s.id, module_id: mid, semester: activeSemester, [cfg.moduleField]: calcAvgVal },
+              { onConflict: "student_id,module_id,semester" },
             )
             .then(({ error }) => {
               if (!error) initialMainValuesRef.current.set(s.id, calcAvgVal);
@@ -514,8 +517,8 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       const mainWasManuallyEdited = initVal !== null && initVal !== prevAvg;
       if (!mainWasManuallyEdited) {
         await supabase.from("module_grades").upsert(
-          { student_id: studentId, module_id: mid, [cfg.moduleField]: avg },
-          { onConflict: "student_id,module_id" },
+          { student_id: studentId, module_id: mid, semester: activeSemester, [cfg.moduleField]: avg },
+          { onConflict: "student_id,module_id,semester" },
         );
         // Actualizar referencia local para que ediciones posteriores sigan sincronizando
         initialMainValuesRef.current.set(studentId, avg);
@@ -541,6 +544,7 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       .from("module_grades")
       .select("student_id,ser,saber,hacer_proceso,hacer_producto,decidir")
       .eq("module_id", mid)
+      .eq("semester", activeSemester)
       .in("student_id", students.map((s) => s.id));
     const currentMain = (currentMainRaw ?? []) as MainGradeRow[];
     const field = cfg.moduleField as keyof MainGradeRow;
@@ -580,8 +584,8 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       const { error } = await supabase
         .from("module_grades")
         .upsert(
-          { student_id: row.student.id, module_id: mid, [cfg.moduleField]: row.newAvg },
-          { onConflict: "student_id,module_id" },
+          { student_id: row.student.id, module_id: mid, semester: activeSemester, [cfg.moduleField]: row.newAvg },
+          { onConflict: "student_id,module_id,semester" },
         );
       if (error) errors++;
       else { initialMainValuesRef.current.set(row.student.id, row.newAvg); count++; }
@@ -591,7 +595,6 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       setMsg(`⚠️ ${errors} fila(s) no se pudieron actualizar.`);
     } else {
       setMsg(`✅ ${count} nota(s) de ${cfg.label} cargadas al registro principal.`);
-      setTimeout(() => setMsg(null), 3000);
     }
   }
 
@@ -1161,22 +1164,6 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
       </div>
 
       <div style={{ padding: "24px" }}>
-        {msg && (
-          <div
-            style={{
-              background: "rgba(239,68,68,0.15)",
-              border: "1px solid rgba(239,68,68,0.3)",
-              borderRadius: 8,
-              padding: "10px 14px",
-              marginBottom: 16,
-              color: "#fca5a5",
-              fontSize: 13,
-            }}
-          >
-            {msg}
-          </div>
-        )}
-
         {loadingData ? (
           <div style={{ color: "#94a3b8", padding: 24 }}>Cargando datos...</div>
         ) : students.length === 0 ? (
@@ -1721,6 +1708,46 @@ export default function TeacherDimensionGrades({ inlineModuleId, inlineDimension
                 Confirmar ({syncSelected.size})
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {msg && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={() => setMsg(null)}
+        >
+          <div
+            style={{
+              background: "#0f172a",
+              border: `1px solid ${msg.includes("✅") ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
+              borderRadius: 14,
+              width: "100%",
+              maxWidth: 420,
+              padding: "26px 28px",
+              textAlign: "center",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 32, marginBottom: 10 }}>{msg.includes("✅") ? "✅" : "⚠️"}</div>
+            <div style={{ color: msg.includes("✅") ? "#4ade80" : "#f87171", fontSize: 14, fontWeight: 600, lineHeight: 1.5, marginBottom: 22 }}>
+              {msg.replace(/^✅\s*|^⚠️\s*|^❌\s*/, "")}
+            </div>
+            <button
+              onClick={() => setMsg(null)}
+              style={{
+                padding: "8px 26px",
+                background: msg.includes("✅") ? "rgba(16,185,129,0.85)" : "rgba(239,68,68,0.85)",
+                border: "none",
+                color: "#fff",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Entendido
+            </button>
           </div>
         </div>
       )}

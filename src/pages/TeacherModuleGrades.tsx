@@ -721,7 +721,6 @@ export default function TeacherModuleGrades() {
       const time = `${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`;
       setSavedAt(time);
       setMsg(`✅ Todos los cambios guardados a las ${time}`);
-      setTimeout(() => setMsg(null), 3000);
     }
   }
 
@@ -1705,17 +1704,6 @@ export default function TeacherModuleGrades() {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-6 py-8 space-y-6">
-        {msg && (
-          <div
-            className={`px-6 py-4 rounded-xl font-medium animate-in fade-in slide-in-from-top-2 duration-300 ${
-              msg.includes("✅")
-                ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                : "bg-red-500/10 border border-red-500/20 text-red-400"
-            }`}
-          >
-            {msg}
-          </div>
-        )}
 
         {loadingData ? (
           <div className="bg-slate-900 rounded-2xl border border-slate-700/50 p-12 text-center">
@@ -2490,6 +2478,36 @@ export default function TeacherModuleGrades() {
           />
         </div>
       )}
+
+      {msg && (() => {
+        const isOk = msg.includes("✅") || msg.includes("🔒");
+        return (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4"
+            onClick={() => setMsg(null)}
+          >
+            <div
+              className={`w-full max-w-md rounded-2xl p-7 text-center border ${
+                isOk ? "bg-slate-900 border-emerald-500/40" : "bg-slate-900 border-red-500/40"
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-3xl mb-2">{isOk ? "✅" : "⚠️"}</div>
+              <p className={`font-semibold mb-5 ${isOk ? "text-emerald-400" : "text-red-400"}`}>
+                {msg.replace(/^✅\s*|^⚠️\s*|^❌\s*|^🔒\s*/, "")}
+              </p>
+              <button
+                onClick={() => setMsg(null)}
+                className={`px-6 py-2 rounded-lg text-sm font-semibold text-white ${
+                  isOk ? "bg-emerald-600/85 hover:bg-emerald-600" : "bg-red-600/85 hover:bg-red-600"
+                }`}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
